@@ -10,7 +10,7 @@ const connectDB = async () => {
     await mongoose.connect(DB_URL, {
       useNewUrlParser: true,  // Use new URL parser
       useUnifiedTopology: true, // Use unified topology to handle MongoDB cluster connections
-      dbName: 'AMD', // Use the AMD database
+      dbName: 'KGF_HM', // Use the AMD database
     });
 
     console.log('✅ MongoDB connected successfully'); // Successful connection message
