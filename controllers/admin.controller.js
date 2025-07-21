@@ -1,13 +1,9 @@
 import 'dotenv/config';
-
+import {Admin} from '../models/admin.model.js';
 import nodemailer from 'nodemailer';
 import bcrypt from "bcrypt";
-
-// simple in-memory stores
-const otpStore = {};       
-const studentStore = [];  // { [email]: { code, expires, verified } }
-let adminPassword = process.env.ADMIN_PASSWORD;
-
+import jwt from 'jsonwebtoken';
+import { Student } from '../models/student.model.js';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
@@ -20,6 +16,15 @@ const transporter = nodemailer.createTransport({
     pass: process.env.MAIL_PASS
   }
 });
+
+const generateToken = (admin) => {
+  return jwt.sign(
+    { adminId: admin.adminId, email: admin.email }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: process.env.JWT_EXPIRES_IN }
+  );
+};
+
 
 const register = async (req, res) => {
   const { adminId, email, password } = req.body;
@@ -40,6 +45,20 @@ const register = async (req, res) => {
   }
 };
 
+const generateRefreshToken = (admin) => {
+  const refreshToken = jwt.sign(
+    { adminId: admin.adminId, email: admin.email },
+    process.env.JWT_SECRET, // Same secret as access token
+    { expiresIn: "30d" } // Longer expiration for refresh token (e.g., 30 days)
+  );
+  
+  // Save refresh token to database (MongoDB)
+  admin.refreshToken = refreshToken;
+  admin.save(); // Save to database
+  
+  return refreshToken;
+};
+
 
 const login = async (req, res) => {
   const { adminId, password } = req.body;
@@ -55,12 +74,44 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    return res.json({ message: "Login successful", adminId: admin.adminId });
+    const token = generateToken(admin);
+    const refreshToken = generateRefreshToken(admin);
+
+    return res.json({ message: "Login successful",token,refreshToken,admin:{ adminId: admin.adminId, adminEmail: admin.email } });
   } catch (err) {
     console.error("Login error:", err);
     return res.status(500).json({ message: "Server error during login." });
   }
 };
+
+const refreshAccessToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (!refreshToken) {
+      return res.status(401).json({ message: "No refresh token provided" });
+    }
+
+    const decoded = jwt.verify(refreshToken, JWT_SECRET); // Verify the refresh token
+
+    const admin = await Admin.findOne({ adminId: decoded.adminId });
+    if (!admin || admin.refreshTokens !== refreshToken) {
+      return res.status(401).json({ message: "Invalid or expired refresh token" });
+    }
+
+    const newAccessToken = generateToken(admin); // New access token
+    const newRefreshToken = generateRefreshToken(admin); // New refresh token
+    
+    return res.json({
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken
+    });
+  } catch (err) {
+    console.error("Refresh token error:", err);
+    return res.status(401).json({ message: "Invalid or expired refresh token" });
+  }
+};
+
 
 
 const forgotPassword = async (req, res) => {
@@ -126,6 +177,7 @@ const resetPassword = async (req, res) => {
 };
 
 
+
 const registerStudent = async (req, res) => {
   const {
     studentName,
@@ -141,52 +193,113 @@ const registerStudent = async (req, res) => {
 
   // Generate a password: lowercase name (no spaces) + studentId
   const cleanName = studentName.replace(/\s+/g, '').toLowerCase();
-  const password  = `${cleanName}${studentId}`;
+  const password = `${cleanName}${studentId}`;
 
-  // Store student record (in-memory demo)
-  const studentRecord = {
-    studentName,
-    studentId,
-    contactNumber,
-    roomBedNumber,
-    email,
-    admissionDate,
-    feeStatus,
-    emergencyContactName,
-    emergencyContactNumber,
-    password
-  };
-  studentStore.push(studentRecord);
-
-  // Email credentials to student
   try {
+    // Create student record
+    const newStudent = new Student({
+      studentName,
+      studentId,
+      contactNumber,
+      roomBedNumber,
+      email,
+      admissionDate,
+      feeStatus,
+      emergencyContactName,
+      emergencyContactNumber,
+      password
+    });
+
+    await newStudent.save();
+
+    // Send email with student credentials
     await transporter.sendMail({
-      from:    `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to:       email,
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: email,
       subject: 'Your Student Panel Credentials',
-      text:    `Hello ${studentName},
+      text: `Hello ${studentName},
 
 Your student account has been created.
 
 • Student ID: ${studentId}
-• Password:   ${password}
+• Password: ${password}
 
 Please log in at https://www.KGF-HM.com and change your password after first login.
 
 – Hostel Admin`
     });
-  } catch (err) {
-    console.error('Error sending student credentials:', err);
-    return res
-      .status(500)
-      .json({ message: 'Student registered but failed to send email.' });
-  }
 
-  return res.json({
-    message: 'Student registered and credentials emailed.',
-    student: { studentName, studentId, email }
-  });
+    return res.json({
+      message: 'Student registered and credentials emailed.',
+      student: { studentName, studentId, email }
+    });
+  } catch (err) {
+    console.error('Error registering student:', err);
+    return res.status(500).json({ message: 'Error registering student.' });
+  }
 };
+
+
+const registerParent = async (req, res) => {
+  const { firstName, lastName, parentId, email, contactNumber, studentId } = req.body;
+
+  try {
+    // Check if the parent already exists
+    const existingParent = await Parent.findOne({ studentId });
+    if (existingParent) {
+      return res.status(409).json({ message: "Parent already exists with the same ID or email." });
+    }
+
+    // Fetch the student details from the database using studentId
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found with the provided studentId." });
+    }
+
+    // Generate password for the parent
+    const cleanName = firstName.replace(/\s+/g, '').toLowerCase(); // Remove spaces from first name
+    const parentPassword = `${cleanName}${studentId}`; // Password will be a combination of firstName and student's studentId
+
+    // Create new parent record
+    const newParent = new Parent({
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      studentId,
+      password: parentPassword 
+    });
+
+    await newParent.save();
+
+    // Send email with the login credentials
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject: 'Your Parent Panel Credentials',
+      text: `Hello ${firstName} ${lastName},
+
+Your parent account has been created.
+
+• Parent ID: ${parentId}
+• Your Child's Student ID: ${studentId}
+• Your Login Password: ${parentPassword}
+
+Please log in at https://www.KGF-HM.com and change your password after first login.
+
+– Hostel Admin`
+    });
+
+    return res.json({
+      message: 'Parent registered and login credentials emailed.',
+      parent: { firstName, lastName, email }
+    });
+  } catch (err) {
+    console.error("Error registering parent:", err);
+    return res.status(500).json({ message: "Error registering parent." });
+  }
+};
+
 
 export {
     resetPassword,
@@ -194,5 +307,8 @@ export {
     forgotPassword,
     register,
     login,
-    registerStudent
+    registerStudent,
+    registerParent,
+    refreshAccessToken,
+    generateRefreshToken
 };

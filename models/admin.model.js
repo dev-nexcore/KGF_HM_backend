@@ -15,8 +15,14 @@ const adminSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true
-  }
+  
+},
+refreshTokens: {
+  type: String,
+  required: false,
+}
 });
+
 
 // Password hash middleware
 adminSchema.pre("save", async function (next) {
