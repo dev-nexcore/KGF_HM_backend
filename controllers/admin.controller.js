@@ -232,7 +232,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { studentName, studentId, email }
+      student: { studentName, studentId, email, password }
     });
   } catch (err) {
     console.error('Error registering student:', err);
@@ -282,7 +282,7 @@ const registerParent = async (req, res) => {
 
 Your parent account has been created.
 
-• Parent ID: ${parentId}
+
 • Your Child's Student ID: ${studentId}
 • Your Login Password: ${parentPassword}
 
@@ -293,11 +293,61 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Parent registered and login credentials emailed.',
-      parent: { firstName, lastName, email }
+      parent: { firstName, lastName, email, studentId, parentPassword }
     });
   } catch (err) {
     console.error("Error registering parent:", err);
     return res.status(500).json({ message: "Error registering parent." });
+  }
+};
+
+const getTodaysCheckInOutStatus = async (req, res) => {
+  try {
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+
+    // Find students who checked in today
+    const checkIns = await Student.find({
+      checkInDate: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    // Find students who checked out today
+    const checkOuts = await Student.find({
+      checkOutDate: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    return res.json({
+      checkIns: checkIns.length,
+      checkOuts: checkOuts.length
+    });
+  } catch (err) {
+    console.error("Error fetching today's check-in/check-out data:", err);
+    return res.status(500).json({ message: "Error fetching data." });
+  }
+};
+
+const getBedOccupancyStatus = async (req, res) => {
+  try {
+    // Get all students with a room number
+    const totalBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });
+
+    // Get the number of students who have checked in
+    const occupiedBeds = await Student.countDocuments({
+      checkInDate: { $ne: null },
+      checkOutDate: null // Ensures the student hasn't checked out
+    });
+
+    const availableBeds = totalBeds - occupiedBeds;
+
+    return res.json({
+      totalBeds,
+      occupiedBeds,
+      availableBeds
+    });
+  } catch (err) {
+    console.error("Error fetching bed occupancy data:", err);
+    return res.status(500).json({ message: "Error fetching data." });
   }
 };
 
@@ -311,5 +361,7 @@ export {
     registerStudent,
     registerParent,
     refreshAccessToken,
-    generateRefreshToken
+    generateRefreshToken,
+    getTodaysCheckInOutStatus,
+    getBedOccupancyStatus
 };
