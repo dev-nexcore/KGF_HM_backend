@@ -334,8 +334,8 @@ const getBedOccupancyStatus = async (req, res) => {
 
     // Get the number of students who have checked in
     const occupiedBeds = await Student.countDocuments({
-      checkInDate: { $ne: null },
-      checkOutDate: null // Ensures the student hasn't checked out
+      roomBedNumber: { $ne: null }
+      
     });
 
     const availableBeds = totalBeds - occupiedBeds;

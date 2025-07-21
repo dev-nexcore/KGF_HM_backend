@@ -9,7 +9,9 @@ import {
   resetPassword,
   registerStudent,
   registerParent,
-  refreshAccessToken
+  refreshAccessToken,
+  getTodaysCheckInOutStatus,
+  getBedOccupancyStatus
 
 } from "../controllers/admin.controller.js";
 
@@ -23,4 +25,6 @@ router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.post('/register-student',  registerStudent);
 router.post('/register-parent', registerParent);
+router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);
+router.get('/bed-occupancy-status', getBedOccupancyStatus);
 export default router;
