@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import bcrypt from "bcrypt";
 import jwt from 'jsonwebtoken';
 import { Student } from '../models/student.model.js';
+import { Parent } from '../models/parent.model.js';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 

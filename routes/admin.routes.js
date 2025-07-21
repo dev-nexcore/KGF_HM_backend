@@ -8,6 +8,7 @@ import {
   verifyOtp,
   resetPassword,
   registerStudent,
+  registerParent,
   refreshAccessToken
 
 } from "../controllers/admin.controller.js";
@@ -21,5 +22,5 @@ router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.post('/register-student',  registerStudent);
-
+router.post('/register-parent', registerParent);
 export default router;
