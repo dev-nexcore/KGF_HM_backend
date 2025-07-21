@@ -242,7 +242,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
 
 const registerParent = async (req, res) => {
-  const { firstName, lastName, parentId, email, contactNumber, studentId } = req.body;
+  const { firstName, lastName, email, contactNumber, studentId } = req.body;
 
   try {
     // Check if the parent already exists

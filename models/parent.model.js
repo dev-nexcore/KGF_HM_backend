@@ -2,11 +2,6 @@ import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 
 const parentSchema = new mongoose.Schema({
-  parentId: {
-    type: String,
-    required: true,
-    unique: true
-  },
   studentId: {
     type: String,
     required: true,
@@ -31,7 +26,7 @@ const parentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  contactNo: {
+  contactNumber: {
     type: String,
     required: true
   }
