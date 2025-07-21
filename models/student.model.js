@@ -10,7 +10,9 @@ const studentSchema = new mongoose.Schema({
   feeStatus: { type: String, required: true },
   emergencyContactName: { type: String },
   emergencyContactNumber: { type: String },
-  password: { type: String, required: true }
+  password: { type: String, required: true },
+  checkInDate: { type: Date, default: null },
+  checkOutDate: { type: Date, default: null },
 });
 
 export const Student = mongoose.model('Student', studentSchema);
