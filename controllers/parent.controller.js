@@ -1,8 +1,8 @@
 import 'dotenv/config';
 import nodemailer from 'nodemailer';
 import bcrypt from 'bcrypt';
-import { Parent } from '../models/parentModel.js';
-import { Student } from '../models/studentModel.js';
+import { Parent } from '../models/parent.model.js';
+import { Student } from '../models/student.model.js';
 
 // Simple in-memory store for OTPs
 const otpStore = {};

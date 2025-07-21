@@ -4,6 +4,7 @@ import dotenv from "dotenv"
 import cors from 'cors'
 import { connect } from 'mongoose'
 import adminRoutes from "./routes/admin.routes.js"
+import parentRoutes from "./routes/parent.routes.js"
 
 
 dotenv.config()
@@ -12,6 +13,7 @@ app.use(express.json())
 connectDB()
 app.use(cors())
 app.use('/api/adminauth', adminRoutes);
+app.use('/api/parentauth',parentRoutes)
 
 
 const PORT = process.env.PORT || 5001

@@ -1,5 +1,5 @@
 import express from 'express';
-import { login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance } from '../controllers/parentController.js';
+import { login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance } from '../controllers/parent.controller.js';
 
 const router = express.Router();
 
