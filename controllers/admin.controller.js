@@ -1,5 +1,7 @@
 import 'dotenv/config';
+
 import nodemailer from 'nodemailer';
+import bcrypt from "bcrypt";
 
 // simple in-memory stores
 const otpStore = {};       
@@ -19,22 +21,54 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-const login = (req, res) => {
-  const { adminId, password } = req.body;
-  if (
-    adminId !== process.env.ADMIN_ID ||
-    password !== adminPassword
-  ) {
-    return res.status(401).json({ message: 'Invalid credentials' });
+const register = async (req, res) => {
+  const { adminId, email, password } = req.body;
+
+  try {
+    const existingAdmin = await Admin.findOne({ $or: [{ adminId }, { email }] });
+    if (existingAdmin) {
+      return res.status(409).json({ message: "Admin already exists with same ID or email." });
+    }
+
+    const newAdmin = new Admin({ adminId, email, password });
+    await newAdmin.save();
+
+    return res.status(201).json({ message: "Admin registered successfully." });
+  } catch (err) {
+    console.error("Admin registration error:", err);
+    return res.status(500).json({ message: "Server error during registration." });
   }
-  // TODO: issue JWT or session here
-  return res.json({ message: 'Login successful' });
 };
+
+
+const login = async (req, res) => {
+  const { adminId, password } = req.body;
+
+  try {
+    const admin = await Admin.findOne({ adminId });
+    if (!admin) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    const isMatch = await admin.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Invalid credentials" });
+    }
+
+    return res.json({ message: "Login successful", adminId: admin.adminId });
+  } catch (err) {
+    console.error("Login error:", err);
+    return res.status(500).json({ message: "Server error during login." });
+  }
+};
+
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
-  if (email !== process.env.ADMIN_EMAIL) {
-    return res.status(400).json({ message: 'Email not recognized' });
+
+  const admin = await Admin.findOne({ email });
+  if (!admin) {
+    return res.status(400).json({ message: "Email not recognized" });
   }
 
   const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -45,14 +79,15 @@ const forgotPassword = async (req, res) => {
   };
 
   await transporter.sendMail({
-    from:`"Hostel Admin" <${process.env.MAIL_USER}>`,
+    from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
     to: email,
-    subject: 'Admin Password Reset OTP',
+    subject: "Admin Password Reset OTP",
     text: `Your OTP is ${otp}. Expires in 10 minutes.`
   });
 
-  return res.json({ message: 'OTP sent' });
+  return res.json({ message: "OTP sent" });
 };
+
 
 const verifyOtp = (req, res) => {
   const { email, otp } = req.body;
@@ -68,21 +103,28 @@ const verifyOtp = (req, res) => {
   return res.json({ message: 'OTP verified' });
 };
 
-const resetPassword = (req, res) => {
+const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
   const record = otpStore[email];
-  if (
-    !record ||
-    record.code !== otp ||
-    !record.verified
-  ) {
-    return res.status(400).json({ message: 'OTP not verified' });
+
+  if (!record || record.code !== otp || !record.verified) {
+    return res.status(400).json({ message: "OTP not verified" });
   }
 
-  adminPassword = newPassword;
+  const admin = await Admin.findOne({ email });
+  if (!admin) {
+    return res.status(404).json({ message: "Admin not found" });
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  admin.password = hashedPassword;
+  await admin.save();
+
   delete otpStore[email];
-  return res.json({ message: 'Password has been reset' });
+
+  return res.json({ message: "Password has been reset" });
 };
+
 
 const registerStudent = async (req, res) => {
   const {
@@ -150,6 +192,7 @@ export {
     resetPassword,
     verifyOtp,
     forgotPassword,
+    register,
     login,
     registerStudent
 };
