@@ -2,7 +2,8 @@ import 'dotenv/config';
 import nodemailer from 'nodemailer';
 
 // simple in-memory stores
-const otpStore = {};               // { [email]: { code, expires, verified } }
+const otpStore = {};       
+const studentStore = [];  // { [email]: { code, expires, verified } }
 let adminPassword = process.env.ADMIN_PASSWORD;
 
 // configure SMTP transporter
@@ -18,7 +19,7 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-export const login = (req, res) => {
+const login = (req, res) => {
   const { adminId, password } = req.body;
   if (
     adminId !== process.env.ADMIN_ID ||
@@ -30,7 +31,7 @@ export const login = (req, res) => {
   return res.json({ message: 'Login successful' });
 };
 
-export const forgotPassword = async (req, res) => {
+const forgotPassword = async (req, res) => {
   const { email } = req.body;
   if (email !== process.env.ADMIN_EMAIL) {
     return res.status(400).json({ message: 'Email not recognized' });
@@ -44,7 +45,7 @@ export const forgotPassword = async (req, res) => {
   };
 
   await transporter.sendMail({
-    from: process.env.MAIL_USER,
+    from:`"Hostel Admin" <${process.env.MAIL_USER}>`,
     to: email,
     subject: 'Admin Password Reset OTP',
     text: `Your OTP is ${otp}. Expires in 10 minutes.`
@@ -53,7 +54,7 @@ export const forgotPassword = async (req, res) => {
   return res.json({ message: 'OTP sent' });
 };
 
-export const verifyOtp = (req, res) => {
+const verifyOtp = (req, res) => {
   const { email, otp } = req.body;
   const record = otpStore[email];
   if (
@@ -67,7 +68,7 @@ export const verifyOtp = (req, res) => {
   return res.json({ message: 'OTP verified' });
 };
 
-export const resetPassword = (req, res) => {
+const resetPassword = (req, res) => {
   const { email, otp, newPassword } = req.body;
   const record = otpStore[email];
   if (
@@ -81,4 +82,74 @@ export const resetPassword = (req, res) => {
   adminPassword = newPassword;
   delete otpStore[email];
   return res.json({ message: 'Password has been reset' });
+};
+
+const registerStudent = async (req, res) => {
+  const {
+    studentName,
+    studentId,
+    contactNumber,
+    roomBedNumber,
+    email,
+    admissionDate,
+    feeStatus,
+    emergencyContactName,
+    emergencyContactNumber
+  } = req.body;
+
+  // Generate a password: lowercase name (no spaces) + studentId
+  const cleanName = studentName.replace(/\s+/g, '').toLowerCase();
+  const password  = `${cleanName}${studentId}`;
+
+  // Store student record (in-memory demo)
+  const studentRecord = {
+    studentName,
+    studentId,
+    contactNumber,
+    roomBedNumber,
+    email,
+    admissionDate,
+    feeStatus,
+    emergencyContactName,
+    emergencyContactNumber,
+    password
+  };
+  studentStore.push(studentRecord);
+
+  // Email credentials to student
+  try {
+    await transporter.sendMail({
+      from:    `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to:       email,
+      subject: 'Your Student Panel Credentials',
+      text:    `Hello ${studentName},
+
+Your student account has been created.
+
+• Student ID: ${studentId}
+• Password:   ${password}
+
+Please log in at https://www.KGF-HM.com and change your password after first login.
+
+– Hostel Admin`
+    });
+  } catch (err) {
+    console.error('Error sending student credentials:', err);
+    return res
+      .status(500)
+      .json({ message: 'Student registered but failed to send email.' });
+  }
+
+  return res.json({
+    message: 'Student registered and credentials emailed.',
+    student: { studentName, studentId, email }
+  });
+};
+
+export {
+    resetPassword,
+    verifyOtp,
+    forgotPassword,
+    login,
+    registerStudent
 };
