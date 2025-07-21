@@ -232,7 +232,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { studentName, studentId, email }
+      student: { studentName, studentId, email, password }
     });
   } catch (err) {
     console.error('Error registering student:', err);
@@ -282,7 +282,7 @@ const registerParent = async (req, res) => {
 
 Your parent account has been created.
 
-• Parent ID: ${parentId}
+
 • Your Child's Student ID: ${studentId}
 • Your Login Password: ${parentPassword}
 
@@ -293,7 +293,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Parent registered and login credentials emailed.',
-      parent: { firstName, lastName, email }
+      parent: { firstName, lastName, email, studentId, parentPassword }
     });
   } catch (err) {
     console.error("Error registering parent:", err);
