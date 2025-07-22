@@ -1,21 +1,19 @@
-import 'dotenv/config';
-import nodemailer from 'nodemailer';
-import bcrypt from 'bcrypt';
-import { Parent } from '../models/parent.model.js';
-import { Student } from '../models/student.model.js';
+import "dotenv/config";
+import nodemailer from "nodemailer";
+import bcrypt from "bcrypt";
+import { Parent } from "../models/parent.model.js";
+import { Student } from "../models/student.model.js";
+import { Otp } from "../models/otp.model.js";
 
-// Simple in-memory store for OTPs
-const otpStore = {};
 
-// Configure SMTP transporter
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
   port: +process.env.MAIL_PORT,
-  secure: process.env.MAIL_SECURE === 'true',
+  secure: process.env.MAIL_SECURE === "true",
   auth: {
     user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS
-  }
+    pass: process.env.MAIL_PASS,
+  },
 });
 
 // Login controller for parent panel
@@ -53,43 +51,48 @@ const forgotPassword = async (req, res) => {
     }
 
     const otp = String(Math.floor(100000 + Math.random() * 900000));
-    otpStore[email] = {
-      code: otp,
-      expires: Date.now() + 10 * 60 * 1000, // 10 minutes expiry
-      verified: false
-    };
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await Otp.findOneAndUpdate(
+      { email },
+      { code: otp, expires, verified: false },
+      { upsert: true }
+    );
 
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
       subject: "Parent Password Reset OTP",
-      text: `Dear ${parent.firstName} ${parent.lastName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`
+      text: `Dear ${parent.firstName} ${parent.lastName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,
     });
 
     return res.json({ message: "OTP sent" });
   } catch (err) {
     console.error("Forgot password error:", err);
-    return res.status(500).json({ message: "Server error during OTP generation." });
+    return res
+      .status(500)
+      .json({ message: "Server error during OTP generation." });
   }
 };
 
 // Verify OTP controller for parent panel
-const verifyOtp = (req, res) => {
+const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
-  const record = otpStore[email];
+  const record = await Otp.findOne({email,code});
 
   if (!record || record.code !== otp || record.expires < Date.now()) {
     return res.status(400).json({ message: "Invalid or expired OTP" });
   }
 
   record.verified = true;
+  await record.save();
   return res.json({ message: "OTP verified" });
 };
 
 // Reset password controller for parent panel
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  const record = otpStore[email];
+  const record = await Otp.findOne({ email, code: otp, verified: true });
 
   if (!record || record.code !== otp || !record.verified) {
     return res.status(400).json({ message: "OTP not verified" });
@@ -104,12 +107,14 @@ const resetPassword = async (req, res) => {
     parent.password = await bcrypt.hash(newPassword, 10);
     await parent.save();
 
-    delete otpStore[email];
+    await Otp.deleteOne({email});
 
     return res.json({ message: "Password has been reset" });
   } catch (err) {
     console.error("Reset password error:", err);
-    return res.status(500).json({ message: "Server error during password reset." });
+    return res
+      .status(500)
+      .json({ message: "Server error during password reset." });
   }
 };
 
@@ -131,32 +136,34 @@ const dashboard = async (req, res) => {
         firstName: student.firstName,
         lastName: student.lastName,
         photo: student.photo || null,
-        documents: student.documents.map(doc => ({
+        documents: student.documents.map((doc) => ({
           name: doc.name,
           status: doc.status,
-          url: doc.url
-        }))
+          url: doc.url,
+        })),
       },
       hostelDetails: {
         status: student.hostelDetails.status,
         roomNo: student.hostelDetails.roomNo,
-        bedNo: student.hostelDetails.bedNo
+        bedNo: student.hostelDetails.bedNo,
       },
       attendanceSummary: {
         totalDays: student.attendanceSummary?.totalDays || 0,
         presentDays: student.attendanceSummary?.presentDays || 0,
-        absentDays: student.attendanceSummary?.absentDays || 0
+        absentDays: student.attendanceSummary?.absentDays || 0,
       },
       feesOverview: {
         status: student.feeStatus || "Not Available",
-        amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0
-      }
+        amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
+      },
     };
 
     return res.json(dashboardData);
   } catch (err) {
     console.error("Dashboard fetch error:", err);
-    return res.status(500).json({ message: "Server error while fetching dashboard data." });
+    return res
+      .status(500)
+      .json({ message: "Server error while fetching dashboard data." });
   }
 };
 
@@ -180,17 +187,31 @@ const attendance = async (req, res) => {
         totalDays: student.attendanceSummary?.totalDays || 0,
         presentDays: student.attendanceSummary?.presentDays || 0,
         absentDays: student.attendanceSummary?.absentDays || 0,
-        attendancePercentage: student.attendanceSummary?.totalDays > 0
-          ? ((student.attendanceSummary.presentDays / student.attendanceSummary.totalDays) * 100).toFixed(2)
-          : 0
-      }
+        attendancePercentage:
+          student.attendanceSummary?.totalDays > 0
+            ? (
+                (student.attendanceSummary.presentDays /
+                  student.attendanceSummary.totalDays) *
+                100
+              ).toFixed(2)
+            : 0,
+      },
     };
 
     return res.json(attendanceData);
   } catch (err) {
     console.error("Attendance fetch error:", err);
-    return res.status(500).json({ message: "Server error while fetching attendance data." });
+    return res
+      .status(500)
+      .json({ message: "Server error while fetching attendance data." });
   }
 };
 
-export { login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance };
+export {
+  login,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
+  dashboard,
+  attendance,
+};

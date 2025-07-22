@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 
 const studentSchema = new mongoose.Schema({
-  studentName: { type: String, required: true },
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
   studentId: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
   roomBedNumber: { type: String, required: true },

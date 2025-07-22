@@ -5,6 +5,8 @@ import bcrypt from "bcrypt";
 import jwt from 'jsonwebtoken';
 import { Student } from '../models/student.model.js';
 import { Parent } from '../models/parent.model.js';
+import { Otp } from '../models/otp.model.js';
+
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
@@ -124,11 +126,11 @@ const forgotPassword = async (req, res) => {
   }
 
   const otp = String(Math.floor(100000 + Math.random() * 900000));
-  otpStore[email] = {
-    code: otp,
-    expires: Date.now() + 10 * 60 * 1000,
-    verified: false
-  };
+  await Otp.findOneAndUpdate(
+    {email},
+    { code: otp, expires, verified: false },
+    { upsert: true }
+  );
 
   await transporter.sendMail({
     from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
@@ -141,9 +143,9 @@ const forgotPassword = async (req, res) => {
 };
 
 
-const verifyOtp = (req, res) => {
+const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
-  const record = otpStore[email];
+  await Otp.findOne({ email, code});
   if (
     !record ||
     record.code !== otp ||
@@ -157,7 +159,7 @@ const verifyOtp = (req, res) => {
 
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  const record = otpStore[email];
+  const record = await Otp.findOne({ email, code: otp, verified: true });
 
   if (!record || record.code !== otp || !record.verified) {
     return res.status(400).json({ message: "OTP not verified" });
@@ -172,7 +174,7 @@ const resetPassword = async (req, res) => {
   admin.password = hashedPassword;
   await admin.save();
 
-  delete otpStore[email];
+  await Otp.deleteOne({ email });
 
   return res.json({ message: "Password has been reset" });
 };
