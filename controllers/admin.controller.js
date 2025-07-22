@@ -301,6 +301,60 @@ Please log in at https://www.KGF-HM.com and change your password after first log
   }
 };
 
+const registerWarden = async (req, res) => {
+  const { firstName, lastName, email, contactNumber, wardenId } = req.body;
+
+  try {
+    // Check if the warden already exists by email
+    const existingWarden = await Warden.findOne({ email });
+    if (existingWarden) {
+      return res.status(409).json({ message: "Warden already exists with the same email." });
+    }
+
+    // Generate a password for the warden (can be a combination of firstName, lastName, or something else)
+    const cleanName = firstName.replace(/\s+/g, '').toLowerCase(); // Remove spaces from first name
+    const password = `${cleanName}${lastName}`; // Password will be a combination of firstName and lastName
+
+    // Create new warden record
+    const newWarden = new Warden({
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      password,
+      wardenId // Set the generated password
+    });
+
+    await newWarden.save();
+
+    // Send email with the login credentials
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject: 'Your Warden Panel Credentials',
+      text: `Hello ${firstName} ${lastName},
+
+Your warden account has been created.
+
+• Warden Name: ${firstName} ${lastName}
+• Your Login Password: ${password}
+
+Please log in at https://www.KGF-HM.com and change your password after first login.
+
+– Hostel Admin`
+    });
+
+    return res.json({
+      message: 'Warden registered and login credentials emailed.',
+      warden: { firstName, lastName, email }
+    });
+  } catch (err) {
+    console.error("Error registering warden:", err);
+    return res.status(500).json({ message: "Error registering warden." });
+  }
+};
+
+
 const getTodaysCheckInOutStatus = async (req, res) => {
   try {
     const today = new Date();
@@ -342,6 +396,7 @@ const getBedOccupancyStatus = async (req, res) => {
 
     return res.json({
       totalBeds,
+
       occupiedBeds,
       availableBeds
     });
@@ -360,6 +415,7 @@ export {
     login,
     registerStudent,
     registerParent,
+    registerWarden,
     refreshAccessToken,
     generateRefreshToken,
     getTodaysCheckInOutStatus,

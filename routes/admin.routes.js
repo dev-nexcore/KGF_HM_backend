@@ -9,6 +9,7 @@ import {
   resetPassword,
   registerStudent,
   registerParent,
+  registerWarden,
   refreshAccessToken,
   getTodaysCheckInOutStatus,
   getBedOccupancyStatus
@@ -25,6 +26,7 @@ router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.post('/register-student',  registerStudent);
 router.post('/register-parent', registerParent);
+router.post('/register-warden', registerWarden);
 router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);
 router.get('/bed-occupancy-status', getBedOccupancyStatus);
 export default router;
