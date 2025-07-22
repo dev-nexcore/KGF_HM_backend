@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { Student } from '../models/student.model.js';
 import { Parent } from '../models/parent.model.js';
 import { Otp } from '../models/otp.model.js';
+import { Warden } from '../models/warden.model.js';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -303,8 +304,12 @@ Please log in at https://www.KGF-HM.com and change your password after first log
   }
 };
 
+
+
+
+
 const registerWarden = async (req, res) => {
-  const { firstName, lastName, email, contactNumber, wardenId } = req.body;
+     const { firstName,lastName, email, wardenId, contactNumber, password } = req.body;
 
   try {
     // Check if the warden already exists by email
@@ -322,9 +327,10 @@ const registerWarden = async (req, res) => {
       firstName,
       lastName,
       email,
+      wardenId,
       contactNumber,
       password,
-      wardenId // Set the generated password
+   // Set the generated password
     });
 
     await newWarden.save();
@@ -355,6 +361,8 @@ Please log in at https://www.KGF-HM.com and change your password after first log
     return res.status(500).json({ message: "Error registering warden." });
   }
 };
+
+
 
 
 const getTodaysCheckInOutStatus = async (req, res) => {
