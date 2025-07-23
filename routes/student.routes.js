@@ -9,7 +9,9 @@ import {
     fileComplaint, 
     getComplaintHistory, 
     applyForLeave,
-    getLeaveHistory
+    getLeaveHistory,
+    requestRefund,
+    getRefundHistory
 } from '../controllers/student.controller.js';
 
 const router = express.Router();
@@ -24,5 +26,7 @@ router.post("/complaint", fileComplaint);
 router.get("/complaints/:studentId", getComplaintHistory);
 router.post("/leave", applyForLeave);
 router.get("/leaves/:studentId", getLeaveHistory);
+router.post("/refund", requestRefund);
+router.get("/refunds/:studentId", getRefundHistory);
 
 export default router;

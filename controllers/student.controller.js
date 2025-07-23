@@ -5,6 +5,7 @@ import { Student } from "../models/student.model.js";
 import { Otp } from "../models/otp.model.js";
 import { Complaint } from "../models/complaint.model.js";
 import { Leave } from "../models/leave.model.js";
+import { Refund } from "../models/refund.model.js";
 
 
 const transporter = nodemailer.createTransport({
@@ -297,6 +298,69 @@ const getLeaveHistory = async (req, res) => {
 };
 
 
+const requestRefund = async (req, res) => {
+  const { studentId, refundType, amount, reason } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const newRefund = new Refund({
+      studentId: student._id,
+      refundType,
+      amount,
+      reason,
+      status: "pending",
+    });
+
+    await newRefund.save();
+
+    // await transporter.sendMail({
+    //   from: `<${student.email}>`,
+    //   to: process.env.MAIL_USER,
+    //   subject: `Refund Request: ${refundType} from ${student.studentName}`,
+    //   text: `Refund Amount: ${amount}\nReason: ${reason}`,
+    // });
+
+    return res.json({
+      message: "Refund request submitted successfully",
+      refund: newRefund,
+    });
+  } catch (err) {
+    console.error("Refund request error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while requesting refund." });
+  }
+};
+
+
+
+const getRefundHistory = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const refunds = await Refund.find({ studentId: student._id })
+      .select("refundType amount reason status requestedAt")
+      .sort({ requestedAt: -1 });
+
+    return res.json({ refunds });
+  } catch (err) {
+    console.error("Fetch refund history error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while fetching refund history." });
+  }
+};
+
+
 
 
 export{
@@ -309,5 +373,7 @@ export{
     fileComplaint,
     getComplaintHistory,
     applyForLeave,
-    getLeaveHistory
+    getLeaveHistory,
+    requestRefund,
+    getRefundHistory
 }
