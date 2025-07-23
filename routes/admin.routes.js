@@ -13,6 +13,8 @@ import {
   refreshAccessToken,
   getTodaysCheckInOutStatus,
   getBedOccupancyStatus,
+  upload,
+  addInventoryItem,
   issueNotice
 
 } from "../controllers/admin.controller.js";
@@ -30,5 +32,6 @@ router.post('/register-parent', registerParent);
 router.post('/register-warden', registerWarden);
 router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);
 router.get('/bed-occupancy-status', getBedOccupancyStatus);
+router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
 router.post('/issue-notice',issueNotice)
 export default router;

@@ -8,6 +8,9 @@ import { Parent } from '../models/parent.model.js';
 import { Otp } from '../models/otp.model.js';
 import { Warden } from '../models/warden.model.js';
 import { Notice } from '../models/notice.model.js';
+import { Inventory } from '../models/inventory.model.js';
+import path from 'path';
+import multer from 'multer';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -418,6 +421,54 @@ const getBedOccupancyStatus = async (req, res) => {
   }
 };
 
+// ✅ File upload config (store in /uploads/receipts/)
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/receipts/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `receipt-${Date.now()}${path.extname(file.originalname)}`);
+  }
+});
+const upload = multer({ storage });
+
+const addInventoryItem = async (req, res) => {
+  try {
+    const {
+      itemName,
+      barcodeId,
+      category,
+      location,
+      status,
+      description,
+      purchaseDate,
+      purchaseCost
+    } = req.body;
+
+    const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
+
+    const newItem = new Inventory({
+      itemName,
+      barcodeId,
+      category,
+      location,
+      status,
+      description,
+      purchaseDate,
+      purchaseCost,
+      receiptUrl
+    });
+
+    await newItem.save();
+    return res.status(201).json({ message: "Inventory item added successfully", item: newItem });
+
+  } catch (err) {
+    console.error("Add Inventory Error:", err);
+    return res.status(500).json({ message: "Failed to add inventory item." });
+  }
+};
+
+
 
 const issueNotice = async (req, res) => {
   const {
@@ -525,5 +576,7 @@ export {
     generateRefreshToken,
     getTodaysCheckInOutStatus,
     getBedOccupancyStatus,
-    issueNotice
+    issueNotice,
+    upload,
+    addInventoryItem
 };
