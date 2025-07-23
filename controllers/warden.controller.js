@@ -1,0 +1,116 @@
+import "dotenv/config";
+import nodemailer from "nodemailer";
+import bcrypt from "bcrypt";
+import { Warden } from "../models/warden.model.js";
+import { Otp } from "../models/otp.model.js";
+
+// Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: +process.env.MAIL_PORT,
+  secure: process.env.MAIL_SECURE === "true",
+  auth: {
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
+  },
+});
+
+//  Login warden
+const login = async (req, res) => {
+  const { wardenId, password } = req.body;
+
+  try {
+    const warden = await Warden.findOne({ wardenId });
+    if (!warden) return res.status(401).json({ message: "Invalid warden ID" });
+
+    const isMatch = await warden.comparePassword(password);
+    if (!isMatch) return res.status(401).json({ message: "Invalid password" });
+
+    return res.json({
+      message: "Login successful",
+      wardenId,
+      name: `${warden.firstName} ${warden.lastName}`,
+    });
+  } catch (err) {
+    console.error("Warden login error:", err);
+    return res.status(500).json({ message: "Server error during login." });
+  }
+};
+
+//  Forgot Password
+const forgotPassword = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const warden = await Warden.findOne({ email });
+    if (!warden) return res.status(400).json({ message: "Email not found" });
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
+
+    await Otp.findOneAndUpdate(
+      { email },
+      { code: otp, expires, verified: false },
+      { upsert: true }
+    );
+
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject: "Warden Password Reset OTP",
+      text: `Dear ${warden.firstName} ${warden.lastName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,
+    });
+
+    return res.json({ message: "OTP sent" });
+  } catch (err) {
+    console.error("Warden forgot password error:", err);
+    return res.status(500).json({ message: "Error sending OTP." });
+  }
+};
+
+//  Verify OTP
+const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  const record = await Otp.findOne({ email, code: otp });
+
+  if (!record || record.expires < Date.now()) {
+    return res.status(400).json({ message: "Invalid or expired OTP" });
+  }
+
+  record.verified = true;
+  await record.save();
+  return res.json({ message: "OTP verified" });
+};
+
+//  Reset Password
+const resetPassword = async (req, res) => {
+  const { email, otp, newPassword } = req.body;
+
+  const record = await Otp.findOne({ email, code: otp, verified: true });
+
+  if (!record) {
+    return res.status(400).json({ message: "OTP not verified" });
+  }
+
+  try {
+    const warden = await Warden.findOne({ email });
+    if (!warden) return res.status(404).json({ message: "Warden not found" });
+
+    warden.password = await bcrypt.hash(newPassword, 10);
+    await warden.save();
+    await Otp.deleteOne({ email });
+
+    return res.json({ message: "Password has been reset" });
+  } catch (err) {
+    console.error("Warden reset password error:", err);
+    return res.status(500).json({ message: "Error resetting password." });
+  }
+};
+
+export {
+  login as loginWarden,
+  forgotPassword as forgotPasswordWarden,
+  verifyOtp as verifyOtpWarden,
+  resetPassword as resetPasswordWarden,
+};

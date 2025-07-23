@@ -309,7 +309,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
 
 const registerWarden = async (req, res) => {
-     const { firstName,lastName, email, wardenId, contactNumber, password } = req.body;
+     const { firstName,lastName, email, wardenId, contactNumber} = req.body;
 
   try {
     // Check if the warden already exists by email
@@ -320,7 +320,7 @@ const registerWarden = async (req, res) => {
 
     // Generate a password for the warden (can be a combination of firstName, lastName, or something else)
     const cleanName = firstName.replace(/\s+/g, '').toLowerCase(); // Remove spaces from first name
-    const password = `${cleanName}${lastName}`; // Password will be a combination of firstName and lastName
+    const wardenPassword = `${cleanName}${lastName}`; // Password will be a combination of firstName and lastName
 
     // Create new warden record
     const newWarden = new Warden({
@@ -329,7 +329,7 @@ const registerWarden = async (req, res) => {
       email,
       wardenId,
       contactNumber,
-      password,
+      password: wardenPassword
    // Set the generated password
     });
 
@@ -345,7 +345,8 @@ const registerWarden = async (req, res) => {
 Your warden account has been created.
 
 • Warden Name: ${firstName} ${lastName}
-• Your Login Password: ${password}
+• Warden ID: ${wardenId}
+• Your Login Password: ${wardenPassword}
 
 Please log in at https://www.KGF-HM.com and change your password after first login.
 
@@ -354,7 +355,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Warden registered and login credentials emailed.',
-      warden: { firstName, lastName, email }
+      warden: { firstName, lastName, email, wardenId, wardenPassword }
     });
   } catch (err) {
     console.error("Error registering warden:", err);

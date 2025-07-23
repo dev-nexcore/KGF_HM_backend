@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcrypt';
 
+// Define the schema
 const wardenSchema = new mongoose.Schema({
   firstName: {
     type: String,
@@ -21,8 +23,9 @@ const wardenSchema = new mongoose.Schema({
   wardenId: {
     type: String,
     required: true,
+    unique: true,
   },
- contactNumber: {
+  contactNumber: {
     type: String,
   },
   profilePhoto: {
@@ -38,7 +41,19 @@ const wardenSchema = new mongoose.Schema({
   },
   otpCode: String,
   otpExpires: Date,
-
 }, { timestamps: true });
 
+//  Password Hash Middleware
+wardenSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+//  Method to Compare Password
+wardenSchema.methods.comparePassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
+// Export the model
 export const Warden = mongoose.model('Warden', wardenSchema);
