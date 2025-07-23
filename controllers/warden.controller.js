@@ -83,6 +83,7 @@ const verifyOtp = async (req, res) => {
   return res.json({ message: "OTP verified" });
 };
 
+
 //  Reset Password
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
@@ -97,8 +98,11 @@ const resetPassword = async (req, res) => {
     const warden = await Warden.findOne({ email });
     if (!warden) return res.status(404).json({ message: "Warden not found" });
 
-    warden.password = await bcrypt.hash(newPassword, 10);
+    // Just assign plain password — schema will hash it
+    warden.password = newPassword;
     await warden.save();
+
+    // Clean up OTP
     await Otp.deleteOne({ email });
 
     return res.json({ message: "Password has been reset" });
