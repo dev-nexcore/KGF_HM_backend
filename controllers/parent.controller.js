@@ -4,6 +4,7 @@ import bcrypt from "bcrypt";
 import { Parent } from "../models/parent.model.js";
 import { Student } from "../models/student.model.js";
 import { Otp } from "../models/otp.model.js";
+import { Notice } from "../models/notice.model.js"; 
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -217,7 +218,7 @@ const leaveManagement = async (req, res) => {
     }
 
     const leaveRecords = student.leaveDetails || [];
-    const currentDate = new Date("2025-07-23T05:57:00Z"); // 11:27 AM IST
+    const currentDate = new Date("2025-07-23T06:45:00Z"); // 12:15 PM IST
 
     const leaveHistory = leaveRecords.map(leave => {
       const startDate = new Date(leave.startDate).toISOString();
@@ -285,6 +286,24 @@ const fees = async (req, res) => {
   }
 };
 
+// Notices controller for parent panel
+const notices = async (req, res) => {
+  try {
+    const noticesList = await Notice.find().sort({ date: -1 });
+    const noticesData = noticesList.map(notice => ({
+      date: notice.date ? new Date(notice.date).toISOString() : null,
+      subject: notice.subject || "No Subject",
+      description: notice.description || "No Description",
+      status: notice.status || "NEW"
+    }));
+
+    return res.json(noticesData);
+  } catch (err) {
+    console.error("Notices fetch error:", err);
+    return res.status(500).json({ message: "Server error while fetching notices data." });
+  }
+};
+
 export {
   login,
   forgotPassword,
@@ -293,5 +312,6 @@ export {
   dashboard,
   attendance,
   leaveManagement,
-  fees
+  fees,
+  notices
 };
