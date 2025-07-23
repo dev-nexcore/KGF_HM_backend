@@ -23,8 +23,8 @@ const login = async(req, res) => {
       return res.status(401).json({ message: "Invalid student ID" });
     }
     
-    const isMatch = student.password === password; // Direct plain comparison
-
+     const isMatch = await admin.comparePassword(password);
+  
     if (!isMatch) { 
       return res.status(401).json({ message: "Invalid password" });
     }
