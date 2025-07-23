@@ -3,6 +3,8 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Warden } from "../models/warden.model.js";
 import { Otp } from "../models/otp.model.js";
+import fs from "fs";
+import path from "path";
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -112,9 +114,70 @@ const resetPassword = async (req, res) => {
   }
 };
 
+
+
+
+
+
+// GET warden profile
+
+const getWardenProfile = async (req, res) => {
+  try {
+    const warden = await Warden.findById(req.params.id).select(
+      "firstName lastName contactNumber email wardenId profilePhoto"
+    );
+
+    if (!warden) {
+      return res.status(404).json({ message: "Warden not found" });
+    }
+
+    res.status(200).json(warden);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
+
+// update wardenprofile
+
+ const updateWardenProfile = async (req, res) => {
+  try {
+    const { firstName, lastName, email, contactNumber } = req.body;
+
+    let warden = await Warden.findById(req.params.id);
+    if (!warden) return res.status(404).json({ message: "Warden not found" });
+
+    warden.firstName = firstName || warden.firstName;
+    warden.lastName = lastName || warden.lastName;
+    warden.email = email || warden.email;
+    warden.contactNumber = contactNumber || warden.contactNumber;
+
+    if (req.file) {
+      // Delete old profile photo if exists
+      if (warden.profilePhoto) {
+        const oldPath = `uploads/${warden.profilePhoto}`;
+        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+      }
+      warden.profilePhoto = req.file.filename;
+    }
+
+    await warden.save();
+    res.status(200).json({ message: "Profile updated successfully", warden });
+  } catch (error) {
+    res.status(500).json({ message: "Update failed", error });
+  }
+};
+
+
+
+
+
+
 export {
   login as loginWarden,
   forgotPassword as forgotPasswordWarden,
   verifyOtp as verifyOtpWarden,
   resetPassword as resetPasswordWarden,
+  getWardenProfile,
+  updateWardenProfile,
 };
