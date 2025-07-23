@@ -15,7 +15,8 @@ connectDB()
 app.use(cors())
 app.use('/api/adminauth', adminRoutes);
 app.use('/api/parentauth',parentRoutes)
-app.use("/api/wardenauth", wardenRoutes);app.use('/api/studentauth', studentRoutes);
+app.use("/api/wardenauth", wardenRoutes);
+app.use('/api/studentauth', studentRoutes);
 
 
 const PORT = process.env.PORT || 5001
