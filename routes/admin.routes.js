@@ -12,7 +12,8 @@ import {
   registerWarden,
   refreshAccessToken,
   getTodaysCheckInOutStatus,
-  getBedOccupancyStatus
+  getBedOccupancyStatus,
+  issueNotice
 
 } from "../controllers/admin.controller.js";
 
@@ -29,4 +30,5 @@ router.post('/register-parent', registerParent);
 router.post('/register-warden', registerWarden);
 router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);
 router.get('/bed-occupancy-status', getBedOccupancyStatus);
+router.post('/issue-notice',issueNotice)
 export default router;

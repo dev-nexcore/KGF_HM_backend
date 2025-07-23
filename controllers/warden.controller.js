@@ -170,17 +170,31 @@ const getWardenProfile = async (req, res) => {
 };
 
 
-// Get emergency contacts of all students
+
+
 
 const getEmergencyContacts = async (req, res) => {
   try {
-    const students = await Student.find({}, {
+    const { studentName, studentId } = req.query;
+
+    // Build dynamic search filter
+    let filter = {};
+
+    if (studentName) {
+      filter.studentName = { $regex: studentName, $options: 'i' }; // Case-insensitive search
+    }
+
+    if (studentId) {
+      filter.studentId = { $regex: studentId, $options: 'i' }; // Case-insensitive partial match
+    }
+
+    const students = await Student.find(filter, {
       studentId: 1,
       studentName: 1,
       emergencyContactName: 1,
       relation: 1,
       emergencyContactNumber: 1,
-      _id: 0
+      _id: 0,
     });
 
     res.status(200).json({
@@ -197,6 +211,101 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
+// Get student list for warden
+
+const getStudentListForWarden = async (req, res) => {
+  try {
+    const { studentId, roomBedNumber } = req.query;
+
+    // Build dynamic search filter
+    let filter = {};
+
+    if (studentId) {
+      filter.studentId = { $regex: studentId, $options: "i" }; // case-insensitive partial match
+    }
+
+    if (roomBedNumber) {
+      filter.roomBedNumber = { $regex: roomBedNumber, $options: "i" };
+    }
+
+    const students = await Student.find(filter, {
+      studentId: 1,
+      studentName: 1,
+      roomBedNumber: 1,
+      contactNumber: 1,
+      _id: 0,
+    });
+
+    res.status(200).json({
+      success: true,
+      students,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch student list",
+      error: error.message,
+    });
+  }
+};
+
+// Update student room/bed number
+
+const updateStudentRoom = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { roomBedNumber } = req.body;
+
+    const student = await Student.findOneAndUpdate(
+      { studentId },
+      { roomBedNumber },
+      { new: true } // returns the updated document
+    );
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Room/Bed number updated successfully",
+      student,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to update student room",
+      error: error.message,
+    });
+  }
+};
+
+
+
+// Get total number of students
+const getTotalStudents = async (req, res) => {
+  try {
+    const count = await Student.countDocuments();
+
+    res.status(200).json({
+      success: true,
+      totalStudents: count,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to get total students",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
 
 
 export {
@@ -207,4 +316,7 @@ export {
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,
+  getStudentListForWarden,
+  updateStudentRoom,
+  getTotalStudents,
 };

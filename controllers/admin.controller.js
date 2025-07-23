@@ -7,6 +7,7 @@ import { Student } from '../models/student.model.js';
 import { Parent } from '../models/parent.model.js';
 import { Otp } from '../models/otp.model.js';
 import { Warden } from '../models/warden.model.js';
+import { Notice } from '../models/notice.model.js';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -418,6 +419,99 @@ const getBedOccupancyStatus = async (req, res) => {
 };
 
 
+const issueNotice = async (req, res) => {
+  const {
+    template,
+    title,
+    message,
+    issueDate,
+    recipientType,
+    individualRecipient
+  } = req.body;
+
+  try {
+    const notice = await Notice.create({
+      template,
+      title,
+      message,
+      issueDate,
+      recipientType,
+      individualRecipient
+    });
+
+    const subject = `Hostel Notice: ${title}`;
+    const emailBody = `
+${message}
+
+Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
+
+– Hostel Admin
+`;
+
+    let recipients = [];
+
+    if (recipientType === 'All') {
+      const students = await Student.find({}, 'email');
+      const parents = await Parent.find({}, 'email');
+      const wardens = await Warden.find({}, 'email');
+
+      recipients = [
+        ...students.map(s => s.email).filter(Boolean),
+        ...parents.map(p => p.email).filter(Boolean),
+        ...wardens.map(w => w.email).filter(Boolean)
+      ];
+    } else if (recipientType === 'Student') {
+      if (!individualRecipient) {
+        const students = await Student.find({}, 'email');
+        recipients = students.map(s => s.email).filter(Boolean);
+      } else {
+        const student = await Student.findOne({ studentId: individualRecipient });
+        if (student?.email) recipients.push(student.email);
+      }
+    } else if (recipientType === 'Parent') {
+      if (!individualRecipient) {
+        const parents = await Parent.find({}, 'email');
+        recipients = parents.map(p => p.email).filter(Boolean);
+      } else {
+        const parent = await Parent.findOne({ studentId: individualRecipient });
+        if (parent?.email) recipients.push(parent.email);
+      }
+    } else if (recipientType === 'Warden') {
+      if (!individualRecipient) {
+        const wardens = await Warden.find({}, 'email');
+        recipients = wardens.map(w => w.email).filter(Boolean);
+      } else {
+        const warden = await Warden.findOne({ wardenId: individualRecipient });
+        if (warden?.email) recipients.push(warden.email);
+      }
+    }
+
+    if (recipients.length === 0) {
+      return res.status(400).json({ message: "No recipients found to send notice." });
+    }
+
+    for (const email of recipients) {
+      const result = await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: email,
+        subject,
+        text: emailBody
+      });
+
+      console.log(`📤 Email sent to ${email} - MessageId: ${result.messageId}`);
+    }
+
+    return res.status(201).json({ message: "Notice issued and emailed successfully", notice });
+  } catch (err) {
+    console.error("Issue notice error:", err);
+    return res.status(500).json({ message: "Failed to issue notice" });
+  }
+};
+
+
+
+
+
 export {
     resetPassword,
     verifyOtp,
@@ -430,5 +524,6 @@ export {
     refreshAccessToken,
     generateRefreshToken,
     getTodaysCheckInOutStatus,
-    getBedOccupancyStatus
+    getBedOccupancyStatus,
+    issueNotice
 };
