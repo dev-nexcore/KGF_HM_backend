@@ -1,8 +1,10 @@
 import mongoose from 'mongoose';
+// import bcrypt from 'bcrypt';
 
 const studentSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
+  studentName: { type: String, required: true },
+  // firstName: { type: String, required: true },
+  // lastName: { type: String, required: true },
   studentId: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
   roomBedNumber: { type: String, required: true },
@@ -12,9 +14,17 @@ const studentSchema = new mongoose.Schema({
   emergencyContactName: { type: String },
   emergencyContactNumber: { type: String },
   password: { type: String, required: true },
-  checkInDate: { type: Date, default: null },
-  checkOutDate: { type: Date, default: null },
+   attendanceLog: [
+    {
+      checkInDate: { type: Date, required: true },
+      checkOutDate: { type: Date, default: null },
+    }
+  ],
 });
+
+// studentSchema.methods.comparePassword = function (candidatePassword) {
+//   return bcrypt.compare(candidatePassword, this.password);
+// };
 
 export const Student = mongoose.model('Student', studentSchema);
 
