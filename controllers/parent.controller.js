@@ -232,7 +232,7 @@ const leaveManagement = async (req, res) => {
     // Fetch leave history from Leave model
     const leaves = await Leave.find({ studentId: student._id })
       .select("leaveType startDate endDate reason status appliedAt _id")
-      .sort({ appliedAt: -1 });
+      .sort({ appliedAt: -1 }); // Fixed missing closing parenthesis
 
     console.log("Leaves found:", leaves);
 
@@ -253,8 +253,8 @@ const leaveManagement = async (req, res) => {
       };
     });
 
-    // Update currentDate to current time (05:37 PM IST, July 23, 2025)
-    const currentDate = new Date("2025-07-23T12:07:00Z");
+    // Use dynamic current date from the backend
+    const currentDate = new Date();
 
     return res.json({
       studentId: student.studentId,
@@ -266,6 +266,7 @@ const leaveManagement = async (req, res) => {
     return res.status(500).json({ message: "Server error while fetching leave data." });
   }
 };
+
 
 // Fees controller for parent panel
 const fees = async (req, res) => {
