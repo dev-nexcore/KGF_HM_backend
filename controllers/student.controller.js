@@ -23,7 +23,8 @@ const login = async(req, res) => {
       return res.status(401).json({ message: "Invalid student ID" });
     }
     
-    const isMatch = await student.comparePassword(password);
+    const isMatch = student.password === password; // Direct plain comparison
+
     if (!isMatch) { 
       return res.status(401).json({ message: "Invalid password" });
     }
@@ -110,6 +111,79 @@ const resetPassword = async (req, res) => {
   }
 };
 
+const checkInStudent = async (req, res) => {
+  const { studentId } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const latestEntry = student.attendanceLog.at(-1); // Get last entry
+
+    // Prevent multiple check-ins without checkout
+    if (latestEntry && !latestEntry.checkOutDate) {
+      return res.status(400).json({ message: "Already checked in, checkout first" });
+    }
+
+    const newCheckIn = {
+      checkInDate: new Date()
+    };
+
+    student.attendanceLog.push(newCheckIn);
+    await student.save();
+
+    const istTime = new Date(newCheckIn.checkInDate).toLocaleString("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour12: false
+    });
+
+    return res.json({
+      message: "Check In recorded successfully",
+      checkInDate: istTime
+    });
+  } catch (err) {
+    console.error("Check-in error:", err);
+    return res.status(500).json({ message: "Server error during check-in." });
+  }
+};
+
+
+const checkOutStudent = async (req, res) => {
+  const { studentId } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const latestEntry = student.attendanceLog.at(-1);
+
+    if (!latestEntry || latestEntry.checkOutDate) {
+      return res.status(400).json({ message: "No active check-in found" });
+    }
+
+    latestEntry.checkOutDate = new Date();
+    await student.save();
+
+    const istTime = new Date(latestEntry.checkOutDate).toLocaleString("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour12: false
+    });
+
+    return res.json({
+      message: "Check Out recorded successfully",
+      checkOutDate: istTime
+    });
+  } catch (err) {
+    console.error("Check-out error:", err);
+    return res.status(500).json({ message: "Server error during check-out." });
+  }
+};
+
+
 
 
 export{
@@ -117,4 +191,6 @@ export{
     forgotPassword,
     resetPassword,
     verifyOtp,
+    checkInStudent,
+    checkOutStudent
 }
