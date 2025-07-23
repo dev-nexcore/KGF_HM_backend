@@ -5,6 +5,9 @@ import bcrypt from "bcrypt";
 import jwt from 'jsonwebtoken';
 import { Student } from '../models/student.model.js';
 import { Parent } from '../models/parent.model.js';
+import { Otp } from '../models/otp.model.js';
+import { Warden } from '../models/warden.model.js';
+
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
@@ -124,11 +127,11 @@ const forgotPassword = async (req, res) => {
   }
 
   const otp = String(Math.floor(100000 + Math.random() * 900000));
-  otpStore[email] = {
-    code: otp,
-    expires: Date.now() + 10 * 60 * 1000,
-    verified: false
-  };
+  await Otp.findOneAndUpdate(
+    {email},
+    { code: otp, expires, verified: false },
+    { upsert: true }
+  );
 
   await transporter.sendMail({
     from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
@@ -141,9 +144,9 @@ const forgotPassword = async (req, res) => {
 };
 
 
-const verifyOtp = (req, res) => {
+const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
-  const record = otpStore[email];
+  await Otp.findOne({ email, code});
   if (
     !record ||
     record.code !== otp ||
@@ -157,7 +160,7 @@ const verifyOtp = (req, res) => {
 
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  const record = otpStore[email];
+  const record = await Otp.findOne({ email, code: otp, verified: true });
 
   if (!record || record.code !== otp || !record.verified) {
     return res.status(400).json({ message: "OTP not verified" });
@@ -172,7 +175,7 @@ const resetPassword = async (req, res) => {
   admin.password = hashedPassword;
   await admin.save();
 
-  delete otpStore[email];
+  await Otp.deleteOne({ email });
 
   return res.json({ message: "Password has been reset" });
 };
@@ -301,6 +304,67 @@ Please log in at https://www.KGF-HM.com and change your password after first log
   }
 };
 
+
+
+
+
+const registerWarden = async (req, res) => {
+     const { firstName,lastName, email, wardenId, contactNumber, password } = req.body;
+
+  try {
+    // Check if the warden already exists by email
+    const existingWarden = await Warden.findOne({ email });
+    if (existingWarden) {
+      return res.status(409).json({ message: "Warden already exists with the same email." });
+    }
+
+    // Generate a password for the warden (can be a combination of firstName, lastName, or something else)
+    const cleanName = firstName.replace(/\s+/g, '').toLowerCase(); // Remove spaces from first name
+    const password = `${cleanName}${lastName}`; // Password will be a combination of firstName and lastName
+
+    // Create new warden record
+    const newWarden = new Warden({
+      firstName,
+      lastName,
+      email,
+      wardenId,
+      contactNumber,
+      password,
+   // Set the generated password
+    });
+
+    await newWarden.save();
+
+    // Send email with the login credentials
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject: 'Your Warden Panel Credentials',
+      text: `Hello ${firstName} ${lastName},
+
+Your warden account has been created.
+
+• Warden Name: ${firstName} ${lastName}
+• Your Login Password: ${password}
+
+Please log in at https://www.KGF-HM.com and change your password after first login.
+
+– Hostel Admin`
+    });
+
+    return res.json({
+      message: 'Warden registered and login credentials emailed.',
+      warden: { firstName, lastName, email }
+    });
+  } catch (err) {
+    console.error("Error registering warden:", err);
+    return res.status(500).json({ message: "Error registering warden." });
+  }
+};
+
+
+
+
 const getTodaysCheckInOutStatus = async (req, res) => {
   try {
     const today = new Date();
@@ -342,6 +406,7 @@ const getBedOccupancyStatus = async (req, res) => {
 
     return res.json({
       totalBeds,
+
       occupiedBeds,
       availableBeds
     });
@@ -360,6 +425,7 @@ export {
     login,
     registerStudent,
     registerParent,
+    registerWarden,
     refreshAccessToken,
     generateRefreshToken,
     getTodaysCheckInOutStatus,
