@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-// import bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt';
 
 const studentSchema = new mongoose.Schema({
   studentName: { type: String, required: true },
@@ -22,9 +22,15 @@ const studentSchema = new mongoose.Schema({
   ],
 });
 
-// studentSchema.methods.comparePassword = function (candidatePassword) {
-//   return bcrypt.compare(candidatePassword, this.password);
-// };
+studentSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+studentSchema.methods.comparePassword = function (candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
+};
 
 export const Student = mongoose.model('Student', studentSchema);
 
