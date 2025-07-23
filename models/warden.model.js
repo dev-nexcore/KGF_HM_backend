@@ -31,6 +31,14 @@ const wardenSchema = new mongoose.Schema({
   profilePhoto: {
     type: String, // File path or filename
   },
+  attendanceLog: [
+    {
+      date: { type: Date, required: true },
+      punchIn: { type: Date, required: true },
+      punchOut: { type: Date },
+      totalHours: { type: Number } // in hours
+    }
+  ],
   resetPasswordToken: {
     type: String,
     default: null,
