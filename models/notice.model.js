@@ -21,4 +21,4 @@ const noticeSchema = new mongoose.Schema({
   }
 });
 
-export default mongoose.model('Notice', noticeSchema);
+export const Notice = mongoose.model('Notice', noticeSchema);

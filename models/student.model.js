@@ -12,6 +12,7 @@ const studentSchema = new mongoose.Schema({
   admissionDate: { type: Date, required: true },
   feeStatus: { type: String, required: true },
   emergencyContactName: { type: String },
+  relation: { type: String },
   emergencyContactNumber: { type: String },
   password: { type: String, required: true },
    attendanceLog: [

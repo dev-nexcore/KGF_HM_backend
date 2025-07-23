@@ -5,6 +5,7 @@ import { Warden } from "../models/warden.model.js";
 import { Otp } from "../models/otp.model.js";
 import fs from "fs";
 import path from "path";
+import { Student } from "../models/student.model.js";
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -169,6 +170,31 @@ const getWardenProfile = async (req, res) => {
 };
 
 
+// Get emergency contacts of all students
+
+const getEmergencyContacts = async (req, res) => {
+  try {
+    const students = await Student.find({}, {
+      studentId: 1,
+      studentName: 1,
+      emergencyContactName: 1,
+      relation: 1,
+      emergencyContactNumber: 1,
+      _id: 0
+    });
+
+    res.status(200).json({
+      success: true,
+      contacts: students,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch emergency contacts",
+      error: error.message,
+    });
+  }
+};
 
 
 
@@ -180,4 +206,5 @@ export {
   resetPassword as resetPasswordWarden,
   getWardenProfile,
   updateWardenProfile,
+  getEmergencyContacts,
 };
