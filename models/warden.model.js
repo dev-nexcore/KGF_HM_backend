@@ -1,7 +1,11 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const wardenSchema = new mongoose.Schema({
-  name: {
+  firstName: {
+    type: String,
+    required: true,
+  },
+   lastName: {
     type: String,
     required: true,
   },
@@ -16,8 +20,9 @@ const wardenSchema = new mongoose.Schema({
   },
   wardenId: {
     type: String,
+    required: true,
   },
-  phone: {
+ contactNumber: {
     type: String,
   },
   profilePhoto: {
@@ -36,4 +41,4 @@ const wardenSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-module.exports = mongoose.model('Warden', wardenSchema);
+export const Warden = mongoose.model('Warden', wardenSchema);
