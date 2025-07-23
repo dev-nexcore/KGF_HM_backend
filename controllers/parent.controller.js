@@ -5,6 +5,7 @@ import { Parent } from "../models/parent.model.js";
 import { Student } from "../models/student.model.js";
 import { Warden } from "../models/warden.model.js";
 import { Otp } from "../models/otp.model.js";
+import { Leave } from "../models/leave.model.js";
 import { Notice } from "../models/notice.model.js"; 
 
 const transporter = nodemailer.createTransport({
@@ -214,7 +215,11 @@ const attendance = async (req, res) => {
 
 // Leave Management controller for parent panel
 const leaveManagement = async (req, res) => {
-  const { studentId } = req.query; // Changed from req.body to req.query
+  const { studentId } = req.query;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "studentId is required" });
+  }
 
   try {
     const student = await Student.findOne({ studentId });
@@ -222,29 +227,37 @@ const leaveManagement = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const leaveRecords = student.leaveDetails || [];
-    const currentDate = new Date("2025-07-23T09:31:00Z"); // 3:01 PM IST
+    console.log("Student found:", student);
 
-    const leaveHistory = leaveRecords.map(leave => {
+    // Fetch leave history from Leave model
+    const leaves = await Leave.find({ studentId: student._id })
+      .select("leaveType startDate endDate reason status appliedAt _id")
+      .sort({ appliedAt: -1 });
+
+    console.log("Leaves found:", leaves);
+
+    const leaveHistory = leaves.map(leave => {
       const startDate = new Date(leave.startDate).toISOString();
       const endDate = new Date(leave.endDate).toISOString();
       const durationMs = new Date(endDate) - new Date(startDate);
       const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
 
       return {
-        type: "Leave",
+        _id: leave._id,
+        leaveType: leave.leaveType,
         duration: `${durationDays} day${durationDays !== 1 ? 's' : ''}`,
         startDate: startDate,
         endDate: endDate,
-        reason: leave.reason || "Not specified",
-        status: leave.status || "Pending"
+        reason: leave.reason,
+        status: leave.status
       };
     });
 
+    // Update currentDate to current time (05:37 PM IST, July 23, 2025)
+    const currentDate = new Date("2025-07-23T12:07:00Z");
+
     return res.json({
       studentId: student.studentId,
-      firstName: student.firstName,
-      lastName: student.lastName,
       leaveHistory,
       currentDate: currentDate.toISOString()
     });
@@ -298,10 +311,10 @@ const notices = async (req, res) => {
   try {
     const noticesList = await Notice.find().sort({ date: -1 });
     const noticesData = noticesList.map(notice => ({
-      date: notice.date ? new Date(notice.date).toISOString() : null,
-      subject: notice.subject || "No Subject",
-      description: notice.description || "No Description",
-      status: notice.status || "NEW"
+      date: notice.issueDate ? new Date(notice.issueDate).toISOString() : null,
+      subject: notice.title || "No Subject",
+      description: notice.message || "No Description",
+      
     }));
 
     return res.json(noticesData);
