@@ -3,6 +3,10 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Student } from "../models/student.model.js";
 import { Otp } from "../models/otp.model.js";
+import { Complaint } from "../models/complaint.model.js";
+import { Leave } from "../models/leave.model.js";
+import { Refund } from "../models/refund.model.js";
+
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -23,7 +27,7 @@ const login = async(req, res) => {
       return res.status(401).json({ message: "Invalid student ID" });
     }
     
-     const isMatch = await admin.comparePassword(password);
+     const isMatch = await student.comparePassword(password);
   
     if (!isMatch) { 
       return res.status(401).json({ message: "Invalid password" });
@@ -184,6 +188,179 @@ const checkOutStudent = async (req, res) => {
 };
 
 
+const fileComplaint = async (req, res) => {
+  const { studentId, complaintType, subject, description } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const newComplaint = new Complaint({
+      studentId: student._id,
+      complaintType,
+      subject,
+      description,
+    });
+
+    await newComplaint.save();
+
+    await transporter.sendMail({
+      from: `<${student.email}>`,
+      to: process.env.MAIL_USER,
+      subject: `${subject}`,
+      text: `${description}`
+    });
+
+    return res.json({ message: "Complaint filed successfully", complaint: newComplaint });
+  } catch (err) {
+    console.error("File complaint error:", err);
+    return res.status(500).json({ message: "Server error while filing complaint." });
+  }
+};
+
+
+const getComplaintHistory = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findOne({  _id: studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const complaints = await Complaint.find({ studentId: student._id }).select(
+      "complaintType subject filedDate status createdAt"
+    );
+
+    return res.json({ complaints });
+  } catch (err) {
+    console.error("Fetch complaint history error:", err);
+    return res.status(500).json({ message: "Server error while fetching complaints." });
+  }
+};
+
+
+const applyForLeave = async (req, res) => {
+  const { studentId, leaveType, startDate, endDate, reason } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const newLeave = new Leave({
+      studentId: student._id,
+      leaveType,
+      startDate,
+      endDate,
+      reason,
+      status:"pending",
+    });
+
+    await newLeave.save();
+
+    // await transporter.sendMail({
+    //   from: `<${student.email}>`,
+    //   to: process.env.MAIL_USER,
+    //   subject: `Leave Application: ${leaveType} from ${student.studentName}`,
+    //   text: `${newLeave.reason}`,
+    // });
+
+    return res.json({ message: "Leave application submitted", leave: newLeave });
+  } catch (err) {
+    console.error("Apply leave error:", err);
+    return res.status(500).json({ message: "Server error while applying for leave." });
+  }
+};
+
+
+const getLeaveHistory = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findById(studentId); // << use findById instead of findOne
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const leaves = await Leave.find({ studentId: student._id })
+      .select("leaveType startDate endDate reason status appliedAt")
+      .sort({ appliedAt: -1 });
+
+    return res.json({ leaves });
+  } catch (err) {
+    console.error("Fetch leave history error:", err);
+    return res.status(500).json({ message: "Server error while fetching leave history." });
+  }
+};
+
+
+const requestRefund = async (req, res) => {
+  const { studentId, refundType, amount, reason } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const newRefund = new Refund({
+      studentId: student._id,
+      refundType,
+      amount,
+      reason,
+      status: "pending",
+    });
+
+    await newRefund.save();
+
+    // await transporter.sendMail({
+    //   from: `<${student.email}>`,
+    //   to: process.env.MAIL_USER,
+    //   subject: `Refund Request: ${refundType} from ${student.studentName}`,
+    //   text: `Refund Amount: ${amount}\nReason: ${reason}`,
+    // });
+
+    return res.json({
+      message: "Refund request submitted successfully",
+      refund: newRefund,
+    });
+  } catch (err) {
+    console.error("Refund request error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while requesting refund." });
+  }
+};
+
+
+
+const getRefundHistory = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findById(studentId);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const refunds = await Refund.find({ studentId: student._id })
+      .select("refundType amount reason status requestedAt")
+      .sort({ requestedAt: -1 });
+
+    return res.json({ refunds });
+  } catch (err) {
+    console.error("Fetch refund history error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while fetching refund history." });
+  }
+};
+
+
 
 
 export{
@@ -192,5 +369,11 @@ export{
     resetPassword,
     verifyOtp,
     checkInStudent,
-    checkOutStudent
+    checkOutStudent,
+    fileComplaint,
+    getComplaintHistory,
+    applyForLeave,
+    getLeaveHistory,
+    requestRefund,
+    getRefundHistory
 }
