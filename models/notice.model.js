@@ -1,24 +1,17 @@
+
 import mongoose from 'mongoose';
 
 const noticeSchema = new mongoose.Schema({
-  date: {
-    type: Date,
+  template: String,
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  issueDate: { type: Date, required: true },
+  recipientType: {
+    type: String,
+    enum: ['All', 'Student', 'Parent', 'Warden'],
     required: true,
-    default: Date.now
   },
-  subject: {
-    type: String,
-    required: true
-  },
-  description: {
-    type: String,
-    required: true
-  },
-  status: {
-    type: String,
-    enum: ['NEW', 'READ'],
-    default: 'NEW'
-  }
-});
+  individualRecipient: String
+}, { timestamps: true });
 
-export default mongoose.model('Notice', noticeSchema);
+export const Notice = mongoose.model("Notice", noticeSchema);

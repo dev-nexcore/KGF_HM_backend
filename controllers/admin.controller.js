@@ -430,7 +430,6 @@ const issueNotice = async (req, res) => {
   } = req.body;
 
   try {
-    // Save notice to DB
     const notice = await Notice.create({
       template,
       title,
@@ -451,36 +450,55 @@ Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
 
     let recipients = [];
 
-    // 🔍 Determine recipients
     if (recipientType === 'All') {
       const students = await Student.find({}, 'email');
       const parents = await Parent.find({}, 'email');
       const wardens = await Warden.find({}, 'email');
 
       recipients = [
-        ...students.map(s => s.email),
-        ...parents.map(p => p.email),
-        ...wardens.map(w => w.email)
+        ...students.map(s => s.email).filter(Boolean),
+        ...parents.map(p => p.email).filter(Boolean),
+        ...wardens.map(w => w.email).filter(Boolean)
       ];
     } else if (recipientType === 'Student') {
-      const student = await Student.findOne({ studentId: individualRecipient });
-      if (student) recipients.push(student.email);
+      if (!individualRecipient) {
+        const students = await Student.find({}, 'email');
+        recipients = students.map(s => s.email).filter(Boolean);
+      } else {
+        const student = await Student.findOne({ studentId: individualRecipient });
+        if (student?.email) recipients.push(student.email);
+      }
     } else if (recipientType === 'Parent') {
-      const parent = await Parent.findOne({ studentId: individualRecipient });
-      if (parent) recipients.push(parent.email);
+      if (!individualRecipient) {
+        const parents = await Parent.find({}, 'email');
+        recipients = parents.map(p => p.email).filter(Boolean);
+      } else {
+        const parent = await Parent.findOne({ studentId: individualRecipient });
+        if (parent?.email) recipients.push(parent.email);
+      }
     } else if (recipientType === 'Warden') {
-      const warden = await Warden.findOne({ wardenId: individualRecipient });
-      if (warden) recipients.push(warden.email);
+      if (!individualRecipient) {
+        const wardens = await Warden.find({}, 'email');
+        recipients = wardens.map(w => w.email).filter(Boolean);
+      } else {
+        const warden = await Warden.findOne({ wardenId: individualRecipient });
+        if (warden?.email) recipients.push(warden.email);
+      }
     }
 
-    // ✉️ Send Emails
+    if (recipients.length === 0) {
+      return res.status(400).json({ message: "No recipients found to send notice." });
+    }
+
     for (const email of recipients) {
-      await transporter.sendMail({
+      const result = await transporter.sendMail({
         from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
         to: email,
         subject,
         text: emailBody
       });
+
+      console.log(`📤 Email sent to ${email} - MessageId: ${result.messageId}`);
     }
 
     return res.status(201).json({ message: "Notice issued and emailed successfully", notice });
@@ -489,6 +507,9 @@ Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
     return res.status(500).json({ message: "Failed to issue notice" });
   }
 };
+
+
+
 
 
 export {
