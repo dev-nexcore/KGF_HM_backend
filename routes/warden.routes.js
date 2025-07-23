@@ -6,7 +6,10 @@ import {
   resetPasswordWarden,
   getWardenProfile,
   updateWardenProfile,
-  getEmergencyContacts
+  getEmergencyContacts,
+  getStudentListForWarden,
+  updateStudentRoom,
+  getTotalStudents
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 
@@ -22,6 +25,10 @@ router.post("/reset-password", resetPasswordWarden);
 router.get("/profile/:id", getWardenProfile);
 router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
 router.get("/contacts", getEmergencyContacts);
+router.get("/students", getStudentListForWarden);
+router.put("/students/:studentId", updateStudentRoom);
+router.get('/students/count', getTotalStudents);
+
 export default router;
 
 
