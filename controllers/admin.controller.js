@@ -7,6 +7,7 @@ import { Student } from '../models/student.model.js';
 import { Parent } from '../models/parent.model.js';
 import { Otp } from '../models/otp.model.js';
 import { Warden } from '../models/warden.model.js';
+import { Notice } from '../models/notice.model.js';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -418,6 +419,78 @@ const getBedOccupancyStatus = async (req, res) => {
 };
 
 
+const issueNotice = async (req, res) => {
+  const {
+    template,
+    title,
+    message,
+    issueDate,
+    recipientType,
+    individualRecipient
+  } = req.body;
+
+  try {
+    // Save notice to DB
+    const notice = await Notice.create({
+      template,
+      title,
+      message,
+      issueDate,
+      recipientType,
+      individualRecipient
+    });
+
+    const subject = `Hostel Notice: ${title}`;
+    const emailBody = `
+${message}
+
+Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
+
+– Hostel Admin
+`;
+
+    let recipients = [];
+
+    // 🔍 Determine recipients
+    if (recipientType === 'All') {
+      const students = await Student.find({}, 'email');
+      const parents = await Parent.find({}, 'email');
+      const wardens = await Warden.find({}, 'email');
+
+      recipients = [
+        ...students.map(s => s.email),
+        ...parents.map(p => p.email),
+        ...wardens.map(w => w.email)
+      ];
+    } else if (recipientType === 'Student') {
+      const student = await Student.findOne({ studentId: individualRecipient });
+      if (student) recipients.push(student.email);
+    } else if (recipientType === 'Parent') {
+      const parent = await Parent.findOne({ studentId: individualRecipient });
+      if (parent) recipients.push(parent.email);
+    } else if (recipientType === 'Warden') {
+      const warden = await Warden.findOne({ wardenId: individualRecipient });
+      if (warden) recipients.push(warden.email);
+    }
+
+    // ✉️ Send Emails
+    for (const email of recipients) {
+      await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: email,
+        subject,
+        text: emailBody
+      });
+    }
+
+    return res.status(201).json({ message: "Notice issued and emailed successfully", notice });
+  } catch (err) {
+    console.error("Issue notice error:", err);
+    return res.status(500).json({ message: "Failed to issue notice" });
+  }
+};
+
+
 export {
     resetPassword,
     verifyOtp,
@@ -430,5 +503,6 @@ export {
     refreshAccessToken,
     generateRefreshToken,
     getTodaysCheckInOutStatus,
-    getBedOccupancyStatus
+    getBedOccupancyStatus,
+    issueNotice
 };
