@@ -6,6 +6,10 @@ import { Otp } from "../models/otp.model.js";
 import fs from "fs";
 import path from "path";
 import { Student } from "../models/student.model.js";
+import { Leave } from "../models/leave.model.js";
+import jwt from "jsonwebtoken";
+import { Inventory } from '../models/inventory.model.js';
+
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -41,14 +45,11 @@ const transporter = nodemailer.createTransport({
 // };
 
 
+// Login Page For Warden
+// This function handles the login process for wardens.
 
-
-import jwt from "jsonwebtoken";
-
-
-// --------------------
 // POST /api/wardenauth/login
-// --------------------
+
  const login = async (req, res) => {
   const { wardenId, password } = req.body;
 
@@ -59,7 +60,7 @@ import jwt from "jsonwebtoken";
     const isMatch = await warden.comparePassword(password);
     if (!isMatch) return res.status(401).json({ message: "Invalid password" });
 
-    // ✅ Generate JWT Token
+    //  Generate JWT Token
     const token = jwt.sign(
       {
         id: warden._id,
@@ -87,6 +88,7 @@ import jwt from "jsonwebtoken";
     res.status(500).json({ message: "Server error during login." });
   }
 };
+
 
 
 //  Forgot Password
@@ -120,6 +122,8 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+
+
 //  Verify OTP
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -134,6 +138,8 @@ const verifyOtp = async (req, res) => {
   await record.save();
   return res.json({ message: "OTP verified" });
 };
+
+
 
 
 //  Reset Password
@@ -168,8 +174,7 @@ const resetPassword = async (req, res) => {
 
 
 
-
-// GET warden profile
+// warden profile Page
 
 const getWardenProfile = async (req, res) => {
   try {
@@ -186,7 +191,6 @@ const getWardenProfile = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 
 // update wardenprofile
 
@@ -220,7 +224,7 @@ const getWardenProfile = async (req, res) => {
 
 
 
-
+// Get Emergency Contacts Page.
 
 const getEmergencyContacts = async (req, res) => {
   try {
@@ -260,73 +264,207 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
+
+// Student Management Page
 // Get student list for warden
+
+// const getStudentListForWarden = async (req, res) => {
+//   try {
+//     const { studentId, roomBedNumber } = req.query;
+
+//     // Build dynamic search filter
+//     let filter = {};
+
+//     if (studentId) {
+//       filter.studentId = { $regex: studentId, $options: "i" }; // case-insensitive partial match
+//     }
+
+//     if (roomBedNumber) {
+//       filter.roomBedNumber = { $regex: roomBedNumber, $options: "i" };
+//     }
+
+//     const students = await Student.find(filter, {
+//       studentId: 1,
+//       studentName: 1,
+//       roomBedNumber: 1,
+//       contactNumber: 1,
+//       _id: 0,
+//     });
+
+//     res.status(200).json({
+//       success: true,
+//       students,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to fetch student list",
+//       error: error.message,
+//     });
+//   }
+// };
+
+
 
 const getStudentListForWarden = async (req, res) => {
   try {
-    const { studentId, roomBedNumber } = req.query;
+    const { studentId, roomNo } = req.query;
 
-    // Build dynamic search filter
-    let filter = {};
+    let studentFilter = {};
 
+    // Filter by studentId (partial match)
     if (studentId) {
-      filter.studentId = { $regex: studentId, $options: "i" }; // case-insensitive partial match
+      studentFilter.studentId = { $regex: studentId, $options: 'i' };
     }
 
-    if (roomBedNumber) {
-      filter.roomBedNumber = { $regex: roomBedNumber, $options: "i" };
+    let bedIds = [];
+
+    // Filter by roomNo (partial match from Inventory)
+    if (roomNo) {
+      const matchedBeds = await Inventory.find({
+        roomNo: { $regex: roomNo, $options: 'i' },
+      }).select('_id');
+
+      bedIds = matchedBeds.map(bed => bed._id);
+
+      if (bedIds.length === 0) {
+        return res.status(200).json({ success: true, students: [] }); // No results if no beds match
+      }
+
+      studentFilter.roomBedNumber = { $in: bedIds };
     }
 
-    const students = await Student.find(filter, {
-      studentId: 1,
-      studentName: 1,
-      roomBedNumber: 1,
-      contactNumber: 1,
-      _id: 0,
-    });
+    const students = await Student.find(studentFilter)
+      .populate({
+        path: 'roomBedNumber',
+        select: 'barcodeId roomNo',
+      })
+      .select('studentId studentName contactNumber roomBedNumber');
+
+    const formattedStudents = students.map(student => ({
+      studentId: student.studentId,
+      studentName: student.studentName,
+      contactNumber: student.contactNumber,
+      barcodeId: student.roomBedNumber?.barcodeId || null,
+      roomNo: student.roomBedNumber?.roomNo || null,
+    }));
 
     res.status(200).json({
       success: true,
-      students,
+      students: formattedStudents,
     });
   } catch (error) {
+    console.error('Error fetching student list:', error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch student list",
+      message: 'Failed to fetch student list',
       error: error.message,
     });
   }
 };
 
+
+
+
 // Update student room/bed number
+
+// const updateStudentRoom = async (req, res) => {
+//   try {
+//     const { studentId } = req.params;
+//     const { roomBedNumber } = req.body;
+
+//     const student = await Student.findOneAndUpdate(
+//       { studentId },
+//       { roomBedNumber },
+//       { new: true } // returns the updated document
+//     );
+
+//     if (!student) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Student not found",
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Room/Bed number updated successfully",
+//       student,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to update student room",
+//       error: error.message,
+//     });
+//   }
+// };
+
+
+
 
 const updateStudentRoom = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { roomBedNumber } = req.body;
+    const { barcodeId } = req.body;
 
-    const student = await Student.findOneAndUpdate(
-      { studentId },
-      { roomBedNumber },
-      { new: true } // returns the updated document
-    );
-
+    // 1. Find the student
+    const student = await Student.findOne({ studentId }).populate('roomBedNumber');
     if (!student) {
       return res.status(404).json({
         success: false,
-        message: "Student not found",
+        message: 'Student not found',
       });
     }
 
+    // 2. Find the new bed by barcodeId
+    const newBed = await Inventory.findOne({ barcodeId });
+    if (!newBed) {
+      return res.status(404).json({
+        success: false,
+        message: 'No bed found with the given barcode ID',
+      });
+    }
+
+    // 3. Prevent assigning bed if already in use
+    if (newBed.status === 'In Use') {
+      return res.status(400).json({
+        success: false,
+        message: 'This bed is already assigned to another student',
+      });
+    }
+
+    // 4. Free up old bed if exists
+    if (student.roomBedNumber) {
+      const oldBed = await Inventory.findById(student.roomBedNumber._id);
+      if (oldBed) {
+        oldBed.status = 'Available';
+        await oldBed.save();
+      }
+    }
+
+    // 5. Assign new bed to student
+    student.roomBedNumber = newBed._id;
+    await student.save();
+
+    // 6. Mark new bed as "In Use"
+    newBed.status = 'In Use';
+    await newBed.save();
+
+    // 7. Send updated student data
+    const updatedStudent = await Student.findById(student._id).populate('roomBedNumber');
+
     res.status(200).json({
       success: true,
-      message: "Room/Bed number updated successfully",
-      student,
+      message: 'Student bed assignment updated successfully',
+      student: updatedStudent,
     });
+
   } catch (error) {
+    console.error('Error updating student room:', error);
     res.status(500).json({
       success: false,
-      message: "Failed to update student room",
+      message: 'Internal server error while assigning bed',
       error: error.message,
     });
   }
@@ -351,6 +489,10 @@ const getTotalStudents = async (req, res) => {
     });
   }
 };
+
+
+
+// Warden Punch In and Punch Out Page.
 
 // POST /api/warden/attendance/punch-in
 const punchIn = async (req, res) => {
@@ -387,7 +529,6 @@ const punchIn = async (req, res) => {
 
 
 
-
 // POST /api/warden/attendance/punch-out
 const punchOut = async (req, res) => {
   try {
@@ -419,7 +560,6 @@ const punchOut = async (req, res) => {
 
 
 
-
 // GET /api/warden/attendance/log
 const getAttendanceLog = async (req, res) => {
   try {
@@ -438,6 +578,222 @@ const getAttendanceLog = async (req, res) => {
 };
 
 
+
+
+// Leave Request Management Page
+
+
+import sendEmail from '../utils/sendEmail.js'; // assumes you have email utility
+
+// Get All Leave Requests
+const getAllLeaveRequests = async (req, res) => {
+  try {
+    const leaves = await Leave.find()
+      .populate('studentId', 'studentName studentId')
+      .sort({ appliedAt: -1 });
+    res.json(leaves);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err });
+  }
+};
+
+
+// Update Leave Status
+const updateLeaveStatus = async (req, res) => {
+  const { leaveId } = req.params;
+  const { status } = req.body;
+
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status value' });
+  }
+
+  try {
+    const leave = await Leave.findByIdAndUpdate(
+      leaveId,
+      { status },
+      { new: true }
+    ).populate('studentId');
+
+    const student = leave.studentId;
+    const emailContent = `
+      Dear ${student.studentName},
+      
+      Your leave request from ${leave.startDate.toDateString()} to ${leave.endDate.toDateString()} has been ${status}.
+      
+      Regards,
+      Hostel Management
+    `;
+
+    await sendEmail({
+      to: student.email,
+      subject: 'Leave Request Status',
+      text: emailContent,
+    });
+
+    res.json({ message: `Leave ${status}`, leave });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err });
+  }
+};
+
+
+
+// Get Leave Request Stats
+
+const getLeaveRequestStats = async (req, res) => {
+  try {
+    const total = await Leave.countDocuments();
+    const pending = await Leave.countDocuments({ status: 'pending' });
+    const approved = await Leave.countDocuments({ status: 'approved' });
+    const rejected = await Leave.countDocuments({ status: 'rejected' });
+
+    res.json({
+      totalRequests: total,
+      pendingRequests: pending,
+      approvedRequests: approved,
+      rejectedRequests: rejected,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+
+
+// Filter Leave Requests
+
+const filterLeaveRequests = async (req, res) => {
+  try {
+    const { studentName, studentId, status, startDate, endDate } = req.query;
+
+    const filter = {};
+
+    // Use aggregation for advanced filtering and joins
+    const matchStage = {};
+
+    if (status) matchStage.status = status;
+    if (startDate || endDate) {
+      matchStage.startDate = {};
+      if (startDate) matchStage.startDate.$gte = new Date(startDate);
+      if (endDate) matchStage.startDate.$lte = new Date(endDate);
+    }
+
+    // Build student filters
+    const studentFilter = {};
+    if (studentName) {
+      studentFilter.studentName = new RegExp('^' + studentName + '$', 'i'); // exact name match (case-insensitive)
+    }
+    if (studentId) {
+      studentFilter.studentId = studentId; // exact ID match
+    }
+
+    // Find matching student IDs
+    let studentIds = [];
+    if (studentName || studentId) {
+      const students = await Student.find(studentFilter).select('_id');
+      studentIds = students.map(s => s._id);
+      matchStage.studentId = { $in: studentIds };
+    }
+
+    const leaves = await Leave.find(matchStage)
+      .populate('studentId', 'studentName studentId')
+      .sort({ appliedAt: -1 });
+
+    res.status(200).json(leaves);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
+// bed allotment
+
+// Get Bed Statistics
+
+
+const getBedStats = async (req, res) => {
+  try {
+    const stats = await Inventory.aggregate([
+      {
+        $match: { itemName: 'Bed' }  // Only count items with itemName === 'Bed'
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Convert result array to an object
+    const result = {
+      totalBeds: 0,
+      available: 0,
+      inUse: 0,
+      inMaintenance: 0,
+      damaged: 0
+    };
+
+    stats.forEach(stat => {
+      result.totalBeds += stat.count;
+      switch (stat._id) {
+        case 'Available':
+          result.available = stat.count;
+          break;
+        case 'In Use':
+          result.inUse = stat.count;
+          break;
+        case 'In maintenance':
+          result.inMaintenance = stat.count;
+          break;
+        case 'Damaged':
+          result.damaged = stat.count;
+          break;
+      }
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error getting bed stats:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+
+
+
+
+// GET /api/inventory/bed-status?floor=1&roomNo=101&status=Available
+const getBedStatusOverview = async (req, res) => {
+  try {
+    const { floor, roomNo, status } = req.query;
+
+    // Build filter object dynamically
+    const filters = {
+      category: 'Furniture',
+      itemName: /bed/i
+    };
+
+    if (floor) filters.floor = floor;
+    if (roomNo) filters.roomNo = roomNo;
+    if (status) filters.status = status;
+
+    const beds = await Inventory.find(filters, 'barcodeId floor roomNo status');
+
+    res.status(200).json(beds);
+  } catch (error) {
+    console.error('Error fetching bed status:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+
+
 export {
   login as loginWarden,
   forgotPassword as forgotPasswordWarden,
@@ -452,4 +808,10 @@ export {
   punchIn as punchInWarden,
   punchOut as punchOutWarden,
   getAttendanceLog,
+  getAllLeaveRequests,
+  updateLeaveStatus as updateLeaveStatusWarden,
+  getLeaveRequestStats,
+  filterLeaveRequests,
+  getBedStats,
+  getBedStatusOverview,
 };
