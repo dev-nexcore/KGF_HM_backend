@@ -7,6 +7,8 @@ import fs from "fs";
 import path from "path";
 import { Student } from "../models/student.model.js";
 import { Leave } from "../models/leave.model.js";
+import jwt from "jsonwebtoken";
+
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -42,14 +44,11 @@ const transporter = nodemailer.createTransport({
 // };
 
 
+// Login Page For Warden
+// This function handles the login process for wardens.
 
-
-import jwt from "jsonwebtoken";
-
-
-// --------------------
 // POST /api/wardenauth/login
-// --------------------
+
  const login = async (req, res) => {
   const { wardenId, password } = req.body;
 
@@ -60,7 +59,7 @@ import jwt from "jsonwebtoken";
     const isMatch = await warden.comparePassword(password);
     if (!isMatch) return res.status(401).json({ message: "Invalid password" });
 
-    // ✅ Generate JWT Token
+    //  Generate JWT Token
     const token = jwt.sign(
       {
         id: warden._id,
@@ -88,6 +87,7 @@ import jwt from "jsonwebtoken";
     res.status(500).json({ message: "Server error during login." });
   }
 };
+
 
 
 //  Forgot Password
@@ -121,6 +121,8 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+
+
 //  Verify OTP
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -135,6 +137,8 @@ const verifyOtp = async (req, res) => {
   await record.save();
   return res.json({ message: "OTP verified" });
 };
+
+
 
 
 //  Reset Password
@@ -169,8 +173,7 @@ const resetPassword = async (req, res) => {
 
 
 
-
-// GET warden profile
+// warden profile Page
 
 const getWardenProfile = async (req, res) => {
   try {
@@ -187,7 +190,6 @@ const getWardenProfile = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 
 // update wardenprofile
 
@@ -221,7 +223,7 @@ const getWardenProfile = async (req, res) => {
 
 
 
-
+// Get Emergency Contacts Page.
 
 const getEmergencyContacts = async (req, res) => {
   try {
@@ -261,6 +263,8 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
+
+// Student Management Page
 // Get student list for warden
 
 const getStudentListForWarden = async (req, res) => {
@@ -353,6 +357,10 @@ const getTotalStudents = async (req, res) => {
   }
 };
 
+
+
+// Warden Punch In and Punch Out Page.
+
 // POST /api/warden/attendance/punch-in
 const punchIn = async (req, res) => {
   try {
@@ -388,7 +396,6 @@ const punchIn = async (req, res) => {
 
 
 
-
 // POST /api/warden/attendance/punch-out
 const punchOut = async (req, res) => {
   try {
@@ -420,7 +427,6 @@ const punchOut = async (req, res) => {
 
 
 
-
 // GET /api/warden/attendance/log
 const getAttendanceLog = async (req, res) => {
   try {
@@ -438,6 +444,10 @@ const getAttendanceLog = async (req, res) => {
   }
 };
 
+
+
+
+// Leave Request Management Page
 
 
 import sendEmail from '../utils/sendEmail.js'; // assumes you have email utility
@@ -495,8 +505,7 @@ const updateLeaveStatus = async (req, res) => {
 
 
 
-// controllers/leave.controller.js
-
+// Get Leave Request Stats
 
 const getLeaveRequestStats = async (req, res) => {
   try {
