@@ -11,7 +11,10 @@ import { Notice } from '../models/notice.model.js';
 import { Inventory } from '../models/inventory.model.js';
 import path from 'path';
 import multer from 'multer';
-
+import QRcode from 'qrcode';
+import {nanoid} from 'nanoid';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
@@ -311,7 +314,6 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
 
 
-
 const registerWarden = async (req, res) => {
      const { firstName,lastName, email, wardenId, contactNumber} = req.body;
 
@@ -432,6 +434,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// If you use ES modules and need __dirname:
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const addInventoryItem = async (req, res) => {
   try {
     const {
@@ -447,6 +453,8 @@ const addInventoryItem = async (req, res) => {
 
     const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
 
+    const publicSlug = nanoid(10); // short, non-guessable slug
+
     const newItem = new Inventory({
       itemName,
       barcodeId,
@@ -456,15 +464,33 @@ const addInventoryItem = async (req, res) => {
       description,
       purchaseDate,
       purchaseCost,
-      receiptUrl
+      receiptUrl,
+      publicSlug
     });
 
     await newItem.save();
-    return res.status(201).json({ message: "Inventory item added successfully", item: newItem });
+
+    const qrData = `${FRONTEND_BASE_URL}/p/${publicSlug}`;
+
+    const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
+    if (!fs.existsSync(qrCodesDir)) fs.mkdirSync(qrCodesDir, { recursive: true });
+
+    const qrCodePath = path.join(qrCodesDir, `${newItem._id}.png`);
+    await QRCode.toFile(qrCodePath, qrData);
+
+    newItem.qrCodeUrl = `/public/qrcodes/${newItem._id}.png`;
+    await newItem.save();
+
+    return res.status(201).json({
+      message: 'Inventory item added successfully',
+      item: newItem,
+      qrCodeUrl: newItem.qrCodeUrl,
+      publicUrl: `${FRONTEND_BASE_URL}/p/${publicSlug}`
+    });
 
   } catch (err) {
-    console.error("Add Inventory Error:", err);
-    return res.status(500).json({ message: "Failed to add inventory item." });
+    console.error('Add Inventory Error:', err);
+    return res.status(500).json({ message: 'Failed to add inventory item.' });
   }
 };
 
@@ -558,6 +584,7 @@ Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
     return res.status(500).json({ message: "Failed to issue notice" });
   }
 };
+
 
 
 

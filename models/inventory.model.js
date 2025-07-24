@@ -15,6 +15,7 @@ const inventorySchema = new mongoose.Schema({
   purchaseDate: { type: Date },
   purchaseCost: { type: Number },
   receiptUrl: { type: String }, // File upload path or Cloudinary link
+  qrCodeUrl: { type: String, default: null }  // <— add this
 }, { timestamps: true });
 
 export const Inventory = mongoose.model('Inventory', inventorySchema);

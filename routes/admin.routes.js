@@ -34,4 +34,17 @@ router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);
 router.get('/bed-occupancy-status', getBedOccupancyStatus);
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
 router.post('/issue-notice',issueNotice)
+
+// GET /api/inventory/public/:slug
+router.get('/public/:slug', async (req, res) => {
+  const { slug } = req.params;
+  const item = await Inventory.findOne({ publicSlug: slug })
+    .select('itemName barcodeId category location status description purchaseDate purchaseCost qrCodeUrl publicSlug');
+
+  if (!item) return res.status(404).json({ message: 'Not found' });
+  res.json(item);
+});
+
+
+
 export default router;
