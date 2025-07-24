@@ -11,7 +11,9 @@ import {
     applyForLeave,
     getLeaveHistory,
     requestRefund,
-    getRefundHistory
+    getRefundHistory,
+    getStudentProfile,
+    updateStudentProfile
 } from '../controllers/student.controller.js';
 
 const router = express.Router();
@@ -28,5 +30,7 @@ router.post("/leave", applyForLeave);
 router.get("/leaves/:studentId", getLeaveHistory);
 router.post("/refund", requestRefund);
 router.get("/refunds/:studentId", getRefundHistory);
+router.get("/profile/:studentId", getStudentProfile);
+router.put("/profile/:studentId", updateStudentProfile);
 
 export default router;
