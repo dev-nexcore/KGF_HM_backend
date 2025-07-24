@@ -13,6 +13,8 @@ import {
   punchInWarden,
   punchOutWarden,
   getAttendanceLog,
+  getAllLeaveRequests,
+  updateLeaveStatusWarden,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -35,6 +37,8 @@ router.get('/students/count', getTotalStudents);
 router.post('/attendance/punch-in', verifyWardenToken,  punchInWarden);
 router.post('/attendance/punch-out', verifyWardenToken,  punchOutWarden);
 router.get('/attendance/log', verifyWardenToken, getAttendanceLog);
+router.get('/requested-leave', verifyWardenToken, getAllLeaveRequests);
+router.put('/:leaveId/status', verifyWardenToken, updateLeaveStatusWarden);
 
 export default router;
 

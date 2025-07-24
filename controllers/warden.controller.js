@@ -6,6 +6,7 @@ import { Otp } from "../models/otp.model.js";
 import fs from "fs";
 import path from "path";
 import { Student } from "../models/student.model.js";
+import { Leave } from "../models/leave.model.js";
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -438,6 +439,64 @@ const getAttendanceLog = async (req, res) => {
 };
 
 
+
+import sendEmail from '../utils/sendEmail.js'; // assumes you have email utility
+
+// Get All Leave Requests
+const getAllLeaveRequests = async (req, res) => {
+  try {
+    const leaves = await Leave.find()
+      .populate('studentId', 'studentName studentId')
+      .sort({ appliedAt: -1 });
+    res.json(leaves);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err });
+  }
+};
+
+
+// Update Leave Status
+const updateLeaveStatus = async (req, res) => {
+  const { leaveId } = req.params;
+  const { status } = req.body;
+
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status value' });
+  }
+
+  try {
+    const leave = await Leave.findByIdAndUpdate(
+      leaveId,
+      { status },
+      { new: true }
+    ).populate('studentId');
+
+    const student = leave.studentId;
+    const emailContent = `
+      Dear ${student.studentName},
+      
+      Your leave request from ${leave.startDate.toDateString()} to ${leave.endDate.toDateString()} has been ${status}.
+      
+      Regards,
+      Hostel Management
+    `;
+
+    await sendEmail({
+      to: student.email,
+      subject: 'Leave Request Status',
+      text: emailContent,
+    });
+
+    res.json({ message: `Leave ${status}`, leave });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err });
+  }
+};
+
+
+
+
+
 export {
   login as loginWarden,
   forgotPassword as forgotPasswordWarden,
@@ -452,4 +511,6 @@ export {
   punchIn as punchInWarden,
   punchOut as punchOutWarden,
   getAttendanceLog,
+  getAllLeaveRequests,
+  updateLeaveStatus as updateLeaveStatusWarden,
 };
