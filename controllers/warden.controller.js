@@ -6,6 +6,9 @@ import { Otp } from "../models/otp.model.js";
 import fs from "fs";
 import path from "path";
 import { Student } from "../models/student.model.js";
+import { Leave } from "../models/leave.model.js";
+import jwt from "jsonwebtoken";
+
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -41,14 +44,11 @@ const transporter = nodemailer.createTransport({
 // };
 
 
+// Login Page For Warden
+// This function handles the login process for wardens.
 
-
-import jwt from "jsonwebtoken";
-
-
-// --------------------
 // POST /api/wardenauth/login
-// --------------------
+
  const login = async (req, res) => {
   const { wardenId, password } = req.body;
 
@@ -59,7 +59,7 @@ import jwt from "jsonwebtoken";
     const isMatch = await warden.comparePassword(password);
     if (!isMatch) return res.status(401).json({ message: "Invalid password" });
 
-    // ✅ Generate JWT Token
+    //  Generate JWT Token
     const token = jwt.sign(
       {
         id: warden._id,
@@ -87,6 +87,7 @@ import jwt from "jsonwebtoken";
     res.status(500).json({ message: "Server error during login." });
   }
 };
+
 
 
 //  Forgot Password
@@ -120,6 +121,8 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+
+
 //  Verify OTP
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -134,6 +137,8 @@ const verifyOtp = async (req, res) => {
   await record.save();
   return res.json({ message: "OTP verified" });
 };
+
+
 
 
 //  Reset Password
@@ -168,8 +173,7 @@ const resetPassword = async (req, res) => {
 
 
 
-
-// GET warden profile
+// warden profile Page
 
 const getWardenProfile = async (req, res) => {
   try {
@@ -186,7 +190,6 @@ const getWardenProfile = async (req, res) => {
     res.status(500).json({ message: "Server error", error });
   }
 };
-
 
 // update wardenprofile
 
@@ -220,7 +223,7 @@ const getWardenProfile = async (req, res) => {
 
 
 
-
+// Get Emergency Contacts Page.
 
 const getEmergencyContacts = async (req, res) => {
   try {
@@ -260,6 +263,8 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
+
+// Student Management Page
 // Get student list for warden
 
 const getStudentListForWarden = async (req, res) => {
@@ -352,6 +357,10 @@ const getTotalStudents = async (req, res) => {
   }
 };
 
+
+
+// Warden Punch In and Punch Out Page.
+
 // POST /api/warden/attendance/punch-in
 const punchIn = async (req, res) => {
   try {
@@ -387,7 +396,6 @@ const punchIn = async (req, res) => {
 
 
 
-
 // POST /api/warden/attendance/punch-out
 const punchOut = async (req, res) => {
   try {
@@ -419,7 +427,6 @@ const punchOut = async (req, res) => {
 
 
 
-
 // GET /api/warden/attendance/log
 const getAttendanceLog = async (req, res) => {
   try {
@@ -438,6 +445,139 @@ const getAttendanceLog = async (req, res) => {
 };
 
 
+
+
+// Leave Request Management Page
+
+
+import sendEmail from '../utils/sendEmail.js'; // assumes you have email utility
+
+// Get All Leave Requests
+const getAllLeaveRequests = async (req, res) => {
+  try {
+    const leaves = await Leave.find()
+      .populate('studentId', 'studentName studentId')
+      .sort({ appliedAt: -1 });
+    res.json(leaves);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err });
+  }
+};
+
+
+// Update Leave Status
+const updateLeaveStatus = async (req, res) => {
+  const { leaveId } = req.params;
+  const { status } = req.body;
+
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ message: 'Invalid status value' });
+  }
+
+  try {
+    const leave = await Leave.findByIdAndUpdate(
+      leaveId,
+      { status },
+      { new: true }
+    ).populate('studentId');
+
+    const student = leave.studentId;
+    const emailContent = `
+      Dear ${student.studentName},
+      
+      Your leave request from ${leave.startDate.toDateString()} to ${leave.endDate.toDateString()} has been ${status}.
+      
+      Regards,
+      Hostel Management
+    `;
+
+    await sendEmail({
+      to: student.email,
+      subject: 'Leave Request Status',
+      text: emailContent,
+    });
+
+    res.json({ message: `Leave ${status}`, leave });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err });
+  }
+};
+
+
+
+// Get Leave Request Stats
+
+const getLeaveRequestStats = async (req, res) => {
+  try {
+    const total = await Leave.countDocuments();
+    const pending = await Leave.countDocuments({ status: 'pending' });
+    const approved = await Leave.countDocuments({ status: 'approved' });
+    const rejected = await Leave.countDocuments({ status: 'rejected' });
+
+    res.json({
+      totalRequests: total,
+      pendingRequests: pending,
+      approvedRequests: approved,
+      rejectedRequests: rejected,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+
+
+// Filter Leave Requests
+
+const filterLeaveRequests = async (req, res) => {
+  try {
+    const { studentName, studentId, status, startDate, endDate } = req.query;
+
+    const filter = {};
+
+    // Use aggregation for advanced filtering and joins
+    const matchStage = {};
+
+    if (status) matchStage.status = status;
+    if (startDate || endDate) {
+      matchStage.startDate = {};
+      if (startDate) matchStage.startDate.$gte = new Date(startDate);
+      if (endDate) matchStage.startDate.$lte = new Date(endDate);
+    }
+
+    // Build student filters
+    const studentFilter = {};
+    if (studentName) {
+      studentFilter.studentName = new RegExp('^' + studentName + '$', 'i'); // exact name match (case-insensitive)
+    }
+    if (studentId) {
+      studentFilter.studentId = studentId; // exact ID match
+    }
+
+    // Find matching student IDs
+    let studentIds = [];
+    if (studentName || studentId) {
+      const students = await Student.find(studentFilter).select('_id');
+      studentIds = students.map(s => s._id);
+      matchStage.studentId = { $in: studentIds };
+    }
+
+    const leaves = await Leave.find(matchStage)
+      .populate('studentId', 'studentName studentId')
+      .sort({ appliedAt: -1 });
+
+    res.status(200).json(leaves);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
+
+
+
+
 export {
   login as loginWarden,
   forgotPassword as forgotPasswordWarden,
@@ -452,4 +592,8 @@ export {
   punchIn as punchInWarden,
   punchOut as punchOutWarden,
   getAttendanceLog,
+  getAllLeaveRequests,
+  updateLeaveStatus as updateLeaveStatusWarden,
+  getLeaveRequestStats,
+  filterLeaveRequests,
 };

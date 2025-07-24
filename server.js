@@ -5,7 +5,8 @@ import cors from 'cors'
 import { connect } from 'mongoose'
 import adminRoutes from "./routes/admin.routes.js"
 import parentRoutes from "./routes/parent.routes.js"
-import wardenRoutes from './routes/warden.routes.js';import studentRoutes from "./routes/student.routes.js"
+import wardenRoutes from './routes/warden.routes.js';
+import studentRoutes from "./routes/student.routes.js"
 
 
 dotenv.config()
