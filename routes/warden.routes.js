@@ -17,6 +17,8 @@ import {
   updateLeaveStatusWarden,
   getLeaveRequestStats,
   filterLeaveRequests,
+  getBedStats,
+  getBedStatusOverview
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -55,6 +57,10 @@ router.get('/requested-leave', verifyWardenToken, getAllLeaveRequests);
 router.put('/:leaveId/status', verifyWardenToken, updateLeaveStatusWarden);
 router.get('/leave-stats', verifyWardenToken, getLeaveRequestStats);
 router.get('/leave-filter', verifyWardenToken, filterLeaveRequests);
+
+// Bed allotments Management Page
+router.get('/bed-stats', getBedStats);
+router.get('/bed-status', getBedStatusOverview);
 
 
 export default router;

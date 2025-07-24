@@ -574,6 +574,89 @@ const filterLeaveRequests = async (req, res) => {
 };
 
 
+// bed allotment
+
+// Get Bed Statistics
+import { Inventory } from '../models/inventory.model.js';
+
+const getBedStats = async (req, res) => {
+  try {
+    const stats = await Inventory.aggregate([
+      {
+        $match: { itemName: 'Bed' }  // Only count items with itemName === 'Bed'
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Convert result array to an object
+    const result = {
+      totalBeds: 0,
+      available: 0,
+      inUse: 0,
+      inMaintenance: 0,
+      damaged: 0
+    };
+
+    stats.forEach(stat => {
+      result.totalBeds += stat.count;
+      switch (stat._id) {
+        case 'Available':
+          result.available = stat.count;
+          break;
+        case 'In Use':
+          result.inUse = stat.count;
+          break;
+        case 'In maintenance':
+          result.inMaintenance = stat.count;
+          break;
+        case 'Damaged':
+          result.damaged = stat.count;
+          break;
+      }
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error getting bed stats:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+
+
+
+
+// GET /api/inventory/bed-status?floor=1&roomNo=101&status=Available
+const getBedStatusOverview = async (req, res) => {
+  try {
+    const { floor, roomNo, status } = req.query;
+
+    // Build filter object dynamically
+    const filters = {
+      category: 'Furniture',
+      itemName: /bed/i
+    };
+
+    if (floor) filters.floor = floor;
+    if (roomNo) filters.roomNo = roomNo;
+    if (status) filters.status = status;
+
+    const beds = await Inventory.find(filters, 'barcodeId floor roomNo status');
+
+    res.status(200).json(beds);
+  } catch (error) {
+    console.error('Error fetching bed status:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
 
 
 
@@ -596,4 +679,6 @@ export {
   updateLeaveStatus as updateLeaveStatusWarden,
   getLeaveRequestStats,
   filterLeaveRequests,
+  getBedStats,
+  getBedStatusOverview,
 };
