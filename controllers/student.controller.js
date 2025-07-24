@@ -6,6 +6,8 @@ import { Otp } from "../models/otp.model.js";
 import { Complaint } from "../models/complaint.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Refund } from "../models/refund.model.js";
+import { Fee } from "../models/fee.model.js";
+import { Payment } from "../models/payment.model.js";
 
 
 const transporter = nodemailer.createTransport({
@@ -262,12 +264,12 @@ const applyForLeave = async (req, res) => {
 
     await newLeave.save();
 
-    // await transporter.sendMail({
-    //   from: `<${student.email}>`,
-    //   to: process.env.MAIL_USER,
-    //   subject: `Leave Application: ${leaveType} from ${student.studentName}`,
-    //   text: `${newLeave.reason}`,
-    // });
+    await transporter.sendMail({
+      from: `<${student.email}>`,
+      to: process.env.MAIL_USER,
+      subject: `Leave Application: ${leaveType} from ${student.studentName}`,
+      text: `${newLeave.reason}`,
+    });
 
     return res.json({ message: "Leave application submitted", leave: newLeave });
   } catch (err) {
@@ -281,7 +283,7 @@ const getLeaveHistory = async (req, res) => {
   const { studentId } = req.params;
 
   try {
-    const student = await Student.findById(studentId); // << use findById instead of findOne
+    const student = await Student.findById(studentId);
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -317,12 +319,12 @@ const requestRefund = async (req, res) => {
 
     await newRefund.save();
 
-    // await transporter.sendMail({
-    //   from: `<${student.email}>`,
-    //   to: process.env.MAIL_USER,
-    //   subject: `Refund Request: ${refundType} from ${student.studentName}`,
-    //   text: `Refund Amount: ${amount}\nReason: ${reason}`,
-    // });
+    await transporter.sendMail({
+      from: `<${student.email}>`,
+      to: process.env.MAIL_USER,
+      subject: `Refund Request: ${refundType} from ${student.studentName}`,
+      text: `Refund Amount: ${amount}\nReason: ${reason}`,
+    });
 
     return res.json({
       message: "Refund request submitted successfully",
@@ -335,7 +337,6 @@ const requestRefund = async (req, res) => {
       .json({ message: "Server error while requesting refund." });
   }
 };
-
 
 
 const getRefundHistory = async (req, res) => {
@@ -436,6 +437,17 @@ const updateStudentProfile = async (req, res) => {
 };
 
 
+const getCurrentFeesStatus = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const fees = await Fee.find({ studentId }).select("feeType amount status dueDate");
+    res.json({ fees });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching fee status" });
+  }
+};
+
 
 
 
@@ -454,5 +466,6 @@ export {
   requestRefund,
   getRefundHistory,
   getStudentProfile,
-  updateStudentProfile
+  updateStudentProfile,
+  getCurrentFeesStatus
 }

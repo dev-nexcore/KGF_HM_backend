@@ -1,19 +1,20 @@
 import express from 'express';
-import { 
-    login, 
-    forgotPassword, 
-    verifyOtp, 
-    resetPassword, 
-    checkInStudent, 
-    checkOutStudent, 
-    fileComplaint, 
-    getComplaintHistory, 
+import {
+    login,
+    forgotPassword,
+    verifyOtp,
+    resetPassword,
+    checkInStudent,
+    checkOutStudent,
+    fileComplaint,
+    getComplaintHistory,
     applyForLeave,
     getLeaveHistory,
     requestRefund,
     getRefundHistory,
     getStudentProfile,
-    updateStudentProfile
+    updateStudentProfile,
+    getCurrentFeesStatus
 } from '../controllers/student.controller.js';
 
 const router = express.Router();
@@ -32,5 +33,6 @@ router.post("/refund", requestRefund);
 router.get("/refunds/:studentId", getRefundHistory);
 router.get("/profile/:studentId", getStudentProfile);
 router.put("/profile/:studentId", updateStudentProfile);
+router.get("/feeStatus/:studentId", getCurrentFeesStatus);
 
 export default router;
