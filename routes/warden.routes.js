@@ -15,6 +15,8 @@ import {
   getAttendanceLog,
   getAllLeaveRequests,
   updateLeaveStatusWarden,
+  getLeaveRequestStats,
+  filterLeaveRequests,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -39,6 +41,9 @@ router.post('/attendance/punch-out', verifyWardenToken,  punchOutWarden);
 router.get('/attendance/log', verifyWardenToken, getAttendanceLog);
 router.get('/requested-leave', verifyWardenToken, getAllLeaveRequests);
 router.put('/:leaveId/status', verifyWardenToken, updateLeaveStatusWarden);
+router.get('/leave-stats', verifyWardenToken, getLeaveRequestStats);
+router.get('/leave-filter', verifyWardenToken, filterLeaveRequests);
+
 
 export default router;
 

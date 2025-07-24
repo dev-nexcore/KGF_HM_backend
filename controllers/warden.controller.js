@@ -495,6 +495,78 @@ const updateLeaveStatus = async (req, res) => {
 
 
 
+// controllers/leave.controller.js
+
+
+const getLeaveRequestStats = async (req, res) => {
+  try {
+    const total = await Leave.countDocuments();
+    const pending = await Leave.countDocuments({ status: 'pending' });
+    const approved = await Leave.countDocuments({ status: 'approved' });
+    const rejected = await Leave.countDocuments({ status: 'rejected' });
+
+    res.json({
+      totalRequests: total,
+      pendingRequests: pending,
+      approvedRequests: approved,
+      rejectedRequests: rejected,
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error });
+  }
+};
+
+
+
+// Filter Leave Requests
+
+const filterLeaveRequests = async (req, res) => {
+  try {
+    const { studentName, studentId, status, startDate, endDate } = req.query;
+
+    const filter = {};
+
+    // Use aggregation for advanced filtering and joins
+    const matchStage = {};
+
+    if (status) matchStage.status = status;
+    if (startDate || endDate) {
+      matchStage.startDate = {};
+      if (startDate) matchStage.startDate.$gte = new Date(startDate);
+      if (endDate) matchStage.startDate.$lte = new Date(endDate);
+    }
+
+    // Build student filters
+    const studentFilter = {};
+    if (studentName) {
+      studentFilter.studentName = new RegExp('^' + studentName + '$', 'i'); // exact name match (case-insensitive)
+    }
+    if (studentId) {
+      studentFilter.studentId = studentId; // exact ID match
+    }
+
+    // Find matching student IDs
+    let studentIds = [];
+    if (studentName || studentId) {
+      const students = await Student.find(studentFilter).select('_id');
+      studentIds = students.map(s => s._id);
+      matchStage.studentId = { $in: studentIds };
+    }
+
+    const leaves = await Leave.find(matchStage)
+      .populate('studentId', 'studentName studentId')
+      .sort({ appliedAt: -1 });
+
+    res.status(200).json(leaves);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
+
+
 
 
 export {
@@ -513,4 +585,6 @@ export {
   getAttendanceLog,
   getAllLeaveRequests,
   updateLeaveStatus as updateLeaveStatusWarden,
+  getLeaveRequestStats,
+  filterLeaveRequests,
 };
