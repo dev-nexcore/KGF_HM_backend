@@ -3,7 +3,9 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Parent } from "../models/parent.model.js";
 import { Student } from "../models/student.model.js";
+import { Warden } from "../models/warden.model.js";
 import { Otp } from "../models/otp.model.js";
+import { Leave } from "../models/leave.model.js";
 import { Notice } from "../models/notice.model.js"; 
 
 const transporter = nodemailer.createTransport({
@@ -21,13 +23,11 @@ const login = async (req, res) => {
   const { studentId, password } = req.body;
 
   try {
-    // Find parent by studentId
     const parent = await Parent.findOne({ studentId });
     if (!parent) {
       return res.status(401).json({ message: "Invalid student ID" });
     }
 
-    // Verify password
     const isMatch = await parent.comparePassword(password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid password" });
@@ -120,32 +120,35 @@ const resetPassword = async (req, res) => {
 
 // Dashboard controller for parent panel
 const dashboard = async (req, res) => {
-  const { studentId } = req.body;
+  const { studentId } = req.query;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "studentId is required" });
+  }
 
   try {
-    // Find student by studentId
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Extract and structure the dashboard details
+    // Fetch warden name directly using wardenId "W123"
+    const warden = await Warden.findOne({ wardenId: "W123" });
+    const wardenName = warden ? `${warden.firstName} ${warden.lastName}` : "Not Assigned";
+
     const dashboardData = {
       studentInfo: {
         studentId: student.studentId,
-        firstName: student.firstName,
-        lastName: student.lastName,
+        studentName: student.studentName,
         photo: student.photo || null,
-        documents: student.documents.map((doc) => ({
-          name: doc.name,
-          status: doc.status,
-          url: doc.url,
-        })),
-      },
-      hostelDetails: {
-        status: student.hostelDetails.status,
-        roomNo: student.hostelDetails.roomNo,
-        bedNo: student.hostelDetails.bedNo,
+        contactNumber: student.contactNumber,
+        email: student.email,
+        roomBedNumber: student.roomBedNumber,
+        admissionDate: student.admissionDate,
+        emergencyContactName: student.emergencyContactName,
+        emergencyContactNumber: student.emergencyContactNumber,
+        checkInDate: student.checkInDate,
+        checkOutDate: student.checkOutDate,
       },
       attendanceSummary: {
         totalDays: student.attendanceSummary?.totalDays || 0,
@@ -155,6 +158,9 @@ const dashboard = async (req, res) => {
       feesOverview: {
         status: student.feeStatus || "Not Available",
         amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
+      },
+      wardenInfo: {
+        wardenName: wardenName
       },
     };
 
@@ -167,34 +173,33 @@ const dashboard = async (req, res) => {
   }
 };
 
+
+
 // Attendance controller for parent panel
 const attendance = async (req, res) => {
-  const { studentId } = req.body;
+  const { studentId } = req.query;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "studentId is required" });
+  }
 
   try {
-    // Find student by studentId
     const student = await Student.findOne({ studentId });
+
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Extract and structure attendance details
     const attendanceData = {
       studentId: student.studentId,
-      firstName: student.firstName,
-      lastName: student.lastName,
+      studentName: student.studentName,
+      checkInDate: student.checkInDate || null,
+      checkOutDate: student.checkOutDate || null,
       attendanceSummary: {
-        totalDays: student.attendanceSummary?.totalDays || 0,
-        presentDays: student.attendanceSummary?.presentDays || 0,
-        absentDays: student.attendanceSummary?.absentDays || 0,
-        attendancePercentage:
-          student.attendanceSummary?.totalDays > 0
-            ? (
-                (student.attendanceSummary.presentDays /
-                  student.attendanceSummary.totalDays) *
-                100
-              ).toFixed(2)
-            : 0,
+        totalDays: 1,
+        presentDays: student.checkInDate ? 1 : 0,
+        absentDays: student.checkInDate ? 0 : 1,
+        attendancePercentage: student.checkInDate ? 100 : 0,
       },
     };
 
@@ -207,9 +212,14 @@ const attendance = async (req, res) => {
   }
 };
 
+
 // Leave Management controller for parent panel
 const leaveManagement = async (req, res) => {
-  const { studentId } = req.body;
+  const { studentId } = req.query;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "studentId is required" });
+  }
 
   try {
     const student = await Student.findOne({ studentId });
@@ -217,29 +227,37 @@ const leaveManagement = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const leaveRecords = student.leaveDetails || [];
-    const currentDate = new Date("2025-07-23T06:45:00Z"); // 12:15 PM IST
+    console.log("Student found:", student);
 
-    const leaveHistory = leaveRecords.map(leave => {
+    // Fetch leave history from Leave model
+    const leaves = await Leave.find({ studentId: student._id })
+      .select("leaveType startDate endDate reason status appliedAt _id")
+      .sort({ appliedAt: -1 }); // Fixed missing closing parenthesis
+
+    console.log("Leaves found:", leaves);
+
+    const leaveHistory = leaves.map(leave => {
       const startDate = new Date(leave.startDate).toISOString();
       const endDate = new Date(leave.endDate).toISOString();
       const durationMs = new Date(endDate) - new Date(startDate);
-      const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24)); // Convert to days
+      const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
 
       return {
-        type: "Leave", // Assuming a generic type; can be extended if specific types are defined
+        _id: leave._id,
+        leaveType: leave.leaveType,
         duration: `${durationDays} day${durationDays !== 1 ? 's' : ''}`,
         startDate: startDate,
         endDate: endDate,
-        reason: leave.reason || "Not specified",
-        status: leave.status || "Pending"
+        reason: leave.reason,
+        status: leave.status
       };
     });
 
+    // Use dynamic current date from the backend
+    const currentDate = new Date();
+
     return res.json({
       studentId: student.studentId,
-      firstName: student.firstName,
-      lastName: student.lastName,
       leaveHistory,
       currentDate: currentDate.toISOString()
     });
@@ -249,18 +267,21 @@ const leaveManagement = async (req, res) => {
   }
 };
 
+
 // Fees controller for parent panel
 const fees = async (req, res) => {
-  const { studentId } = req.body;
+  const { studentId } = req.query; // Changed from req.body to req.query
+
+  if (!studentId) {
+    return res.status(400).json({ message: "studentId is required" });
+  }
 
   try {
-    // Find student by studentId
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Extract and structure fees details
     const feesData = {
       studentId: student.studentId,
       firstName: student.firstName,
@@ -291,10 +312,10 @@ const notices = async (req, res) => {
   try {
     const noticesList = await Notice.find().sort({ date: -1 });
     const noticesData = noticesList.map(notice => ({
-      date: notice.date ? new Date(notice.date).toISOString() : null,
-      subject: notice.subject || "No Subject",
-      description: notice.description || "No Description",
-      status: notice.status || "NEW"
+      date: notice.issueDate ? new Date(notice.issueDate).toISOString() : null,
+      subject: notice.title || "No Subject",
+      description: notice.message || "No Description",
+      
     }));
 
     return res.json(noticesData);
