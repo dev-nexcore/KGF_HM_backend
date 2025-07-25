@@ -894,6 +894,68 @@ const getFilteredInspections = async (req, res) => {
 
 
 
+const getInspectionById = async (req, res) => {
+  try {
+    const inspection = await Inspection.findById(req.params.id).populate('createdBy', 'name email');
+
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: 'Inspection not found' });
+    }
+
+    res.status(200).json({ success: true, inspection });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch inspection', error: error.message });
+  }
+};
+
+
+const completeInspection = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const inspection = await Inspection.findById(id);
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: "Inspection not found" });
+    }
+
+    inspection.status = 'completed';
+    await inspection.save();
+
+    res.status(200).json({ success: true, message: "Inspection marked as completed", inspection });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Failed to update inspection status" });
+  }
+};
+
+
+
+
+
+const getInspectionStats = async (req, res) => {
+  try {
+    const total = await Inspection.countDocuments();
+    const pending = await Inspection.countDocuments({ status: 'pending' });
+    const completed = await Inspection.countDocuments({ status: 'completed' });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total,
+        pending,
+        completed,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspection statistics',
+      error: error.message,
+    });
+  }
+};
+
+
 
 
 export {
@@ -918,4 +980,7 @@ export {
   getBedStatusOverview,
   getRecentInspections,
   getFilteredInspections,
+  getInspectionById,
+  completeInspection,
+  getInspectionStats,
 };

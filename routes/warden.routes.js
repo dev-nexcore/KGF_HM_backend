@@ -21,6 +21,9 @@ import {
   getBedStatusOverview,
   getRecentInspections,
   getFilteredInspections,
+  getInspectionById,
+  completeInspection,
+  getInspectionStats,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -67,7 +70,9 @@ router.get('/bed-status', getBedStatusOverview);
 // Inspections Management Page
 router.get('/recent-inspections',getRecentInspections);
 router.get('/filtered-inspections', getFilteredInspections);
-
+router.get('/recent-inspections/:id', getInspectionById); // Assuming this is the new route for getting inspection by ID
+router.patch('/recent-inspections/complete/:id', completeInspection);
+router.get('/inspection-stats', getInspectionStats);
 
 export default router;
 
