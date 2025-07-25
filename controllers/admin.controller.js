@@ -1,5 +1,7 @@
 import 'dotenv/config';
-import {Admin} from '../models/admin.model.js';
+import mongoose from 'mongoose';
+import { Admin } from '../models/admin.model.js';
+import { Inspection } from '../models/inspection.model.js';
 import nodemailer from 'nodemailer';
 import bcrypt from "bcrypt";
 import jwt from 'jsonwebtoken';
@@ -14,11 +16,9 @@ import multer from 'multer';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
-
     host:    process.env.MAIL_HOST,      // smtp.gmail.com
   port:   +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
- 
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS
@@ -32,7 +32,6 @@ const generateToken = (admin) => {
     { expiresIn: process.env.JWT_EXPIRES_IN }
   );
 };
-
 
 const register = async (req, res) => {
   const { adminId, email, password } = req.body;
@@ -66,7 +65,6 @@ const generateRefreshToken = (admin) => {
   
   return refreshToken;
 };
-
 
 const login = async (req, res) => {
   const { adminId, password } = req.body;
@@ -120,8 +118,6 @@ const refreshAccessToken = async (req, res) => {
   }
 };
 
-
-
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -146,7 +142,6 @@ const forgotPassword = async (req, res) => {
 
   return res.json({ message: "OTP sent" });
 };
-
 
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -183,8 +178,6 @@ const resetPassword = async (req, res) => {
 
   return res.json({ message: "Password has been reset" });
 };
-
-
 
 const registerStudent = async (req, res) => {
   const {
@@ -247,7 +240,6 @@ Please log in at https://www.KGF-HM.com and change your password after first log
   }
 };
 
-
 const registerParent = async (req, res) => {
   const { firstName, lastName, email, contactNumber, studentId } = req.body;
 
@@ -289,7 +281,6 @@ const registerParent = async (req, res) => {
 
 Your parent account has been created.
 
-
 • Your Child's Student ID: ${studentId}
 • Your Login Password: ${parentPassword}
 
@@ -307,10 +298,6 @@ Please log in at https://www.KGF-HM.com and change your password after first log
     return res.status(500).json({ message: "Error registering parent." });
   }
 };
-
-
-
-
 
 const registerWarden = async (req, res) => {
      const { firstName,lastName, email, wardenId, contactNumber} = req.body;
@@ -334,7 +321,6 @@ const registerWarden = async (req, res) => {
       wardenId,
       contactNumber,
       password: wardenPassword
-   // Set the generated password
     });
 
     await newWarden.save();
@@ -366,9 +352,6 @@ Please log in at https://www.KGF-HM.com and change your password after first log
     return res.status(500).json({ message: "Error registering warden." });
   }
 };
-
-
-
 
 const getTodaysCheckInOutStatus = async (req, res) => {
   try {
@@ -404,14 +387,12 @@ const getBedOccupancyStatus = async (req, res) => {
     // Get the number of students who have checked in
     const occupiedBeds = await Student.countDocuments({
       roomBedNumber: { $ne: null }
-      
     });
 
     const availableBeds = totalBeds - occupiedBeds;
 
     return res.json({
       totalBeds,
-
       occupiedBeds,
       availableBeds
     });
@@ -467,8 +448,6 @@ const addInventoryItem = async (req, res) => {
     return res.status(500).json({ message: "Failed to add inventory item." });
   }
 };
-
-
 
 const issueNotice = async (req, res) => {
   const {
@@ -559,24 +538,236 @@ Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
   }
 };
 
+// Create a new inspection
+const createInspection = async (req, res) => {
+  try {
+    const { title, target, area, datetime, instructions, adminId } = req.body;
 
+    console.log("Received adminId:", adminId);
 
+    // Check if adminId is provided
+    if (!adminId || adminId.trim() === '') {
+      return res.status(400).json({ message: "adminId is required" });
+    }
+
+    if (!title || !target || !area || !datetime || !instructions) {
+      return res.status(400).json({
+        message: "All fields (title, target, area, datetime, instructions) are required",
+      });
+    }
+
+    // Find admin by the custom adminId field, not by _id
+    const admin = await Admin.findOne({ adminId: adminId });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found with this adminId" });
+    }
+
+    console.log("Found admin:", admin);
+
+    const newInspection = new Inspection({
+      title,
+      target,
+      area,
+      datetime,
+      instructions,
+      createdBy: admin._id, // Use the MongoDB _id for the relationship
+      status: "pending",
+    });
+
+    await newInspection.save();
+
+    return res.status(201).json({
+      message: "Inspection created successfully",
+      inspection: newInspection,
+    });
+  } catch (err) {
+    console.error("Create inspection error:", err);
+    return res.status(500).json({
+      message: "Error creating inspection",
+      error: err.message,
+    });
+  }
+};
+
+// Get all inspections for an admin
+const getAdminInspections = async (req, res) => {
+  try {
+    const { adminId } = req.query;
+
+    if (!adminId || !mongoose.Types.adminId.isValid(adminId)) {
+      return res.status(400).json({ message: "Valid adminId is required" });
+    }
+
+    const inspections = await Inspection.find({ createdBy: adminId })
+      .populate("createdBy", "email")
+      .sort({ datetime: -1 });
+
+    return res.status(200).json({
+      message: "Inspections retrieved successfully",
+      inspections,
+    });
+  } catch (err) {
+    console.error("Get inspections error:", err);
+    return res.status(500).json({
+      message: "Error fetching inspections",
+      error: err.message,
+    });
+  }
+};
+
+// Get a single inspection by ID
+const getInspectionById = async (req, res) => {
+  try {
+    const inspection = await Inspection.findById(req.params.id).populate(
+      "createdBy",
+      "email"
+    );
+
+    if (!inspection) {
+      return res.status(404).json({ message: "Inspection not found" });
+    }
+
+    return res.status(200).json({
+      message: "Inspection retrieved successfully",
+      inspection,
+    });
+  } catch (err) {
+    console.error("Get inspection error:", err);
+    return res.status(500).json({
+      message: "Error fetching inspection",
+      error: err.message,
+    });
+  }
+};
+
+// Update an inspection
+const updateInspection = async (req, res) => {
+  try {
+    const { title, target, area, datetime, instructions, status } = req.body;
+    const inspection = await Inspection.findById(req.params.id);
+
+    if (!inspection) {
+      return res.status(404).json({ message: "Inspection not found" });
+    }
+
+    inspection.title = title || inspection.title;
+    inspection.target = target || inspection.target;
+    inspection.area = area || inspection.area;
+    inspection.datetime = datetime || inspection.datetime;
+    inspection.instructions = instructions || inspection.instructions;
+    inspection.status = status || inspection.status;
+
+    await inspection.save();
+
+    return res.status(200).json({
+      message: "Inspection updated successfully",
+      inspection,
+    });
+  } catch (err) {
+    console.error("Update inspection error:", err);
+    return res.status(500).json({
+      message: "Error updating inspection",
+      error: err.message,
+    });
+  }
+};
+
+// Delete an inspection
+const deleteInspection = async (req, res) => {
+  try {
+    const inspection = await Inspection.findById(req.params.id);
+
+    if (!inspection) {
+      return res.status(404).json({ message: "Inspection not found" });
+    }
+
+    await inspection.deleteOne();
+
+    return res.status(200).json({ message: "Inspection deleted successfully" });
+  } catch (err) {
+    console.error("Delete inspection error:", err);
+    return res.status(500).json({
+      message: "Error deleting inspection",
+      error: err.message,
+    });
+  }
+};
+
+// Get inspection history
+const getInspectionHistory = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      startDate,
+      endDate,
+      area,
+      target,
+    } = req.query;
+
+    const query = {};
+    if (status) query.status = status;
+    if (area) query.area = { $regex: area, $options: "i" };
+    if (target) query.target = { $regex: target, $options: "i" };
+    if (startDate || endDate) {
+      query.datetime = {};
+      if (startDate) query.datetime.$gte = new Date(startDate);
+      if (endDate) query.datetime.$lte = new Date(endDate);
+    }
+
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const inspections = await Inspection.find(query)
+      .populate("createdBy", "email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    const total = await Inspection.countDocuments(query);
+
+    return res.status(200).json({
+      message: "Inspection history retrieved successfully",
+      inspections,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (err) {
+    console.error("Get inspection history error:", err);
+    return res.status(500).json({
+      message: "Error fetching inspection history",
+      error: err.message,
+    });
+  }
+};
 
 
 export {
-    resetPassword,
-    verifyOtp,
-    forgotPassword,
-    register,
-    login,
-    registerStudent,
-    registerParent,
-    registerWarden,
-    refreshAccessToken,
-    generateRefreshToken,
-    getTodaysCheckInOutStatus,
-    getBedOccupancyStatus,
-    issueNotice,
-    upload,
-    addInventoryItem
+  resetPassword,
+  verifyOtp,
+  forgotPassword,
+  register,
+  login,
+  registerStudent,
+  registerParent,
+  registerWarden,
+  refreshAccessToken,
+  generateRefreshToken,
+  getTodaysCheckInOutStatus,
+  getBedOccupancyStatus,
+  issueNotice,
+  upload,
+  addInventoryItem,
+  createInspection,
+  getAdminInspections,
+  getInspectionById,
+  updateInspection,
+  deleteInspection,
+  getInspectionHistory,
 };
