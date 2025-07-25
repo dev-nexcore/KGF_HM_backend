@@ -18,7 +18,9 @@ import {
   getLeaveRequestStats,
   filterLeaveRequests,
   getBedStats,
-  getBedStatusOverview
+  getBedStatusOverview,
+  getRecentInspections,
+  getFilteredInspections,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -61,6 +63,10 @@ router.get('/leave-filter', verifyWardenToken, filterLeaveRequests);
 // Bed allotments Management Page
 router.get('/bed-stats', getBedStats);
 router.get('/bed-status', getBedStatusOverview);
+
+// Inspections Management Page
+router.get('/recent-inspections',getRecentInspections);
+router.get('/filtered-inspections', getFilteredInspections);
 
 
 export default router;

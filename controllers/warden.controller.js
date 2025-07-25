@@ -9,6 +9,7 @@ import { Student } from "../models/student.model.js";
 import { Leave } from "../models/leave.model.js";
 import jwt from "jsonwebtoken";
 import { Inventory } from '../models/inventory.model.js';
+import { Inspection } from '../models/inspection.model.js';
 
 
 // Nodemailer transporter
@@ -757,6 +758,142 @@ const getBedStatusOverview = async (req, res) => {
 
 
 
+// inspection management
+
+
+
+
+const getRecentInspections = async (req, res) => {
+  try {
+    const inspections = await Inspection.find({})
+      .sort({ datetime: -1 })
+      .select('title target status datetime')
+      .lean();
+
+    const formatted = inspections.map(ins => {
+      const dateObj = new Date(ins.datetime);
+      return {
+        date: dateObj.toISOString().split('T')[0],
+        time: dateObj.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        title: ins.title || '',
+        target: ins.target || '',
+        status: ins.status
+          ? ins.status.charAt(0).toUpperCase() + ins.status.slice(1)
+          : 'Unknown',
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      inspections: formatted,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspections',
+      error: error.message,
+    });
+  }
+};
+
+
+// Filter inspections based on date, time, status, and target
+
+
+const getFilteredInspections = async (req, res) => {
+  try {
+    const { date, time, status, target } = req.query;
+
+    const match = {};
+
+    if (status) {
+      match.status = new RegExp(`^${status}$`, 'i'); // case-insensitive match
+    }
+
+    if (target) {
+      match.target = new RegExp(`^${target}$`, 'i'); // case-insensitive match
+    }
+
+    // Handle date filter
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setDate(end.getDate() + 1);
+      match.datetime = { $gte: start, $lt: end };
+    }
+
+    // If time is provided, use aggregation
+    const pipeline = [];
+
+    // Match base filters
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+
+    // Add hour and minute fields
+    pipeline.push({
+      $addFields: {
+        timeStr: {
+          $dateToString: {
+            format: "%H:%M",
+            date: "$datetime",
+            timezone: "Asia/Kolkata",
+          },
+        },
+      },
+    });
+
+    // Match time if given
+    if (time) {
+      pipeline.push({
+        $match: {
+          timeStr: { $regex: `^${time}` }, // e.g., "09" or "09:00"
+        },
+      });
+    }
+
+    // Sort and project final result
+    pipeline.push(
+      { $sort: { datetime: -1 } },
+      {
+        $project: {
+          _id: 0,
+          title: 1,
+          target: 1,
+          status: 1,
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$datetime",
+              timezone: "Asia/Kolkata",
+            },
+          },
+          time: "$timeStr",
+        },
+      }
+    );
+
+    const inspections = await Inspection.aggregate(pipeline);
+
+    res.status(200).json({
+      success: true,
+      inspections,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspections',
+      error: error.message,
+    });
+  }
+};
+
+
+
+
 
 
 export {
@@ -779,4 +916,6 @@ export {
   filterLeaveRequests,
   getBedStats,
   getBedStatusOverview,
+  getRecentInspections,
+  getFilteredInspections,
 };

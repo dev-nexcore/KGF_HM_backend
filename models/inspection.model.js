@@ -32,7 +32,7 @@ const inspectionSchema = new mongoose.Schema({
   },
   status: {
       type: String,
-      enum: ["pending", "refunded", "rejected"],
+      enum: ["pending", "completed"],
       default: "pending",
     },
   createdAt: {
