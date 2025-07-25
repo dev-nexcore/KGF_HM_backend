@@ -268,41 +268,6 @@ const getEmergencyContacts = async (req, res) => {
 // Student Management Page
 // Get student list for warden
 
-// const getStudentListForWarden = async (req, res) => {
-//   try {
-//     const { studentId, roomBedNumber } = req.query;
-
-//     // Build dynamic search filter
-//     let filter = {};
-
-//     if (studentId) {
-//       filter.studentId = { $regex: studentId, $options: "i" }; // case-insensitive partial match
-//     }
-
-//     if (roomBedNumber) {
-//       filter.roomBedNumber = { $regex: roomBedNumber, $options: "i" };
-//     }
-
-//     const students = await Student.find(filter, {
-//       studentId: 1,
-//       studentName: 1,
-//       roomBedNumber: 1,
-//       contactNumber: 1,
-//       _id: 0,
-//     });
-
-//     res.status(200).json({
-//       success: true,
-//       students,
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to fetch student list",
-//       error: error.message,
-//     });
-//   }
-// };
 
 
 
