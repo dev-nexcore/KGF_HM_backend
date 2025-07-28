@@ -8,6 +8,8 @@ import path from "path";
 import { Student } from "../models/student.model.js";
 import { Leave } from "../models/leave.model.js";
 import jwt from "jsonwebtoken";
+import { Inventory } from '../models/inventory.model.js';
+import { Inspection } from '../models/inspection.model.js';
 
 
 // Nodemailer transporter
@@ -267,71 +269,168 @@ const getEmergencyContacts = async (req, res) => {
 // Student Management Page
 // Get student list for warden
 
+
+
+
 const getStudentListForWarden = async (req, res) => {
   try {
-    const { studentId, roomBedNumber } = req.query;
+    const { studentId, roomNo } = req.query;
 
-    // Build dynamic search filter
-    let filter = {};
+    let studentFilter = {};
 
+    // Filter by studentId (partial match)
     if (studentId) {
-      filter.studentId = { $regex: studentId, $options: "i" }; // case-insensitive partial match
+      studentFilter.studentId = { $regex: studentId, $options: 'i' };
     }
 
-    if (roomBedNumber) {
-      filter.roomBedNumber = { $regex: roomBedNumber, $options: "i" };
+    let bedIds = [];
+
+    // Filter by roomNo (partial match from Inventory)
+    if (roomNo) {
+      const matchedBeds = await Inventory.find({
+        roomNo: { $regex: roomNo, $options: 'i' },
+      }).select('_id');
+
+      bedIds = matchedBeds.map(bed => bed._id);
+
+      if (bedIds.length === 0) {
+        return res.status(200).json({ success: true, students: [] }); // No results if no beds match
+      }
+
+      studentFilter.roomBedNumber = { $in: bedIds };
     }
 
-    const students = await Student.find(filter, {
-      studentId: 1,
-      studentName: 1,
-      roomBedNumber: 1,
-      contactNumber: 1,
-      _id: 0,
-    });
+    const students = await Student.find(studentFilter)
+      .populate({
+        path: 'roomBedNumber',
+        select: 'barcodeId roomNo',
+      })
+      .select('studentId studentName contactNumber roomBedNumber');
+
+    const formattedStudents = students.map(student => ({
+      studentId: student.studentId,
+      studentName: student.studentName,
+      contactNumber: student.contactNumber,
+      barcodeId: student.roomBedNumber?.barcodeId || null,
+      roomNo: student.roomBedNumber?.roomNo || null,
+    }));
 
     res.status(200).json({
       success: true,
-      students,
+      students: formattedStudents,
     });
   } catch (error) {
+    console.error('Error fetching student list:', error);
     res.status(500).json({
       success: false,
-      message: "Failed to fetch student list",
+      message: 'Failed to fetch student list',
       error: error.message,
     });
   }
 };
 
+
+
+
 // Update student room/bed number
+
+// const updateStudentRoom = async (req, res) => {
+//   try {
+//     const { studentId } = req.params;
+//     const { roomBedNumber } = req.body;
+
+//     const student = await Student.findOneAndUpdate(
+//       { studentId },
+//       { roomBedNumber },
+//       { new: true } // returns the updated document
+//     );
+
+//     if (!student) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Student not found",
+//       });
+//     }
+
+//     res.status(200).json({
+//       success: true,
+//       message: "Room/Bed number updated successfully",
+//       student,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: "Failed to update student room",
+//       error: error.message,
+//     });
+//   }
+// };
+
+
+
 
 const updateStudentRoom = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { roomBedNumber } = req.body;
+    const { barcodeId } = req.body;
 
-    const student = await Student.findOneAndUpdate(
-      { studentId },
-      { roomBedNumber },
-      { new: true } // returns the updated document
-    );
-
+    // 1. Find the student
+    const student = await Student.findOne({ studentId }).populate('roomBedNumber');
     if (!student) {
       return res.status(404).json({
         success: false,
-        message: "Student not found",
+        message: 'Student not found',
       });
     }
 
+    // 2. Find the new bed by barcodeId
+    const newBed = await Inventory.findOne({ barcodeId });
+    if (!newBed) {
+      return res.status(404).json({
+        success: false,
+        message: 'No bed found with the given barcode ID',
+      });
+    }
+
+    // 3. Prevent assigning bed if already in use
+    if (newBed.status === 'In Use') {
+      return res.status(400).json({
+        success: false,
+        message: 'This bed is already assigned to another student',
+      });
+    }
+
+    // 4. Free up old bed if exists
+    if (student.roomBedNumber) {
+      const oldBed = await Inventory.findById(student.roomBedNumber._id);
+      if (oldBed) {
+        oldBed.status = 'Available';
+        await oldBed.save();
+      }
+    }
+
+    // 5. Assign new bed to student
+    student.roomBedNumber = newBed._id;
+    await student.save();
+
+    // 6. Mark new bed as "In Use"
+    newBed.status = 'In Use';
+    await newBed.save();
+
+    // 7. Send updated student data
+    const updatedStudent = await Student.findById(student._id).populate('roomBedNumber');
+
     res.status(200).json({
       success: true,
-      message: "Room/Bed number updated successfully",
-      student,
+      message: 'Student bed assignment updated successfully',
+      student: updatedStudent,
     });
+
   } catch (error) {
+    console.error('Error updating student room:', error);
     res.status(500).json({
       success: false,
-      message: "Failed to update student room",
+      message: 'Internal server error while assigning bed',
       error: error.message,
     });
   }
@@ -574,6 +673,287 @@ const filterLeaveRequests = async (req, res) => {
 };
 
 
+// bed allotment
+
+// Get Bed Statistics
+
+
+const getBedStats = async (req, res) => {
+  try {
+    const stats = await Inventory.aggregate([
+      {
+        $match: { itemName: 'Bed' }  // Only count items with itemName === 'Bed'
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Convert result array to an object
+    const result = {
+      totalBeds: 0,
+      available: 0,
+      inUse: 0,
+      inMaintenance: 0,
+      damaged: 0
+    };
+
+    stats.forEach(stat => {
+      result.totalBeds += stat.count;
+      switch (stat._id) {
+        case 'Available':
+          result.available = stat.count;
+          break;
+        case 'In Use':
+          result.inUse = stat.count;
+          break;
+        case 'In maintenance':
+          result.inMaintenance = stat.count;
+          break;
+        case 'Damaged':
+          result.damaged = stat.count;
+          break;
+      }
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error getting bed stats:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+
+
+
+
+// GET /api/inventory/bed-status?floor=1&roomNo=101&status=Available
+const getBedStatusOverview = async (req, res) => {
+  try {
+    const { floor, roomNo, status } = req.query;
+
+    // Build filter object dynamically
+    const filters = {
+      category: 'Furniture',
+      itemName: /bed/i
+    };
+
+    if (floor) filters.floor = floor;
+    if (roomNo) filters.roomNo = roomNo;
+    if (status) filters.status = status;
+
+    const beds = await Inventory.find(filters, 'barcodeId floor roomNo status');
+
+    res.status(200).json(beds);
+  } catch (error) {
+    console.error('Error fetching bed status:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+// inspection management
+
+
+
+
+const getRecentInspections = async (req, res) => {
+  try {
+    const inspections = await Inspection.find({})
+      .sort({ datetime: -1 })
+      .select('title target status datetime')
+      .lean();
+
+    const formatted = inspections.map(ins => {
+      const dateObj = new Date(ins.datetime);
+      return {
+        date: dateObj.toISOString().split('T')[0],
+        time: dateObj.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        title: ins.title || '',
+        target: ins.target || '',
+        status: ins.status
+          ? ins.status.charAt(0).toUpperCase() + ins.status.slice(1)
+          : 'Unknown',
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      inspections: formatted,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspections',
+      error: error.message,
+    });
+  }
+};
+
+
+// Filter inspections based on date, time, status, and target
+
+
+const getFilteredInspections = async (req, res) => {
+  try {
+    const { date, time, status, target } = req.query;
+
+    const match = {};
+
+    if (status) {
+      match.status = new RegExp(`^${status}$`, 'i'); // case-insensitive match
+    }
+
+    if (target) {
+      match.target = new RegExp(`^${target}$`, 'i'); // case-insensitive match
+    }
+
+    // Handle date filter
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setDate(end.getDate() + 1);
+      match.datetime = { $gte: start, $lt: end };
+    }
+
+    // If time is provided, use aggregation
+    const pipeline = [];
+
+    // Match base filters
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+
+    // Add hour and minute fields
+    pipeline.push({
+      $addFields: {
+        timeStr: {
+          $dateToString: {
+            format: "%H:%M",
+            date: "$datetime",
+            timezone: "Asia/Kolkata",
+          },
+        },
+      },
+    });
+
+    // Match time if given
+    if (time) {
+      pipeline.push({
+        $match: {
+          timeStr: { $regex: `^${time}` }, // e.g., "09" or "09:00"
+        },
+      });
+    }
+
+    // Sort and project final result
+    pipeline.push(
+      { $sort: { datetime: -1 } },
+      {
+        $project: {
+          _id: 0,
+          title: 1,
+          target: 1,
+          status: 1,
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$datetime",
+              timezone: "Asia/Kolkata",
+            },
+          },
+          time: "$timeStr",
+        },
+      }
+    );
+
+    const inspections = await Inspection.aggregate(pipeline);
+
+    res.status(200).json({
+      success: true,
+      inspections,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspections',
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+const getInspectionById = async (req, res) => {
+  try {
+    const inspection = await Inspection.findById(req.params.id).populate('createdBy', 'name email');
+
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: 'Inspection not found' });
+    }
+
+    res.status(200).json({ success: true, inspection });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch inspection', error: error.message });
+  }
+};
+
+
+const completeInspection = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const inspection = await Inspection.findById(id);
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: "Inspection not found" });
+    }
+
+    inspection.status = 'completed';
+    await inspection.save();
+
+    res.status(200).json({ success: true, message: "Inspection marked as completed", inspection });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Failed to update inspection status" });
+  }
+};
+
+
+
+
+
+const getInspectionStats = async (req, res) => {
+  try {
+    const total = await Inspection.countDocuments();
+    const pending = await Inspection.countDocuments({ status: 'pending' });
+    const completed = await Inspection.countDocuments({ status: 'completed' });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total,
+        pending,
+        completed,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspection statistics',
+      error: error.message,
+    });
+  }
+};
 
 
 
@@ -596,4 +976,11 @@ export {
   updateLeaveStatus as updateLeaveStatusWarden,
   getLeaveRequestStats,
   filterLeaveRequests,
+  getBedStats,
+  getBedStatusOverview,
+  getRecentInspections,
+  getFilteredInspections,
+  getInspectionById,
+  completeInspection,
+  getInspectionStats,
 };

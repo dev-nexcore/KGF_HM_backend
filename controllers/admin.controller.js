@@ -1,5 +1,7 @@
 import 'dotenv/config';
-import {Admin} from '../models/admin.model.js';
+import mongoose from 'mongoose';
+import { Admin } from '../models/admin.model.js';
+import { Inspection } from '../models/inspection.model.js';
 import nodemailer from 'nodemailer';
 import bcrypt from "bcrypt";
 import jwt from 'jsonwebtoken';
@@ -25,11 +27,9 @@ import { StaffSalary } from '../models/staffSalary.model.js';
 import { Refund } from '../models/refund.model.js';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
-
     host:    process.env.MAIL_HOST,      // smtp.gmail.com
   port:   +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
- 
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS
@@ -43,7 +43,6 @@ const generateToken = (admin) => {
     { expiresIn: process.env.JWT_EXPIRES_IN }
   );
 };
-
 
 const register = async (req, res) => {
   const { adminId, email, password } = req.body;
@@ -77,7 +76,6 @@ const generateRefreshToken = (admin) => {
   
   return refreshToken;
 };
-
 
 const login = async (req, res) => {
   const { adminId, password } = req.body;
@@ -139,8 +137,6 @@ const refreshAccessToken = async (req, res) => {
   }
 };
 
-
-
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -165,7 +161,6 @@ const forgotPassword = async (req, res) => {
 
   return res.json({ message: "OTP sent" });
 };
-
 
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
@@ -202,8 +197,6 @@ const resetPassword = async (req, res) => {
 
   return res.json({ message: "Password has been reset" });
 };
-
-
 
 const registerStudent = async (req, res) => {
   const {
@@ -281,7 +274,6 @@ Please log in at https://www.KGF-HM.com and change your password after first log
   }
 };
 
-
 const registerParent = async (req, res) => {
   const { firstName, lastName, email, contactNumber, studentId } = req.body;
 
@@ -322,7 +314,6 @@ const registerParent = async (req, res) => {
       text: `Hello ${firstName} ${lastName},
 
 Your parent account has been created.
-
 
 • Your Child's Student ID: ${studentId}
 • Your Login Password: ${parentPassword}
@@ -367,7 +358,6 @@ const registerWarden = async (req, res) => {
       wardenId,
       contactNumber,
       password: wardenPassword
-   // Set the generated password
     });
 
     await newWarden.save();
@@ -1259,7 +1249,6 @@ const getBedOccupancyStatus = async (req, res) => {
 
     return res.json({
       totalBeds,
-
       occupiedBeds,
       availableBeds
     });
@@ -1339,8 +1328,6 @@ const addInventoryItem = async (req, res) => {
     return res.status(500).json({ message: 'Failed to add inventory item.' });
   }
 };
-
-
 
 const issueNotice = async (req, res) => {
   const {

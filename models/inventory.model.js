@@ -6,6 +6,8 @@ const inventorySchema = new mongoose.Schema({
   barcodeId: { type: String, required: true, unique: true },
   category: { type: String, required: true },
   location: { type: String, required: true },
+  floor: { type: String, required: true },
+  roomNo: { type: String, required: true },
   status: {
     type: String,
     enum: ['Available', 'In Use', 'In maintenance', 'Damaged'],
