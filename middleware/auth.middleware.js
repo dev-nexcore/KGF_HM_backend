@@ -1,23 +1,26 @@
 import jwt from 'jsonwebtoken';
 
-const verifyAdminToken=(req,res,next)=>{
-    const authHeader= req.headers.authorization;
+const verifyAdminToken = (req, res, next) => {
+    const authHeader = req.headers.authorization;
 
-    if(!authHeader || !authHeader.startsWith('Bearer ')){
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return res.status(401).json({ message: "Unauthorized access" });
     }
 
-    const token= authHeader.split(' ')[1];
+    const token = authHeader.split(' ')[1];
 
-    try{
-
-
+    try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.admin = decoded;
+        
+        // Add the missing _id field
+        req.admin = {
+            _id: decoded.adminId, // Map adminId to _id for audit logs
+            adminId: decoded.adminId,
+            email: decoded.email
+        };
+        
         next();
-
-    }catch(err){
-
+    } catch (err) {
         return res.status(401).json({ message: "Invalid token" });
     }
 };

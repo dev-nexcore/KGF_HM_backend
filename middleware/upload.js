@@ -7,7 +7,7 @@ const storage = multer.diskStorage({
   filename: (req, file, cb) => {
     cb(null, `warden_${Date.now()}${path.extname(file.originalname)}`);
   },
-});
+}); 
 
 // File filter
 const fileFilter = (req, file, cb) => {
