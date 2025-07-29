@@ -11,7 +11,24 @@ const noticeSchema = new mongoose.Schema({
     enum: ['All', 'Student', 'Parent', 'Warden'],
     required: true,
   },
-  individualRecipient: String
-}, { timestamps: true });
+  readBy: [{
+    studentId: {
+      type: String,
+      required: true
+    },
+    readAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
+  individualRecipient: String,
+   readStatus: {
+    type: String,
+    enum: ['Read', 'Unread'],
+    default: 'Unread'
+  }
+},
+ { timestamps: true });
 
 export const Notice = mongoose.model("Notice", noticeSchema);

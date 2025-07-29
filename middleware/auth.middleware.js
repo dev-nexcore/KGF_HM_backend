@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { Parent } from '../models/parent.model.js';
 
 const verifyAdminToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -49,10 +50,52 @@ const verifyWardenToken = (req, res, next) => {
   }
 };
 
+const authenticateParent = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
+
+    // Verify the token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Find the parent
+    const parent = await Parent.findOne({ studentId: decoded.studentId });
+    if (!parent) {
+      return res.status(401).json({ message: 'Invalid token - parent not found' });
+    }
+
+    // Add parent info to request object
+    req.parent = parent;
+    req.studentId = decoded.studentId;
+    
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    
+    return res.status(500).json({ message: 'Server error during authentication' });
+  }
+};
+
 
 
 
 export{
     verifyAdminToken,
     verifyWardenToken,
+    authenticateParent
 };

@@ -439,22 +439,91 @@ const fees = async (req, res) => {
 };
 
 // Notices controller for parent panel
+// Updated notices controller for parent panel
 const notices = async (req, res) => {
+  const { studentId } = req.query;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "studentId is required" });
+  }
+
   try {
-    const noticesList = await Notice.find().sort({ date: -1 });
+    // Verify student exists
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Fetch all notices (you can add filtering logic if needed)
+    const noticesList = await Notice.find()
+      .sort({ issueDate: -1 }) // Sort by issue date, newest first
+      .lean(); // Use lean() for better performance
+
+    console.log("Raw notices from database:", noticesList);
+
+    // Transform notices data to match frontend expectations
     const noticesData = noticesList.map(notice => ({
-      date: notice.issueDate ? new Date(notice.issueDate).toISOString() : null,
-      subject: notice.title || "No Subject",
-      description: notice.message || "No Description",
-      
+      _id: notice._id,
+      issueDate: notice.issueDate || notice.createdAt || new Date(),
+      title: notice.title || "No Subject",
+      message: notice.message || "No Description",
+      template: notice.template || "default",
+      recipientType: notice.recipientType || "Student",
+      readStatus: notice.readStatus || "Unread" // Default to Unread if not specified
     }));
 
-    return res.json(noticesData);
+    console.log("Processed notices data:", noticesData);
+
+    // Return response in the format expected by frontend
+    return res.json({
+      message: "Notices fetched successfully",
+      notices: noticesData, // Frontend expects response.data.notices
+      count: noticesData.length
+    });
+
   } catch (err) {
     console.error("Notices fetch error:", err);
-    return res.status(500).json({ message: "Server error while fetching notices data." });
+    return res.status(500).json({ 
+      message: "Server error while fetching notices data.",
+      error: err.message 
+    });
   }
 };
+
+const markNoticeAsRead = async (req, res) => {
+  const { noticeId } = req.params;
+  const studentId = req.studentId; // From authentication middleware
+
+  if (!noticeId) {
+    return res.status(400).json({ message: "Notice ID is required" });
+  }
+
+  try {
+    // Find the notice
+    const notice = await Notice.findById(noticeId);
+    if (!notice) {
+      return res.status(404).json({ message: "Notice not found" });
+    }
+
+    // Update read status (you might need to modify your Notice schema to support per-student read status)
+    // For now, this is a simple approach - you might want to create a separate collection for read statuses
+    notice.readStatus = "Read";
+    await notice.save();
+
+    return res.json({
+      message: "Notice marked as read",
+      noticeId: noticeId
+    });
+
+  } catch (err) {
+    console.error("Mark notice as read error:", err);
+    return res.status(500).json({ 
+      message: "Server error while marking notice as read",
+      error: err.message 
+    });
+  }
+};
+
 
 export {
   login,
@@ -469,4 +538,5 @@ export {
   leaveManagement,
   fees,
   notices,
+  markNoticeAsRead
 };
