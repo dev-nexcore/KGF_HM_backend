@@ -2,17 +2,17 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 
 const studentSchema = new mongoose.Schema({
-  studentName: { type: String, required: true },
-  // firstName: { type: String, required: true },
-  // lastName: { type: String, required: true },
+  // studentName: { type: String, required: true },
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
   studentId: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
-  //roomBedNumber: { type: String, required: true },
-  roomBedNumber: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Inventory',
-  required: true
-},
+  roomBedNumber: { type: String, required: true },
+//   roomBedNumber: {
+//   type: mongoose.Schema.Types.ObjectId,
+//   ref: 'Inventory',
+//   required: true
+// },
 
   email: { type: String, required: true, unique: true },
   admissionDate: { type: Date, required: true },

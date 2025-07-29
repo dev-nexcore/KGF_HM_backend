@@ -14,7 +14,8 @@ import {
     getRefundHistory,
     getStudentProfile,
     updateStudentProfile,
-    getCurrentFeesStatus
+    getCurrentFeesStatus,
+    getAttendanceLog
 } from '../controllers/student.controller.js';
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.post('/check-in', checkInStudent);
 router.post('/check-out', checkOutStudent);
+router.get('/attendance-log/:studentId', getAttendanceLog);
 router.post("/complaint", fileComplaint);
 router.get("/complaints/:studentId", getComplaintHistory);
 router.post("/leave", applyForLeave);

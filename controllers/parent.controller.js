@@ -1,5 +1,6 @@
 import "dotenv/config";
 import nodemailer from "nodemailer";
+import jwt from 'jsonwebtoken';
 import bcrypt from "bcrypt";
 import { Parent } from "../models/parent.model.js";
 import { Student } from "../models/student.model.js";
@@ -18,28 +19,151 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+// Generate access token for parent
+
+const generateToken = (parent) => {
+  if (!process.env.JWT_SECRET || !process.env.JWT_EXPIRES_IN) {
+    throw new Error("JWT_SECRET or JWT_EXPIRES_IN is not defined in environment variables");
+  }
+
+  return jwt.sign(
+    { studentId: parent.studentId, email: parent.email },
+    process.env.JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN } // e.g., '1h' for access token
+  );
+};
+
+// Generate refresh token for parent
+const generateRefreshToken = async (parent) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not defined in environment variables");
+  }
+
+  const refreshToken = jwt.sign(
+    { studentId: parent.studentId, email: parent.email },
+    process.env.JWT_SECRET,
+    { expiresIn: "30d" } // Longer expiration for refresh token
+  );
+
+  // Save refresh token to database (MongoDB)
+  parent.refreshToken = refreshToken;
+  await parent.save(); // Await the save operation
+
+  return refreshToken;
+};
+
 // Login controller for parent panel
 const login = async (req, res) => {
   const { studentId, password } = req.body;
 
+  // Input validation
+  if (!studentId || !password) {
+    return res.status(400).json({ message: "Student ID and password are required" });
+  }
+
   try {
-    const parent = await Parent.findOne({ studentId });
+    // Find parent by studentId, explicitly select password
+    const parent = await Parent.findOne({ studentId }).select("+password");
     if (!parent) {
       return res.status(401).json({ message: "Invalid student ID" });
     }
 
-    const isMatch = await parent.comparePassword(password);
+    // Detailed debugging
+   
+
+    // Test direct bcrypt comparison
+    const directBcryptResult = await bcrypt.compare(password, parent.password);
+    console.log("Direct bcrypt.compare result:", directBcryptResult);
+
+    // Test the model method
+    const modelMethodResult = await parent.comparePassword(password);
+    console.log("Model comparePassword result:", modelMethodResult);
+
+    // Test with string conversion (in case of type issues)
+    const stringPassword = String(password);
+    const stringDirectResult = await bcrypt.compare(stringPassword, parent.password);
+    console.log("String converted direct result:", stringDirectResult);
+
+    // Test if password contains hidden characters
+    console.log("Password char codes:", Array.from(password).map(char => char.charCodeAt(0)));
+    console.log("Hash char codes (first 20):", Array.from(parent.password.substring(0, 20)).map(char => char.charCodeAt(0)));
+
+    // Generate a new hash with the plain password to compare
+    const newHash = await bcrypt.hash(password, 12);
+    console.log("Newly generated hash:", newHash);
+    const newHashTest = await bcrypt.compare(password, newHash);
+    console.log("New hash comparison test:", newHashTest);
+
+
+
+
+    // Use direct bcrypt comparison as fallback
+    const isMatch = directBcryptResult;
+    
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    return res.json({ message: "Login successful", studentId });
+    // Generate tokens
+    const token = generateToken(parent);
+    const refreshToken = await generateRefreshToken(parent);
+
+    // Return response
+    return res.json({
+      message: "Login successful",
+      token,
+      refreshToken,
+      parent: {
+        studentId: parent.studentId,
+        email: parent.email, 
+        firstname: parent.firstName,
+        lastName: parent.lastName,
+        contactNumber:parent.contactNumber
+      },
+    });
   } catch (err) {
     console.error("Parent login error:", err);
-    return res.status(500).json({ message: "Server error during login." });
+    return res.status(500).json({ message: "Server error during login" });
   }
 };
 
+// Refresh access token controller
+const refreshAccessToken = async (req, res) => {
+  const { refreshToken } = req.body;
+
+  try {
+    if (!refreshToken) {
+      return res.status(401).json({ message: "No refresh token provided" });
+    }
+
+    // Verify the refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    if (!decoded.studentId) {
+      return res.status(401).json({ message: "Invalid refresh token payload" });
+    }
+
+    // Find parent by studentId, explicitly select refreshToken
+    const parent = await Parent.findOne({ studentId: decoded.studentId }).select("+refreshToken");
+    if (!parent || parent.refreshToken !== refreshToken) {
+      return res.status(401).json({ message: "Invalid or expired refresh token" });
+    }
+
+    // Generate new tokens
+    const newAccessToken = generateToken(parent);
+    const newRefreshToken = await generateRefreshToken(parent);
+
+    return res.json({
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    });
+  } catch (err) {
+    console.error("Refresh token error:", err);
+    if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+      return res.status(401).json({ message: "Invalid or expired refresh token" });
+    }
+    return res.status(500).json({ message: "Server error during token refresh" });
+  }
+};
 // Forgot password controller for parent panel
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
@@ -104,8 +228,15 @@ const resetPassword = async (req, res) => {
       return res.status(404).json({ message: "Parent not found" });
     }
 
-    parent.password = await bcrypt.hash(newPassword, 10);
+    // OPTION 1: Let the pre-save middleware handle the hashing
+    parent.password = newPassword; // Set plain password, let middleware hash it
     await parent.save();
+
+    // OPTION 2: Alternative - Use updateOne to bypass middleware entirely
+    // await Parent.updateOne(
+    //   { email },
+    //   { $set: { password: await bcrypt.hash(newPassword, 12) } }
+    // );
 
     await Otp.deleteOne({ email });
 
@@ -327,6 +458,9 @@ const notices = async (req, res) => {
 
 export {
   login,
+  generateToken, 
+  generateRefreshToken, 
+  refreshAccessToken,
   forgotPassword,
   verifyOtp,
   resetPassword,
@@ -334,5 +468,5 @@ export {
   attendance,
   leaveManagement,
   fees,
-  notices
+  notices,
 };

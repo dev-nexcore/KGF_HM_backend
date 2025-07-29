@@ -173,7 +173,47 @@ const resetPassword = async (req, res) => {
 
 
 
+const getAllWardens = async (req, res) => {
+  try {
+    // Fetch all wardens with only necessary fields
+    const wardens = await Warden.find({}).select(
+      "firstName lastName wardenId profilePhoto email"
+    );
 
+    if (!wardens || wardens.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: "No wardens found" 
+      });
+    }
+
+    // Format the response to include full name
+    const formattedWardens = wardens.map(warden => ({
+      id: warden._id,
+      wardenId: warden.wardenId,
+      firstName: warden.firstName,
+      lastName: warden.lastName,
+      fullName: `${warden.firstName} ${warden.lastName}`,
+      email: warden.email,
+      profilePhoto: warden.profilePhoto || null
+    }));
+
+    res.status(200).json({
+      success: true,
+      message: "Wardens fetched successfully",
+      wardens: formattedWardens,
+      totalWardens: formattedWardens.length
+    });
+
+  } catch (error) {
+    console.error("Error fetching wardens:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Server error while fetching wardens", 
+      error: error.message 
+    });
+  }
+};
 
 // warden profile Page
 
@@ -184,15 +224,38 @@ const getWardenProfile = async (req, res) => {
     );
 
     if (!warden) {
-      return res.status(404).json({ message: "Warden not found" });
+      return res.status(404).json({ 
+        success: false,
+        message: "Warden not found" 
+      });
     }
 
-    res.status(200).json(warden);
+    // Include full name in response
+    const wardenData = {
+      id: warden._id,
+      wardenId: warden.wardenId,
+      firstName: warden.firstName,
+      lastName: warden.lastName,
+      fullName: `${warden.firstName} ${warden.lastName}`,
+      email: warden.email,
+      contactNumber: warden.contactNumber,
+      profilePhoto: warden.profilePhoto || null
+    };
+
+    res.status(200).json({
+      success: true,
+      warden: wardenData
+    });
+
   } catch (error) {
-    res.status(500).json({ message: "Server error", error });
+    console.error("Error fetching warden profile:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Server error", 
+      error: error.message 
+    });
   }
 };
-
 // update wardenprofile
 
  const updateWardenProfile = async (req, res) => {
@@ -963,6 +1026,7 @@ export {
   forgotPassword as forgotPasswordWarden,
   verifyOtp as verifyOtpWarden,
   resetPassword as resetPasswordWarden,
+  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,
