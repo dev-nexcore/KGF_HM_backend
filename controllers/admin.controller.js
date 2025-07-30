@@ -77,7 +77,8 @@ const generateRefreshToken = (admin) => {
   return refreshToken;
 };
 
-const login = async (req, res) => {
+const login =
+ async (req, res) => {
   const { adminId, password } = req.body;
 
   try {
@@ -200,7 +201,8 @@ const resetPassword = async (req, res) => {
 
 const registerStudent = async (req, res) => {
   const {
-    studentName,
+    firstName,
+    lastName,
     studentId,
     contactNumber,
     roomBedNumber,
@@ -212,13 +214,14 @@ const registerStudent = async (req, res) => {
   } = req.body;
 
   // Generate a password: lowercase name (no spaces) + studentId
-  const cleanName = studentName.replace(/\s+/g, '').toLowerCase();
+  const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
   const password = `${cleanName}${studentId}`;
 
   try {
     // Create student record
     const newStudent = new Student({
-      studentName,
+      firstName,
+      lastName,
       studentId,
       contactNumber,
       roomBedNumber,
@@ -237,7 +240,7 @@ const registerStudent = async (req, res) => {
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
       subject: 'Your Student Panel Credentials',
-      text: `Hello ${studentName},
+      text: `Hello ${firstName}, ${lastName}
 
 Your student account has been created.
 
@@ -266,7 +269,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { studentName, studentId, email, password }
+      student: { firstName, lastName, studentId, email, password }
     });
   } catch (err) {
     console.error('Error registering student:', err);

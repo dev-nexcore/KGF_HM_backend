@@ -4,6 +4,7 @@ import {
   forgotPasswordWarden,
   verifyOtpWarden,
   resetPasswordWarden,
+  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,
@@ -38,8 +39,7 @@ router.post("/login", loginWarden);
 router.post("/forgot-password", forgotPasswordWarden);
 router.post("/verify-otp", verifyOtpWarden);
 router.post("/reset-password", resetPasswordWarden);
-
-// Warden Profile Page.
+router.get('/all', getAllWardens);
 router.get("/profile/:id", getWardenProfile);
 router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
 

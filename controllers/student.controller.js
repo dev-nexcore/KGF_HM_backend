@@ -202,6 +202,25 @@ const checkOutStudent = async (req, res) => {
 };
 
 
+// controller/student.controller.js
+const getAttendanceLog = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    return res.json({ attendanceLog: student.attendanceLog });
+  } catch (err) {
+    console.error("Error fetching attendance log:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
 const fileComplaint = async (req, res) => {
   const { studentId, complaintType, subject, description } = req.body;
 
@@ -279,7 +298,7 @@ const applyForLeave = async (req, res) => {
     await transporter.sendMail({
       from: `<${student.email}>`,
       to: process.env.MAIL_USER,
-      subject: `Leave Application: ${leaveType} from ${student.studentName}`,
+      subject: `Leave Application: ${leaveType} from ${student.firstName}`,
       text: `${newLeave.reason}`,
     });
 
@@ -334,7 +353,7 @@ const requestRefund = async (req, res) => {
     await transporter.sendMail({
       from: `<${student.email}>`,
       to: process.env.MAIL_USER,
-      subject: `Refund Request: ${refundType} from ${student.studentName}`,
+      subject: `Refund Request: ${refundType} from ${student.firstName}`,
       text: `Refund Amount: ${amount}\nReason: ${reason}`,
     });
 
@@ -424,7 +443,8 @@ const getStudentProfile = async (req, res) => {
     }
 
     return res.json({
-      studentName: student.studentName,
+      firstName: student.firstName,
+      lastName: student.lastName,
       studentId: student.studentId,
       email: student.email,
       contactNumber: student.contactNumber,
@@ -447,7 +467,8 @@ const getStudentProfile = async (req, res) => {
 const updateStudentProfile = async (req, res) => {
   const { studentId } = req.params;
   const {
-    studentName,
+    firstName,
+    lastName,
     email,
     contactNumber,
   } = req.body;
@@ -458,7 +479,8 @@ const updateStudentProfile = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    if (studentName) student.studentName = studentName;
+    if (firstName) student.firstName = firstName;
+        if (lastName) student.lastName = lastName;
     if (email) student.email = email;
     if (contactNumber) student.contactNumber = contactNumber;
 
@@ -624,6 +646,7 @@ export {
   verifyOtp,
   checkInStudent,
   checkOutStudent,
+  getAttendanceLog,
   fileComplaint,
   getComplaintHistory,
   applyForLeave,

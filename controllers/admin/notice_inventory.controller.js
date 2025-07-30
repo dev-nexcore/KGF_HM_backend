@@ -123,10 +123,15 @@ const issueNotice = async (req, res) => {
     });
 
     const subject = `Hostel Notice: ${title}`;
+
+    const istDateTime = new Date(issueDate).toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata"
+    });
+
     const emailBody = `
 ${message}
 
-Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
+Issued on: ${istDateTime}
 
 – Hostel Admin
 `;
@@ -190,6 +195,7 @@ Issued on: ${new Date(issueDate).toLocaleDateString("en-IN")}
     return res.status(500).json({ message: "Failed to issue notice" });
   }
 };
+
 
 export{
     addInventoryItem,
