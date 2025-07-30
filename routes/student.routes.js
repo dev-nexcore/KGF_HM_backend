@@ -14,7 +14,10 @@ import {
     getRefundHistory,
     getStudentProfile,
     updateStudentProfile,
-    getCurrentFeesStatus
+    getCurrentFeesStatus,
+    getNotices,
+    getNextInspection,
+    getAttendanceSummary
 } from '../controllers/student.controller.js';
 
 const router = express.Router();
@@ -34,5 +37,8 @@ router.get("/refunds/:studentId", getRefundHistory);
 router.get("/profile/:studentId", getStudentProfile);
 router.put("/profile/:studentId", updateStudentProfile);
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);
+router.get("/notices",getNotices);
+router.get('/inspectionSchedule/:studentId', getNextInspection);
+router.get('/attendanceSummary/:studentId', getAttendanceSummary);
 
 export default router;

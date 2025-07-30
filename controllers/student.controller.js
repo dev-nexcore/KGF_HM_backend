@@ -7,6 +7,9 @@ import { Complaint } from "../models/complaint.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Refund } from "../models/refund.model.js";
 import { Fee } from "../models/fee.model.js";
+import { Notice } from "../models/notice.model.js";
+import { Inspection } from '../models/inspection.model.js';
+import { Inventory } from '../models/inventory.model.js';
 // import { Payment } from "../models/payment.model.js";
 
 
@@ -20,6 +23,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+
 const login = async (req, res) => {
   const { studentId, password } = req.body;
 
@@ -30,17 +34,16 @@ const login = async (req, res) => {
     }
 
     const isMatch = await student.comparePassword(password);
-
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid password" });
     }
-    return res.json({ message: "Login successful", studentId });
+
+    return res.json({ message: "Login successful", studentId: student.studentId, email: student.email });
   } catch (err) {
     console.error("Student login error:", err);
     return res.status(500).json({ message: "Server error during login." });
   }
 };
-
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
@@ -57,53 +60,62 @@ const forgotPassword = async (req, res) => {
     await Otp.findOneAndUpdate(
       { email },
       { code: otp, expires, verified: false },
-      { upsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
       subject: "Student Password Reset OTP",
-      text: `Dear ${student.firstName} ${student.lastName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,
+      text: `Dear ${student.studentName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,
     });
 
     return res.json({ message: "OTP sent" });
   } catch (err) {
     console.error("Forgot password error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error during OTP generation." });
+    return res.status(500).json({ message: "Server error during OTP generation." });
   }
 };
 
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
-  const record = await Otp.findOne({ email, code });
 
-  if (!record || record.code !== otp || record.expires < Date.now()) {
-    return res.status(400).json({ message: "Invalid or expired OTP" });
+  try {
+    const record = await Otp.findOne({ email, code: otp });
+    if (!record) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+    if (record.expires.getTime() < Date.now()) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+
+    record.verified = true;
+    await record.save();
+    return res.json({ message: "OTP verified" });
+  } catch (err) {
+    console.error("Verify OTP error:", err);
+    return res.status(500).json({ message: "Server error during OTP verification." });
   }
-
-  record.verified = true;
-  await record.save();
-  return res.json({ message: "OTP verified" });
 };
 
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  const record = await Otp.findOne({ email, code: otp, verified: true });
-
-  if (!record || record.code !== otp || !record.verified) {
-    return res.status(400).json({ message: "OTP not verified" });
-  }
 
   try {
+    const record = await Otp.findOne({ email, code: otp, verified: true });
+    if (!record) {
+      return res.status(400).json({ message: "OTP not verified" });
+    }
+    if (record.expires.getTime() < Date.now()) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
     const student = await Student.findOne({ email });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    student.password = await bcrypt.hash(newPassword, 10);
+    student.password = newPassword;
     await student.save();
 
     await Otp.deleteOne({ email });
@@ -111,11 +123,11 @@ const resetPassword = async (req, res) => {
     return res.json({ message: "Password has been reset" });
   } catch (err) {
     console.error("Reset password error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error during password reset." });
+    return res.status(500).json({ message: "Server error during password reset." });
   }
 };
+
+
 
 const checkInStudent = async (req, res) => {
   const { studentId } = req.body;
@@ -227,7 +239,7 @@ const getComplaintHistory = async (req, res) => {
   const { studentId } = req.params;
 
   try {
-    const student = await Student.findOne({ _id: studentId });
+    const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -283,7 +295,7 @@ const getLeaveHistory = async (req, res) => {
   const { studentId } = req.params;
 
   try {
-    const student = await Student.findById(studentId);
+    const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -343,7 +355,7 @@ const getRefundHistory = async (req, res) => {
   const { studentId } = req.params;
 
   try {
-    const student = await Student.findById(studentId);
+    const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -366,27 +378,50 @@ const getStudentProfile = async (req, res) => {
   const { studentId } = req.params;
 
   try {
-    const student = await Student.findOne({ studentId });
+    const student = await Student.findOne({ studentId }).populate("roomBedNumber");
+
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const fullRoomBed = student.roomBedNumber;
-    const lastDashIndex = fullRoomBed.lastIndexOf("-");
+    const inventoryData = student.roomBedNumber;
 
-    const roomNo = fullRoomBed.substring(0, lastDashIndex);
-    const bedAllotment = fullRoomBed.substring(lastDashIndex + 1);
+    if (!inventoryData) {
+      return res.status(500).json({
+        message: "Student room data is missing or invalid",
+      });
+    }
 
+    const roomNo = inventoryData.roomNo;
+    const bedAllotment = inventoryData.itemName;
 
     const roommate = await Student.findOne({
-      roomBedNumber: { $regex: `^${roomNo}-` },
       studentId: { $ne: studentId },
-    });
+    }).populate("roomBedNumber");
 
-    const lastCheckIn =
-      student.attendanceLog.length > 0
-        ? student.attendanceLog.at(-1).checkInDate
-        : null;
+    const roommateInSameRoom =
+      roommate && roommate.roomBedNumber?.roomNo === roomNo ? roommate : null;
+
+    const lastLog = student.attendanceLog.at(-1);
+
+    let checkStatus = "Pending Check-in";
+    let checkTime = "--:--:--";
+
+    if (lastLog) {
+      if (!lastLog.checkOutDate) {
+        checkStatus = "Checked In";
+        checkTime = new Date(lastLog.checkInDate).toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          hour12: false
+        });
+      } else {
+        checkStatus = "Checked Out";
+        checkTime = new Date(lastLog.checkOutDate).toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          hour12: false
+        });
+      }
+    }
 
     return res.json({
       studentName: student.studentName,
@@ -394,9 +429,11 @@ const getStudentProfile = async (req, res) => {
       email: student.email,
       contactNumber: student.contactNumber,
       roomNo,
-      roommateName: roommate?.studentName || "No roommate",
+      roommateName: roommateInSameRoom?.studentName || "No roommate",
       bedAllotment,
-      lastCheckInDate: lastCheckIn,
+      lastCheckInDate: lastLog?.checkInDate || null,
+      checkStatus,
+      checkTime
     });
   } catch (err) {
     console.error("Fetch student profile error:", err);
@@ -441,12 +478,140 @@ const getCurrentFeesStatus = async (req, res) => {
   const { studentId } = req.params;
 
   try {
-    const fees = await Fee.find({ studentId }).select("feeType amount status dueDate");
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const fees = await Fee.find({ studentId: student._id }).select("feeType amount status dueDate");
+
     res.json({ fees });
   } catch (error) {
+    console.error("Fee status error:", error);
     res.status(500).json({ message: "Error fetching fee status" });
   }
 };
+
+
+const getNotices = async (req, res) => {
+  try {
+    const noticesList = await Notice.find().sort({ issueDate: -1 });
+
+    const noticesData = noticesList.map(notice => ({
+      issueDate: notice.issueDate ? new Date(notice.issueDate).toISOString() : null,
+      title: notice.title || "No Subject",
+      message: notice.message || "No Description",
+    }));
+
+    return res.json({ notices: noticesData }); // ✅ FIXED
+  } catch (err) {
+    console.error("Notices fetch error:", err);
+    return res.status(500).json({ message: "Server error while fetching notices data." });
+  }
+};
+
+
+const getNextInspection = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findOne({ studentId }).populate('roomBedNumber');
+
+    if (!student || !student.roomBedNumber) {
+      return res.status(404).json({ message: 'Student room not found' });
+    }
+
+    const targetRoom = `Room ${student.roomBedNumber.roomNo}`;
+
+    const nextInspection = await Inspection.findOne({
+      target: targetRoom,
+      status: 'pending',
+      datetime: { $gte: new Date() }
+    }).sort({ datetime: 1 });
+
+    if (!nextInspection) {
+      return res.status(404).json({ message: 'No upcoming inspections for this room' });
+    }
+
+    return res.json({
+      title: nextInspection.title,
+      date: nextInspection.datetime,
+      status: nextInspection.status,
+    });
+
+  } catch (err) {
+    console.error('Error fetching inspection:', err.message);
+    return res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
+const getAttendanceSummary = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { range } = req.query;
+
+    const student = await Student.findOne({ studentId });
+
+    if (!student) return res.status(404).json({ message: 'Student not found' });
+
+    const now = new Date();
+    let fromDate;
+
+    // Calculate date range
+    switch (range) {
+      case 'day':
+        fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        break;
+      case 'week':
+        const firstDayOfWeek = now.getDate() - now.getDay();
+        fromDate = new Date(now.getFullYear(), now.getMonth(), firstDayOfWeek);
+        break;
+      case 'month':
+        fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      default:
+        return res.status(400).json({ message: 'Invalid range' });
+    }
+
+    const logs = student.attendanceLog;
+
+    let present = 0;
+    let absent = 0;
+
+    const dateSet = new Set();
+
+    // Count present days
+    logs.forEach(log => {
+      const checkIn = new Date(log.checkInDate);
+      if (checkIn >= fromDate && checkIn <= now) {
+        const dateStr = checkIn.toISOString().split('T')[0];
+        dateSet.add(dateStr);
+      }
+    });
+
+    present = dateSet.size;
+
+    // Count absent days
+    const today = new Date();
+    let daysInRange = 0;
+    let iter = new Date(fromDate);
+
+    while (iter <= today) {
+      daysInRange++;
+      iter.setDate(iter.getDate() + 1);
+    }
+
+    absent = daysInRange - present;
+
+    return res.json({ present, absent });
+
+  } catch (error) {
+    console.error('Attendance summary error:', error);
+    return res.status(500).json({ message: 'Internal server error' });
+  }
+};
+
 
 
 
@@ -467,5 +632,8 @@ export {
   getRefundHistory,
   getStudentProfile,
   updateStudentProfile,
-  getCurrentFeesStatus
+  getCurrentFeesStatus,
+  getNotices,
+  getNextInspection,
+  getAttendanceSummary
 }
