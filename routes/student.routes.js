@@ -17,7 +17,9 @@ import {
     getCurrentFeesStatus,
     getNotices,
     getNextInspection,
-    getAttendanceSummary
+    getAttendanceSummary,
+     uploadMyProfileImage, // ✨ ADD THIS
+    deleteMyProfileImage
 } from '../controllers/student.controller.js';
 import { verifyStudentToken } from '../middleware/auth.middleware.js'
 
@@ -48,8 +50,15 @@ router.put("/profile/:studentId", updateStudentProfile);
 
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);
 
-router.get('/inspectionSchedule', getNextInspection);
+router.get('/inspectionSchedule/:studentId', getNextInspection);
 
 router.get('/attendanceSummary/:studentId', getAttendanceSummary);
+
+router.post('/upload-profile-image/:studentId', 
+  uploadStudent.single('profileImage'), // Use your existing upload middleware
+  uploadMyProfileImage
+);
+
+router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 
 export default router;

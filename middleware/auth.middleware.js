@@ -1,3 +1,4 @@
+// middleware/auth.middleware.js (ADD STUDENT AUTH)
 import jwt from 'jsonwebtoken';
 import { Parent } from '../models/parent.model.js';
 import { Student } from '../models/student.model.js'
@@ -26,7 +27,6 @@ const verifyAdminToken = (req, res, next) => {
         return res.status(401).json({ message: "Invalid token" });
     }
 };
-
 
 const verifyWardenToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -135,5 +135,6 @@ export const verifyStudentToken = async (req, res, next) => {
 export{
     verifyAdminToken,
     verifyWardenToken,
-    authenticateParent
+    authenticateParent,
+    authenticateStudent // ✨ ADD THIS EXPORT
 };
