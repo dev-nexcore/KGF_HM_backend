@@ -1,5 +1,7 @@
+// middleware/auth.middleware.js (ADD STUDENT AUTH)
 import jwt from 'jsonwebtoken';
 import { Parent } from '../models/parent.model.js';
+import { Student } from '../models/student.model.js'; // Add this import
 
 const verifyAdminToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
@@ -25,7 +27,6 @@ const verifyAdminToken = (req, res, next) => {
         return res.status(401).json({ message: "Invalid token" });
     }
 };
-
 
 const verifyWardenToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -91,11 +92,56 @@ const authenticateParent = async (req, res, next) => {
   }
 };
 
+// ✨ ADD THIS NEW STUDENT AUTHENTICATION MIDDLEWARE
+const authenticateStudent = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
 
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    
+    if (!token) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
 
+    // Verify the token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if it's a student token (you can add userType field to JWT)
+    if (decoded.userType && decoded.userType !== 'student') {
+      return res.status(403).json({ message: 'Access denied. Student authentication required.' });
+    }
+    
+    // Find the student
+    const student = await Student.findOne({ studentId: decoded.studentId });
+    if (!student) {
+      return res.status(401).json({ message: 'Invalid token - student not found' });
+    }
 
-export{
+    // Add student info to request object
+    req.student = student;
+    req.studentId = decoded.studentId;
+    
+    next();
+  } catch (error) {
+    console.error('Student authentication error:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    
+    return res.status(500).json({ message: 'Server error during authentication' });
+  }
+};
+
+export {
     verifyAdminToken,
     verifyWardenToken,
-    authenticateParent
+    authenticateParent,
+    authenticateStudent // ✨ ADD THIS EXPORT
 };

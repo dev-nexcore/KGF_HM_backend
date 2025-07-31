@@ -15,8 +15,12 @@ import {
     getStudentProfile,
     updateStudentProfile,
     getCurrentFeesStatus,
-    getAttendanceLog
+    getAttendanceLog,
+     uploadMyProfileImage, // ✨ ADD THIS
+    deleteMyProfileImage
 } from '../controllers/student.controller.js';
+
+import { uploadStudent } from '../middleware/upload.js'; // Import the upload middleware
 
 const router = express.Router();
 
@@ -36,5 +40,12 @@ router.get("/refunds/:studentId", getRefundHistory);
 router.get("/profile/:studentId", getStudentProfile);
 router.put("/profile/:studentId", updateStudentProfile);
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);
+
+router.post('/upload-profile-image/:studentId', 
+  uploadStudent.single('profileImage'), // Use your existing upload middleware
+  uploadMyProfileImage
+);
+
+router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 
 export default router;

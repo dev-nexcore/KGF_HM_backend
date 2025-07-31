@@ -1,4 +1,6 @@
 import "dotenv/config";
+import fs from "fs";
+import path from "path";
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Student } from "../models/student.model.js";
@@ -380,6 +382,125 @@ const getRefundHistory = async (req, res) => {
   }
 };
 
+// Upload student's own profile image
+const uploadMyProfileImage = async (req, res) => {
+  try {
+    const { studentId } = req.params; // Get from URL params like your other routes
+    
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided'
+      });
+    }
+
+    // Find student using your existing pattern
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      // Delete uploaded file if student not found
+      if (fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(404).json({
+        success: false, 
+        message: 'Student not found'
+      });
+    }
+
+    // Delete old profile image if exists
+    if (student.profileImage) {
+      const oldImagePath = path.join(process.cwd(), student.profileImage);
+      if (fs.existsSync(oldImagePath)) {
+        try {
+          fs.unlinkSync(oldImagePath);
+          console.log('Old profile image deleted');
+        } catch (error) {
+          console.error('Error deleting old image:', error);
+          // Continue anyway - don't fail the upload for this
+        }
+      }
+    }
+
+    // Update student with new image path
+    const imagePath = req.file.path.replace(/\\/g, '/'); // Normalize path separators
+    student.profileImage = imagePath;
+    await student.save();
+
+    // Create full URL for frontend
+    const imageUrl = `${req.protocol}://${req.get('host')}/${imagePath}`;
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image uploaded successfully',
+      imageUrl: imageUrl,
+      student: {
+        studentId: student.studentId,
+        profileImage: imagePath
+      }
+    });
+
+  } catch (error) {
+    console.error('Upload error:', error);
+    
+    // Clean up uploaded file if there was an error
+    if (req.file && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.error('Error cleaning up file:', cleanupError);
+      }
+    }
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to upload profile image',
+      error: error.message
+    });
+  }
+};
+
+// Delete student's own profile image
+const deleteMyProfileImage = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found'
+      });
+    }
+
+    // Delete image file if exists
+    if (student.profileImage) {
+      const imagePath = path.join(process.cwd(), student.profileImage);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+        console.log('Profile image file deleted');
+      }
+    }
+
+    // Remove image path from database
+    student.profileImage = null;
+    await student.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile image deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete profile image',
+      error: error.message
+    });
+  }
+};
+
 
 const getStudentProfile = async (req, res) => {
   const { studentId } = req.params;
@@ -396,7 +517,6 @@ const getStudentProfile = async (req, res) => {
     const roomNo = fullRoomBed.substring(0, lastDashIndex);
     const bedAllotment = fullRoomBed.substring(lastDashIndex + 1);
 
-
     const roommate = await Student.findOne({
       roomBedNumber: { $regex: `^${roomNo}-` },
       studentId: { $ne: studentId },
@@ -407,7 +527,8 @@ const getStudentProfile = async (req, res) => {
         ? student.attendanceLog.at(-1).checkInDate
         : null;
 
-    return res.json({
+    // ✨ ADD PROFILE IMAGE URL TO RESPONSE
+    const response = {
       firstName: student.firstName,
       lastName: student.lastName,
       studentId: student.studentId,
@@ -417,7 +538,15 @@ const getStudentProfile = async (req, res) => {
       roommateName: roommate?.studentName || "No roommate",
       bedAllotment,
       lastCheckInDate: lastCheckIn,
-    });
+      profileImage: student.profileImage || null, // ✨ ADD THIS
+    };
+
+    // Add full image URL if profile image exists
+    if (student.profileImage) {
+      response.profileImageUrl = `${req.protocol}://${req.get('host')}/${student.profileImage}`;
+    }
+
+    return res.json(response);
   } catch (err) {
     console.error("Fetch student profile error:", err);
     return res
@@ -490,5 +619,7 @@ export {
   getRefundHistory,
   getStudentProfile,
   updateStudentProfile,
-  getCurrentFeesStatus
+  getCurrentFeesStatus,
+  uploadMyProfileImage, // ✨ NEW
+  deleteMyProfileImage
 }
