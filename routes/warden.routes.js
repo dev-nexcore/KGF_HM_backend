@@ -4,6 +4,7 @@ import {
   forgotPasswordWarden,
   verifyOtpWarden,
   resetPasswordWarden,
+  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,

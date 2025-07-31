@@ -220,6 +220,7 @@ const punchOut = async (req, res) => {
 };
 
 
+
 const getAttendanceLog = async (req, res) => {
   try {
     const wardenId = req.user.id;
@@ -998,6 +999,7 @@ export {
   forgotPassword as forgotPasswordWarden,
   verifyOtp as verifyOtpWarden,
   resetPassword as resetPasswordWarden,
+  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,

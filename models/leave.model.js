@@ -28,9 +28,17 @@ const leaveSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending',
   },
+   adminComments: {
+    type: String,
+    default: null, 
+  },
   appliedAt: {
     type: Date,
     default: Date.now,
+  },
+    processedAt: {
+    type: Date,
+    default: null,
   },
 });
 
