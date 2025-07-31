@@ -15,7 +15,9 @@ import {
     getStudentProfile,
     updateStudentProfile,
     getCurrentFeesStatus,
-    getAttendanceLog,
+    getNotices,
+    getNextInspection,
+    getAttendanceSummary,
      uploadMyProfileImage, // ✨ ADD THIS
     deleteMyProfileImage
 } from '../controllers/student.controller.js';
@@ -30,7 +32,6 @@ router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.post('/check-in', checkInStudent);
 router.post('/check-out', checkOutStudent);
-router.get('/attendance-log/:studentId', getAttendanceLog);
 router.post("/complaint", fileComplaint);
 router.get("/complaints/:studentId", getComplaintHistory);
 router.post("/leave", applyForLeave);
@@ -47,5 +48,8 @@ router.post('/upload-profile-image/:studentId',
 );
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
+router.get("/notices",getNotices);
+router.get('/inspectionSchedule/:studentId', getNextInspection);
+router.get('/attendanceSummary/:studentId', getAttendanceSummary);
 
 export default router;
