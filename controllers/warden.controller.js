@@ -10,6 +10,12 @@ import { Leave } from "../models/leave.model.js";
 import jwt from "jsonwebtoken";
 import { Inventory } from '../models/inventory.model.js';
 import { Inspection } from '../models/inspection.model.js';
+import sendEmail from '../utils/sendEmail.js'; 
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+import mongoose from "mongoose";
+
 
 
 // Nodemailer transporter
@@ -23,33 +29,8 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// //  Login warden
-// const login = async (req, res) => {
-//   const { wardenId, password } = req.body;
 
-//   try {
-//     const warden = await Warden.findOne({ wardenId });
-//     if (!warden) return res.status(401).json({ message: "Invalid warden ID" });
-
-//     const isMatch = await warden.comparePassword(password);
-//     if (!isMatch) return res.status(401).json({ message: "Invalid password" });
-
-//     return res.json({
-//       message: "Login successful",
-//       wardenId,
-//       name: `${warden.firstName} ${warden.lastName}`,
-//     });
-//   } catch (err) {
-//     console.error("Warden login error:", err);
-//     return res.status(500).json({ message: "Server error during login." });
-//   }
-// };
-
-
-// Login Page For Warden
-// This function handles the login process for wardens.
-
-// POST /api/wardenauth/login
+// <------------    Login Page For Warden  -------------->
 
  const login = async (req, res) => {
   const { wardenId, password } = req.body;
@@ -91,8 +72,8 @@ const transporter = nodemailer.createTransport({
 };
 
 
-
 //  Forgot Password
+
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -124,8 +105,8 @@ const forgotPassword = async (req, res) => {
 };
 
 
-
 //  Verify OTP
+
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
 
@@ -139,8 +120,6 @@ const verifyOtp = async (req, res) => {
   await record.save();
   return res.json({ message: "OTP verified" });
 };
-
-
 
 
 //  Reset Password
@@ -175,101 +154,220 @@ const resetPassword = async (req, res) => {
 
 
 
-// warden profile Page
+//  <--------  Warden Punch In and Punch Out Page. ----------->
 
-const getWardenProfile = async (req, res) => {
+
+const punchIn = async (req, res) => {
   try {
-    const warden = await Warden.findById(req.params.id).select(
-      "firstName lastName contactNumber email wardenId profilePhoto"
+    const wardenId = req.user.id;
+    const warden = await Warden.findById(wardenId);
+
+    if (!warden) return res.status(404).json({ message: 'Warden not found' });
+
+    const today = new Date().toDateString();
+    const alreadyPunchedIn = warden.attendanceLog.find(entry =>
+      new Date(entry.date).toDateString() === today
     );
 
-    if (!warden) {
-      return res.status(404).json({ message: "Warden not found" });
+    if (alreadyPunchedIn) {
+      return res.status(400).json({ message: 'Already punched in for today' });
     }
 
-    res.status(200).json(warden);
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error });
-  }
-};
-
-// update wardenprofile
-
- const updateWardenProfile = async (req, res) => {
-  try {
-    const { firstName, lastName, email, contactNumber } = req.body;
-
-    let warden = await Warden.findById(req.params.id);
-    if (!warden) return res.status(404).json({ message: "Warden not found" });
-
-    warden.firstName = firstName || warden.firstName;
-    warden.lastName = lastName || warden.lastName;
-    warden.email = email || warden.email;
-    warden.contactNumber = contactNumber || warden.contactNumber;
-
-    if (req.file) {
-      // Delete old profile photo if exists
-      if (warden.profilePhoto) {
-        const oldPath = `uploads/${warden.profilePhoto}`;
-        if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-      }
-      warden.profilePhoto = req.file.filename;
-    }
+    warden.attendanceLog.push({
+      date: new Date(),
+      punchIn: new Date(),
+      punchOut: null,
+      totalHours: null,
+    });
 
     await warden.save();
-    res.status(200).json({ message: "Profile updated successfully", warden });
+    res.status(200).json({ message: 'Punch in recorded successfully' });
+
   } catch (error) {
-    res.status(500).json({ message: "Update failed", error });
+    console.error('Punch In Error:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+const punchOut = async (req, res) => {
+  try {
+    const wardenId = req.user.id;
+
+    const warden = await Warden.findById(wardenId);
+
+    if (!warden) return res.status(404).json({ message: 'Warden not found' });
+
+    const today = new Date().toDateString();
+    const log = warden.attendanceLog.find(entry =>
+      new Date(entry.date).toDateString() === today
+    );
+
+    if (!log) return res.status(400).json({ message: 'Punch in not found for today' });
+    if (log.punchOut) return res.status(400).json({ message: 'Already punched out for today' });
+
+    log.punchOut = new Date();
+    const durationMs = log.punchOut - log.punchIn;
+    log.totalHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100;
+
+    await warden.save();
+    res.status(200).json({ message: 'Punch out recorded successfully' });
+
+  } catch (error) {
+    console.error('Punch Out Error:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+const getAttendanceLog = async (req, res) => {
+  try {
+    const wardenId = req.user.id;
+    const warden = await Warden.findById(wardenId);
+
+    if (!warden) return res.status(404).json({ message: 'Warden not found' });
+
+    const log = warden.attendanceLog.sort((a, b) => new Date(b.date) - new Date(a.date)); // recent first
+    res.status(200).json({ attendanceLog: log });
+
+  } catch (error) {
+    console.error('Get Attendance Log Error:', error);
+    res.status(500).json({ message: 'Server Error' });
   }
 };
 
 
 
-// Get Emergency Contacts Page.
 
-const getEmergencyContacts = async (req, res) => {
+// <------- Warden Dashboard Summary ---------->
+
+const getWardenDashboardStats = async (req, res) => {
   try {
-    const { studentName, studentId } = req.query;
+    // Total Students
+    const totalStudents = await Student.countDocuments();
 
-    // Build dynamic search filter
-    let filter = {};
+    // Total Beds
+    const totalBeds = await Inventory.countDocuments({ itemName: 'Bed' });
 
-    if (studentName) {
-      filter.studentName = { $regex: studentName, $options: 'i' }; // Case-insensitive search
-    }
+    // In Use Beds
+    const inUseBeds = await Inventory.countDocuments({ itemName: 'Bed', status: 'In Use' });
 
-    if (studentId) {
-      filter.studentId = { $regex: studentId, $options: 'i' }; // Case-insensitive partial match
-    }
+    // Available Beds
+    const availableBeds = await Inventory.countDocuments({ itemName: 'Bed', status: 'Available' });
 
-    const students = await Student.find(filter, {
-      studentId: 1,
-      studentName: 1,
-      emergencyContactName: 1,
-      relation: 1,
-      emergencyContactNumber: 1,
-      _id: 0,
+    // Damaged Beds
+    const damagedBeds = await Inventory.countDocuments({ itemName: 'Bed', status: 'Damaged' });
+
+    // Upcoming Inspections (future + pending) — no limit
+    const now = new Date();
+
+    const upcomingInspections = await Inspection.find({
+      datetime: { $gte: now },
+      status: "pending"
+    }).sort({ datetime: 1 }); // sorted but no limit
+
+    const upcomingInspectionCount = await Inspection.countDocuments({
+      datetime: { $gte: now },
+      status: "pending"
     });
 
     res.status(200).json({
-      success: true,
-      contacts: students,
+      totalStudents,
+      totalBeds,
+      inUseBeds,
+      availableBeds,
+      damagedBeds,
+      upcomingInspectionCount,
+      upcomingInspections
     });
+
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch emergency contacts",
-      error: error.message,
-    });
+    console.error("Error in getWardenDashboardStats:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
 
 
-// Student Management Page
-// Get student list for warden
+
+// <---------- bed allotment page -------->
 
 
+const getBedStats = async (req, res) => {
+  try {
+    const stats = await Inventory.aggregate([
+      {
+        $match: { itemName: 'Bed' }  // Only count items with itemName === 'Bed'
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Convert result array to an object
+    const result = {
+      totalBeds: 0,
+      available: 0,
+      inUse: 0,
+      inMaintenance: 0,
+      damaged: 0
+    };
+
+    stats.forEach(stat => {
+      result.totalBeds += stat.count;
+      switch (stat._id) {
+        case 'Available':
+          result.available = stat.count;
+          break;
+        case 'In Use':
+          result.inUse = stat.count;
+          break;
+        case 'In maintenance':
+          result.inMaintenance = stat.count;
+          break;
+        case 'Damaged':
+          result.damaged = stat.count;
+          break;
+      }
+    });
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error getting bed stats:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+const getBedStatusOverview = async (req, res) => {
+  try {
+    const { floor, roomNo, status } = req.query;
+
+    // Build filter object dynamically
+    const filters = {
+      category: 'Furniture',
+      itemName: /bed/i
+    };
+
+    if (floor) filters.floor = floor;
+    if (roomNo) filters.roomNo = roomNo;
+    if (status) filters.status = status;
+
+    const beds = await Inventory.find(filters, 'barcodeId floor roomNo status');
+
+    res.status(200).json(beds);
+  } catch (error) {
+    console.error('Error fetching bed status:', error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+// <-----------  Student Management Page ---------->
 
 
 const getStudentListForWarden = async (req, res) => {
@@ -328,44 +426,6 @@ const getStudentListForWarden = async (req, res) => {
     });
   }
 };
-
-
-
-
-// Update student room/bed number
-
-// const updateStudentRoom = async (req, res) => {
-//   try {
-//     const { studentId } = req.params;
-//     const { roomBedNumber } = req.body;
-
-//     const student = await Student.findOneAndUpdate(
-//       { studentId },
-//       { roomBedNumber },
-//       { new: true } // returns the updated document
-//     );
-
-//     if (!student) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Student not found",
-//       });
-//     }
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Room/Bed number updated successfully",
-//       student,
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: "Failed to update student room",
-//       error: error.message,
-//     });
-//   }
-// };
-
 
 
 
@@ -438,7 +498,6 @@ const updateStudentRoom = async (req, res) => {
 
 
 
-// Get total number of students
 const getTotalStudents = async (req, res) => {
   try {
     const count = await Student.countDocuments();
@@ -458,100 +517,211 @@ const getTotalStudents = async (req, res) => {
 
 
 
-// Warden Punch In and Punch Out Page.
 
-// POST /api/warden/attendance/punch-in
-const punchIn = async (req, res) => {
+// <--------  inspection management Page ----------->
+
+
+
+
+const getRecentInspections = async (req, res) => {
   try {
-    const wardenId = req.user.id;
-    const warden = await Warden.findById(wardenId);
+    const inspections = await Inspection.find({})
+      .sort({ datetime: -1 })
+      .select('_id title target status datetime') // ✅ Include _id
+      .lean();
 
-    if (!warden) return res.status(404).json({ message: 'Warden not found' });
-
-    const today = new Date().toDateString();
-    const alreadyPunchedIn = warden.attendanceLog.find(entry =>
-      new Date(entry.date).toDateString() === today
-    );
-
-    if (alreadyPunchedIn) {
-      return res.status(400).json({ message: 'Already punched in for today' });
-    }
-
-    warden.attendanceLog.push({
-      date: new Date(),
-      punchIn: new Date(),
-      punchOut: null,
-      totalHours: null,
+    const formatted = inspections.map(ins => {
+      const dateObj = new Date(ins.datetime);
+      return {
+        _id: ins._id, // ✅ Include _id in formatted output
+        date: dateObj.toISOString().split('T')[0],
+        time: dateObj.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        title: ins.title || '',
+        target: ins.target || '',
+        status: ins.status
+          ? ins.status.charAt(0).toUpperCase() + ins.status.slice(1)
+          : 'Unknown',
+      };
     });
 
-    await warden.save();
-    res.status(200).json({ message: 'Punch in recorded successfully' });
-
+    res.status(200).json({
+      success: true,
+      inspections: formatted,
+    });
   } catch (error) {
-    console.error('Punch In Error:', error);
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspections',
+      error: error.message,
+    });
   }
 };
 
 
 
-// POST /api/warden/attendance/punch-out
-const punchOut = async (req, res) => {
+const getFilteredInspections = async (req, res) => {
   try {
-    const wardenId = req.user.id;
-    const warden = await Warden.findById(wardenId);
+    const { date, time, status, target } = req.query;
 
-    if (!warden) return res.status(404).json({ message: 'Warden not found' });
+    const match = {};
 
-    const today = new Date().toDateString();
-    const log = warden.attendanceLog.find(entry =>
-      new Date(entry.date).toDateString() === today
+    // Case-insensitive filters
+    if (status) {
+      match.status = new RegExp(`^${status}$`, 'i');
+    }
+
+    if (target) {
+      match.target = new RegExp(`^${target}$`, 'i');
+    }
+
+    // Date range filter
+    if (date) {
+      const start = new Date(date);
+      const end = new Date(date);
+      end.setDate(end.getDate() + 1);
+      match.datetime = { $gte: start, $lt: end };
+    }
+
+    const pipeline = [];
+
+    if (Object.keys(match).length > 0) {
+      pipeline.push({ $match: match });
+    }
+
+    // Extract time string
+    pipeline.push({
+      $addFields: {
+        timeStr: {
+          $dateToString: {
+            format: "%H:%M",
+            date: "$datetime",
+            timezone: "Asia/Kolkata",
+          },
+        },
+      },
+    });
+
+    if (time) {
+      pipeline.push({
+        $match: {
+          timeStr: { $regex: `^${time}` }, // partial match like "09" or "09:30"
+        },
+      });
+    }
+
+    pipeline.push(
+      { $sort: { datetime: -1 } },
+      {
+        $project: {
+          _id: 1, // ✅ include _id
+          title: 1,
+          target: 1,
+          status: 1,
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$datetime",
+              timezone: "Asia/Kolkata",
+            },
+          },
+          time: "$timeStr",
+        },
+      }
     );
 
-    if (!log) return res.status(400).json({ message: 'Punch in not found for today' });
-    if (log.punchOut) return res.status(400).json({ message: 'Already punched out for today' });
+    const inspections = await Inspection.aggregate(pipeline);
 
-    log.punchOut = new Date();
-    const durationMs = log.punchOut - log.punchIn;
-    log.totalHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100;
-
-    await warden.save();
-    res.status(200).json({ message: 'Punch out recorded successfully' });
-
+    res.status(200).json({
+      success: true,
+      inspections,
+    });
   } catch (error) {
-    console.error('Punch Out Error:', error);
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch inspections",
+      error: error.message,
+    });
   }
 };
 
 
-
-// GET /api/warden/attendance/log
-const getAttendanceLog = async (req, res) => {
+const getInspectionById = async (req, res) => {
   try {
-    const wardenId = req.user.id;
-    const warden = await Warden.findById(wardenId);
+    const inspection = await Inspection.findById(req.params.id).populate('createdBy', 'name email');
 
-    if (!warden) return res.status(404).json({ message: 'Warden not found' });
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: 'Inspection not found' });
+    }
 
-    const log = warden.attendanceLog.sort((a, b) => new Date(b.date) - new Date(a.date)); // recent first
-    res.status(200).json({ attendanceLog: log });
-
+    res.status(200).json({ success: true, inspection });
   } catch (error) {
-    console.error('Get Attendance Log Error:', error);
-    res.status(500).json({ message: 'Server Error' });
+    res.status(500).json({ success: false, message: 'Failed to fetch inspection', error: error.message });
+  }
+};
+
+
+
+const completeInspection = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("Received ID:", id);
+
+    // Check if ID is a valid MongoDB ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.log("Invalid ObjectId");
+      return res.status(400).json({ success: false, message: "Invalid inspection ID" });
+    }
+
+    const inspection = await Inspection.findById(id);
+    if (!inspection) {
+      console.log("Inspection not found in DB");
+      return res.status(404).json({ success: false, message: "Inspection not found" });
+    }
+
+    inspection.status = "completed";
+    await inspection.save();
+
+    console.log("Inspection marked completed:", inspection._id);
+    res.status(200).json({ success: true, message: "Inspection marked as completed", inspection });
+  } catch (error) {
+    console.error("Error in completeInspection:", error);
+    res.status(500).json({ success: false, message: "Failed to update inspection status", error: error.message });
+  }
+};
+
+
+const getInspectionStats = async (req, res) => {
+  try {
+    const total = await Inspection.countDocuments();
+    const pending = await Inspection.countDocuments({ status: 'pending' });
+    const completed = await Inspection.countDocuments({ status: 'completed' });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total,
+        pending,
+        completed,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch inspection statistics',
+      error: error.message,
+    });
   }
 };
 
 
 
 
-// Leave Request Management Page
 
+// <--------- Leave Request Management Page ----------->
 
-import sendEmail from '../utils/sendEmail.js'; // assumes you have email utility
-
-// Get All Leave Requests
 const getAllLeaveRequests = async (req, res) => {
   try {
     const leaves = await Leave.find()
@@ -564,7 +734,6 @@ const getAllLeaveRequests = async (req, res) => {
 };
 
 
-// Update Leave Status
 const updateLeaveStatus = async (req, res) => {
   const { leaveId } = req.params;
   const { status } = req.body;
@@ -603,9 +772,6 @@ const updateLeaveStatus = async (req, res) => {
 };
 
 
-
-// Get Leave Request Stats
-
 const getLeaveRequestStats = async (req, res) => {
   try {
     const total = await Leave.countDocuments();
@@ -625,267 +791,197 @@ const getLeaveRequestStats = async (req, res) => {
 };
 
 
-
-// Filter Leave Requests
-
 const filterLeaveRequests = async (req, res) => {
   try {
     const { studentName, studentId, status, startDate, endDate } = req.query;
 
-    const filter = {};
-
-    // Use aggregation for advanced filtering and joins
     const matchStage = {};
 
+    // Status filter
     if (status) matchStage.status = status;
+
+    // Date filters
     if (startDate || endDate) {
       matchStage.startDate = {};
       if (startDate) matchStage.startDate.$gte = new Date(startDate);
       if (endDate) matchStage.startDate.$lte = new Date(endDate);
     }
 
-    // Build student filters
+    // Build student filters using $or for both name and ID
     const studentFilter = {};
-    if (studentName) {
-      studentFilter.studentName = new RegExp('^' + studentName + '$', 'i'); // exact name match (case-insensitive)
-    }
-    if (studentId) {
-      studentFilter.studentId = studentId; // exact ID match
+    if (studentName || studentId) {
+      const searchTerm = studentName || studentId;
+
+      studentFilter.$or = [
+        { studentName: { $regex: searchTerm, $options: 'i' } },
+        { studentId: { $regex: searchTerm, $options: 'i' } }
+      ];
     }
 
     // Find matching student IDs
     let studentIds = [];
     if (studentName || studentId) {
-      const students = await Student.find(studentFilter).select('_id');
-      studentIds = students.map(s => s._id);
-      matchStage.studentId = { $in: studentIds };
+      const students = await Student.find(studentFilter).select("_id");
+      studentIds = students.map((s) => s._id);
+
+      if (studentIds.length > 0) {
+        matchStage.studentId = { $in: studentIds };
+      } else {
+        // No matching students found
+        return res.status(200).json([]);
+      }
     }
 
+    // Fetch filtered leaves
     const leaves = await Leave.find(matchStage)
-      .populate('studentId', 'studentName studentId')
+      .populate("studentId", "studentName studentId")
       .sort({ appliedAt: -1 });
 
     res.status(200).json(leaves);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: 'Server error', error: err.message });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
 
-// bed allotment
 
-// Get Bed Statistics
+//  <---------- Warden Profile Page ------------>
 
-
-const getBedStats = async (req, res) => {
+const getWardenProfile = async (req, res) => {
   try {
-    const stats = await Inventory.aggregate([
-      {
-        $match: { itemName: 'Bed' }  // Only count items with itemName === 'Bed'
-      },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 }
+    const warden = await Warden.findById(req.params.id).select(
+      "firstName lastName email contactNumber wardenId profilePhoto"
+    );
+
+    if (!warden) {
+      return res.status(404).json({ message: "Warden not found" });
+    }
+
+    res.status(200).json(warden);
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+const updateWardenProfile = async (req, res) => {
+  try {
+    const { firstName, lastName, email, contactNumber } = req.body;
+
+    const warden = await Warden.findById(req.params.id);
+    if (!warden) return res.status(404).json({ message: "Warden not found" });
+
+    // Update basic fields
+    warden.firstName = firstName || warden.firstName;
+    warden.lastName = lastName || warden.lastName;
+    warden.email = email || warden.email;
+    warden.contactNumber = contactNumber || warden.contactNumber;
+
+    // Handle profile photo update
+    if (req.file) {
+      // Delete old photo if it exists
+      if (warden.profilePhoto) {
+        const oldPath = path.join(__dirname, "../uploads", warden.profilePhoto);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
         }
       }
-    ]);
 
-    // Convert result array to an object
-    const result = {
-      totalBeds: 0,
-      available: 0,
-      inUse: 0,
-      inMaintenance: 0,
-      damaged: 0
-    };
+      // Save new photo
+      warden.profilePhoto = req.file.filename;
+    }
 
-    stats.forEach(stat => {
-      result.totalBeds += stat.count;
-      switch (stat._id) {
-        case 'Available':
-          result.available = stat.count;
-          break;
-        case 'In Use':
-          result.inUse = stat.count;
-          break;
-        case 'In maintenance':
-          result.inMaintenance = stat.count;
-          break;
-        case 'Damaged':
-          result.damaged = stat.count;
-          break;
-      }
-    });
+    await warden.save();
 
-    res.status(200).json(result);
+    res.status(200).json({ message: "Profile updated", warden });
   } catch (error) {
-    console.error('Error getting bed stats:', error);
-    res.status(500).json({ message: 'Server Error' });
+    console.error("Update error:", error);
+    res.status(500).json({ message: "Update failed", error });
   }
 };
 
 
+// <--------- Emergency Contact Page ----------->
 
-
-
-
-
-// GET /api/inventory/bed-status?floor=1&roomNo=101&status=Available
-const getBedStatusOverview = async (req, res) => {
+const getEmergencyContacts = async (req, res) => {
   try {
-    const { floor, roomNo, status } = req.query;
+    const { studentName, studentId } = req.query;
 
-    // Build filter object dynamically
-    const filters = {
-      category: 'Furniture',
-      itemName: /bed/i
-    };
+    let filter = {};
 
-    if (floor) filters.floor = floor;
-    if (roomNo) filters.roomNo = roomNo;
-    if (status) filters.status = status;
-
-    const beds = await Inventory.find(filters, 'barcodeId floor roomNo status');
-
-    res.status(200).json(beds);
-  } catch (error) {
-    console.error('Error fetching bed status:', error);
-    res.status(500).json({ message: 'Server Error' });
-  }
-};
-
-
-
-// inspection management
-
-
-
-
-const getRecentInspections = async (req, res) => {
-  try {
-    const inspections = await Inspection.find({})
-      .sort({ datetime: -1 })
-      .select('title target status datetime')
-      .lean();
-
-    const formatted = inspections.map(ins => {
-      const dateObj = new Date(ins.datetime);
-      return {
-        date: dateObj.toISOString().split('T')[0],
-        time: dateObj.toLocaleTimeString('en-IN', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-        title: ins.title || '',
-        target: ins.target || '',
-        status: ins.status
-          ? ins.status.charAt(0).toUpperCase() + ins.status.slice(1)
-          : 'Unknown',
+    if (studentName || studentId) {
+      const searchTerm = studentName || studentId;
+      filter = {
+        $or: [
+          { studentName: { $regex: searchTerm, $options: 'i' } },
+          { studentId: { $regex: searchTerm, $options: 'i' } },
+        ],
       };
+    }
+
+    const students = await Student.find(filter, {
+      studentId: 1,
+      studentName: 1,
+      emergencyContactName: 1,
+      relation: 1,
+      emergencyContactNumber: 1,
+      _id: 0,
     });
 
     res.status(200).json({
       success: true,
-      inspections: formatted,
+      contacts: students,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch inspections',
+      message: "Failed to fetch emergency contacts",
       error: error.message,
     });
   }
 };
 
 
-// Filter inspections based on date, time, status, and target
-
-
-const getFilteredInspections = async (req, res) => {
+// Update emergency contact info for a student by studentId
+const updateEmergencyContact = async (req, res) => {
   try {
-    const { date, time, status, target } = req.query;
+    const { studentId } = req.params;
+    const { emergencyContactName, relation, emergencyContactNumber } = req.body;
 
-    const match = {};
-
-    if (status) {
-      match.status = new RegExp(`^${status}$`, 'i'); // case-insensitive match
-    }
-
-    if (target) {
-      match.target = new RegExp(`^${target}$`, 'i'); // case-insensitive match
-    }
-
-    // Handle date filter
-    if (date) {
-      const start = new Date(date);
-      const end = new Date(date);
-      end.setDate(end.getDate() + 1);
-      match.datetime = { $gte: start, $lt: end };
-    }
-
-    // If time is provided, use aggregation
-    const pipeline = [];
-
-    // Match base filters
-    if (Object.keys(match).length > 0) {
-      pipeline.push({ $match: match });
-    }
-
-    // Add hour and minute fields
-    pipeline.push({
-      $addFields: {
-        timeStr: {
-          $dateToString: {
-            format: "%H:%M",
-            date: "$datetime",
-            timezone: "Asia/Kolkata",
-          },
-        },
-      },
-    });
-
-    // Match time if given
-    if (time) {
-      pipeline.push({
-        $match: {
-          timeStr: { $regex: `^${time}` }, // e.g., "09" or "09:00"
-        },
+    // Validate required fields
+    if (!emergencyContactName || !relation || !emergencyContactNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields (emergencyContactName, relation, emergencyContactNumber) are required.",
       });
     }
 
-    // Sort and project final result
-    pipeline.push(
-      { $sort: { datetime: -1 } },
-      {
-        $project: {
-          _id: 0,
-          title: 1,
-          target: 1,
-          status: 1,
-          date: {
-            $dateToString: {
-              format: "%Y-%m-%d",
-              date: "$datetime",
-              timezone: "Asia/Kolkata",
-            },
-          },
-          time: "$timeStr",
-        },
-      }
+    // Find and update student
+    const updatedStudent = await Student.findOneAndUpdate(
+      { studentId }, // filter
+      { emergencyContactName, relation, emergencyContactNumber }, // update
+      { new: true, fields: { studentId: 1, studentName: 1, emergencyContactName: 1, relation: 1, emergencyContactNumber: 1 } } // return updated fields only
     );
 
-    const inspections = await Inspection.aggregate(pipeline);
+    if (!updatedStudent) {
+      return res.status(404).json({
+        success: false,
+        message: `Student with ID ${studentId} not found.`,
+      });
+    }
 
     res.status(200).json({
       success: true,
-      inspections,
+      message: "Emergency contact updated successfully.",
+      contact: updatedStudent,
     });
+
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch inspections',
+      message: "Failed to update emergency contact.",
       error: error.message,
     });
   }
@@ -893,67 +989,6 @@ const getFilteredInspections = async (req, res) => {
 
 
 
-
-const getInspectionById = async (req, res) => {
-  try {
-    const inspection = await Inspection.findById(req.params.id).populate('createdBy', 'name email');
-
-    if (!inspection) {
-      return res.status(404).json({ success: false, message: 'Inspection not found' });
-    }
-
-    res.status(200).json({ success: true, inspection });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch inspection', error: error.message });
-  }
-};
-
-
-const completeInspection = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const inspection = await Inspection.findById(id);
-    if (!inspection) {
-      return res.status(404).json({ success: false, message: "Inspection not found" });
-    }
-
-    inspection.status = 'completed';
-    await inspection.save();
-
-    res.status(200).json({ success: true, message: "Inspection marked as completed", inspection });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Failed to update inspection status" });
-  }
-};
-
-
-
-
-
-const getInspectionStats = async (req, res) => {
-  try {
-    const total = await Inspection.countDocuments();
-    const pending = await Inspection.countDocuments({ status: 'pending' });
-    const completed = await Inspection.countDocuments({ status: 'completed' });
-
-    res.status(200).json({
-      success: true,
-      stats: {
-        total,
-        pending,
-        completed,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch inspection statistics',
-      error: error.message,
-    });
-  }
-};
 
 
 
@@ -983,4 +1018,6 @@ export {
   getInspectionById,
   completeInspection,
   getInspectionStats,
+  getWardenDashboardStats,
+  updateEmergencyContact,
 };

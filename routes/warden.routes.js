@@ -24,12 +24,11 @@ import {
   getInspectionById,
   completeInspection,
   getInspectionStats,
+  getWardenDashboardStats,
+  updateEmergencyContact,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
-
-
-
 
 const router = express.Router();
 
@@ -39,12 +38,21 @@ router.post("/forgot-password", forgotPasswordWarden);
 router.post("/verify-otp", verifyOtpWarden);
 router.post("/reset-password", resetPasswordWarden);
 
-// Warden Profile Page.
-router.get("/profile/:id", getWardenProfile);
-router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
 
-// Emergency Contacts.
-router.get("/contacts", getEmergencyContacts);
+// Warden Puch in and Punch out page
+router.post('/attendance/punch-in', verifyWardenToken,  punchInWarden);
+router.post('/attendance/punch-out', verifyWardenToken,  punchOutWarden);
+router.get('/attendance/log', verifyWardenToken, getAttendanceLog);
+
+
+// warden Dashboard
+router.get("/warden-dashboard", getWardenDashboardStats);
+
+
+// Bed allotments Management Page
+router.get('/bed-stats', getBedStats);
+router.get('/bed-status', getBedStatusOverview);
+
 
 // Student Management.
 router.get("/students", getStudentListForWarden);
@@ -52,10 +60,15 @@ router.put("/students/:studentId", updateStudentRoom);
 router.get('/students/count', getTotalStudents);
 
 
-// Warden Puch in and Punch out. page
-router.post('/attendance/punch-in', verifyWardenToken,  punchInWarden);
-router.post('/attendance/punch-out', verifyWardenToken,  punchOutWarden);
-router.get('/attendance/log', verifyWardenToken, getAttendanceLog);
+
+// Inspections Management Page
+router.get('/recent-inspections',getRecentInspections);
+router.get('/filtered-inspections', getFilteredInspections);
+router.get('/recent-inspections/:id', getInspectionById); 
+router.patch('/recent-inspections/complete/:id', completeInspection);
+router.get('/inspection-stats', getInspectionStats);
+
+
 
 // Leave Management Page
 router.get('/requested-leave', verifyWardenToken, getAllLeaveRequests);
@@ -63,16 +76,17 @@ router.put('/:leaveId/status', verifyWardenToken, updateLeaveStatusWarden);
 router.get('/leave-stats', verifyWardenToken, getLeaveRequestStats);
 router.get('/leave-filter', verifyWardenToken, filterLeaveRequests);
 
-// Bed allotments Management Page
-router.get('/bed-stats', getBedStats);
-router.get('/bed-status', getBedStatusOverview);
 
-// Inspections Management Page
-router.get('/recent-inspections',getRecentInspections);
-router.get('/filtered-inspections', getFilteredInspections);
-router.get('/recent-inspections/:id', getInspectionById); // Assuming this is the new route for getting inspection by ID
-router.patch('/recent-inspections/complete/:id', completeInspection);
-router.get('/inspection-stats', getInspectionStats);
+
+// Warden Profile Page.
+router.get("/profile/:id", getWardenProfile);
+router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
+
+
+// Emergency Contacts.
+router.get("/emergency-contact", getEmergencyContacts);
+router.put('/emergency-contact/:studentId', updateEmergencyContact);
+
 
 export default router;
 
