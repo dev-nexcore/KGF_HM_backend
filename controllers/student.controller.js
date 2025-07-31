@@ -1,5 +1,6 @@
 import "dotenv/config";
 import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { Student } from "../models/student.model.js";
 import { Otp } from "../models/otp.model.js";
@@ -23,7 +24,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-
 const login = async (req, res) => {
   const { studentId, password } = req.body;
 
@@ -38,24 +38,49 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    return res.json({ message: "Login successful", studentId: student.studentId, email: student.email });
+    const token = jwt.sign(
+      {
+        sub: student._id.toString(),
+        role: 'student',
+        email: student.email,
+        studentId: student.studentId,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      message: "Login successful",
+      token,
+      student: {
+        _id: student._id,
+        studentId: student.studentId,
+        email: student.email,
+        firstName: student.firstName,
+        lastName: student.lastName,
+      },
+    });
   } catch (err) {
     console.error("Student login error:", err);
     return res.status(500).json({ message: "Server error during login." });
   }
 };
 
+const LOWER = s => (s || '').trim().toLowerCase();
+
 const forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const emailRaw = req.body?.email;
+  const email = LOWER(emailRaw);
 
   try {
     const student = await Student.findOne({ email });
     if (!student) {
-      return res.status(400).json({ message: "Email not recognized" });
+      // You can return 200 for privacy; keeping your current behavior:
+      return res.status(400).json({ message: 'Email not recognized' });
     }
 
-    const otp = String(Math.floor(100000 + Math.random() * 900000));
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const otp = String(Math.floor(100000 + Math.random() * 900000)); // 6-digit
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 min
 
     await Otp.findOneAndUpdate(
       { email },
@@ -63,70 +88,93 @@ const forgotPassword = async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
+    const firstName = student.firstName || 'Student';
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: "Student Password Reset OTP",
-      text: `Dear ${student.studentName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,
+      subject: 'Student Password Reset OTP',
+      text:
+        `Dear ${firstName},
+
+Your OTP for password reset is ${otp}.
+It expires in 10 minutes.
+
+– Hostel Admin`,
     });
 
-    return res.json({ message: "OTP sent" });
+    return res.json({ message: 'OTP sent' });
   } catch (err) {
-    console.error("Forgot password error:", err);
-    return res.status(500).json({ message: "Server error during OTP generation." });
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ message: 'Server error during OTP generation.' });
   }
 };
 
 const verifyOtp = async (req, res) => {
-  const { email, otp } = req.body;
+  const email = (req.body?.email || '').toLowerCase().trim();
+  const rawCode = String(req.body?.otp || '').replace(/\D/g, '').slice(0, 6);
+
+  if (rawCode.length !== 6) {
+    return res.status(400).json({ message: 'Invalid OTP format' });
+  }
 
   try {
-    const record = await Otp.findOne({ email, code: otp });
-    if (!record) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
-    if (record.expires.getTime() < Date.now()) {
-      return res.status(400).json({ message: "Invalid or expired OTP" });
-    }
+    const otpDoc = await Otp.findOne({ email });
+    if (!otpDoc) return res.status(400).json({ message: 'OTP not found. Please request a new one.' });
+    if (otpDoc.expires < new Date()) return res.status(400).json({ message: 'OTP expired. Please request a new one.' });
+    if (otpDoc.code !== rawCode) return res.status(400).json({ message: 'Incorrect OTP' });
 
-    record.verified = true;
-    await record.save();
-    return res.json({ message: "OTP verified" });
+    otpDoc.verified = true;
+    await otpDoc.save();
+
+    return res.json({ message: 'OTP verified' }); // no resetToken sent
   } catch (err) {
-    console.error("Verify OTP error:", err);
-    return res.status(500).json({ message: "Server error during OTP verification." });
+    console.error('Verify OTP error:', err);
+    return res.status(500).json({ message: 'Server error during OTP verification.' });
   }
 };
+
+const PASSWORD_REGEX = /^(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  const sanitizedOtp = String(otp || '').replace(/\D/g, '').slice(0, 6);
+
+  if (!normalizedEmail || !sanitizedOtp || sanitizedOtp.length !== 6) {
+    return res.status(400).json({ message: 'Invalid email or OTP' });
+  }
+
+  if (!newPassword || !PASSWORD_REGEX.test(newPassword)) {
+    return res.status(400).json({
+      message: 'Password must be at least 8 characters, include at least 1 number and 1 special character.',
+    });
+  }
 
   try {
-    const record = await Otp.findOne({ email, code: otp, verified: true });
-    if (!record) {
-      return res.status(400).json({ message: "OTP not verified" });
-    }
-    if (record.expires.getTime() < Date.now()) {
-      return res.status(400).json({ message: "OTP expired" });
-    }
+    // Find OTP record and check it
+    const otpDoc = await Otp.findOne({ email: normalizedEmail });
+    if (!otpDoc) return res.status(400).json({ message: 'OTP not found. Please request a new one.' });
+    if (otpDoc.expires < new Date()) return res.status(400).json({ message: 'OTP expired. Please request a new one.' });
+    if (otpDoc.code !== sanitizedOtp) return res.status(400).json({ message: 'Incorrect OTP' });
+    if (!otpDoc.verified) return res.status(400).json({ message: 'OTP not verified. Please verify first.' });
 
-    const student = await Student.findOne({ email });
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
+    // Find student by email
+    const student = await Student.findOne({ email: normalizedEmail });
+    if (!student) return res.status(400).json({ message: 'Student not found' });
 
+    // Set new password and save (bcrypt hook will hash)
     student.password = newPassword;
     await student.save();
 
-    await Otp.deleteOne({ email });
+    // Remove OTP to prevent reuse
+    await Otp.deleteOne({ _id: otpDoc._id });
 
-    return res.json({ message: "Password has been reset" });
+    return res.json({ message: 'Password has been reset successfully' });
   } catch (err) {
-    console.error("Reset password error:", err);
-    return res.status(500).json({ message: "Server error during password reset." });
+    console.error('Reset password error:', err);
+    return res.status(500).json({ message: 'Server error during password reset.' });
   }
 };
-
 
 
 const checkInStudent = async (req, res) => {
@@ -200,25 +248,6 @@ const checkOutStudent = async (req, res) => {
     return res.status(500).json({ message: "Server error during check-out." });
   }
 };
-
-
-// controller/student.controller.js
-const getAttendanceLog = async (req, res) => {
-  const { studentId } = req.params;
-
-  try {
-    const student = await Student.findOne({ studentId });
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
-
-    return res.json({ attendanceLog: student.attendanceLog });
-  } catch (err) {
-    console.error("Error fetching attendance log:", err);
-    return res.status(500).json({ message: "Server error" });
-  }
-};
-
 
 
 const fileComplaint = async (req, res) => {
@@ -394,32 +423,22 @@ const getRefundHistory = async (req, res) => {
 
 
 const getStudentProfile = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.studentId; // from verifyStudentToken
 
   try {
     const student = await Student.findOne({ studentId }).populate("roomBedNumber");
 
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
-    }
+    if (!student) return res.status(404).json({ message: "Student not found" });
 
-    const inventoryData = student.roomBedNumber;
+    const inventoryData = student.roomBedNumber || {};
 
-    if (!inventoryData) {
-      return res.status(500).json({
-        message: "Student room data is missing or invalid",
-      });
-    }
-
-    const roomNo = inventoryData.roomNo;
-    const bedAllotment = inventoryData.itemName;
+    const roomNo = inventoryData.roomNo || student.roomBedNumber;
+    const bedAllotment = inventoryData.itemName || "N/A";
 
     const roommate = await Student.findOne({
       studentId: { $ne: studentId },
-    }).populate("roomBedNumber");
-
-    const roommateInSameRoom =
-      roommate && roommate.roomBedNumber?.roomNo === roomNo ? roommate : null;
+      roomBedNumber: student.roomBedNumber,
+    });
 
     const lastLog = student.attendanceLog.at(-1);
 
@@ -431,13 +450,13 @@ const getStudentProfile = async (req, res) => {
         checkStatus = "Checked In";
         checkTime = new Date(lastLog.checkInDate).toLocaleTimeString("en-IN", {
           timeZone: "Asia/Kolkata",
-          hour12: false
+          hour12: false,
         });
       } else {
         checkStatus = "Checked Out";
         checkTime = new Date(lastLog.checkOutDate).toLocaleTimeString("en-IN", {
           timeZone: "Asia/Kolkata",
-          hour12: false
+          hour12: false,
         });
       }
     }
@@ -449,20 +468,17 @@ const getStudentProfile = async (req, res) => {
       email: student.email,
       contactNumber: student.contactNumber,
       roomNo,
-      roommateName: roommateInSameRoom?.studentName || "No roommate",
+      roommateName: roommate?.firstName || "No roommate",
       bedAllotment,
       lastCheckInDate: lastLog?.checkInDate || null,
       checkStatus,
-      checkTime
+      checkTime,
     });
   } catch (err) {
     console.error("Fetch student profile error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error while fetching profile." });
+    return res.status(500).json({ message: "Server error while fetching profile." });
   }
 };
-
 
 const updateStudentProfile = async (req, res) => {
   const { studentId } = req.params;
@@ -480,7 +496,7 @@ const updateStudentProfile = async (req, res) => {
     }
 
     if (firstName) student.firstName = firstName;
-        if (lastName) student.lastName = lastName;
+    if (lastName) student.lastName = lastName;
     if (email) student.email = email;
     if (contactNumber) student.contactNumber = contactNumber;
 
@@ -507,7 +523,18 @@ const getCurrentFeesStatus = async (req, res) => {
 
     const fees = await Fee.find({ studentId: student._id }).select("feeType amount status dueDate");
 
-    res.json({ fees });
+    const now = new Date();
+
+    const updatedFees = fees.map((fee) => {
+      const isOverdue = fee.status === 'unpaid' && new Date(fee.dueDate) < now;
+
+      return {
+        ...fee.toObject(),
+        status: isOverdue ? 'overdue' : fee.status,
+      };
+    });
+
+    res.json({ fees: updatedFees });
   } catch (error) {
     console.error("Fee status error:", error);
     res.status(500).json({ message: "Error fetching fee status" });
@@ -534,16 +561,16 @@ const getNotices = async (req, res) => {
 
 
 const getNextInspection = async (req, res) => {
-  const { studentId } = req.params;
-
   try {
+    const studentId = req.studentId; // Comes from token (verifyStudentToken)
+
     const student = await Student.findOne({ studentId }).populate('roomBedNumber');
 
     if (!student || !student.roomBedNumber) {
       return res.status(404).json({ message: 'Student room not found' });
     }
 
-    const targetRoom = `Room ${student.roomBedNumber.roomNo}`;
+    const targetRoom = `Room ${student.roomBedNumber.roomNo || student.roomBedNumber}`;
 
     const nextInspection = await Inspection.findOne({
       target: targetRoom,
@@ -646,7 +673,6 @@ export {
   verifyOtp,
   checkInStudent,
   checkOutStudent,
-  getAttendanceLog,
   fileComplaint,
   getComplaintHistory,
   applyForLeave,
