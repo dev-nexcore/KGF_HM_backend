@@ -108,7 +108,6 @@ const authenticateParent = async (req, res, next) => {
       return res.status(403).json({ message: 'Forbidden: role mismatch' });
     }
 
-    // Prefer sub for canonical user id
     const student = await Student.findById(decoded.sub).select('-password');
     if (!student) {
       return res.status(401).json({ message: 'Invalid token - student not found' });
@@ -116,17 +115,27 @@ const authenticateParent = async (req, res, next) => {
 
     req.student = student;
     req.studentId = student.studentId;
-    
-    req.user = { _id: student._id, role: 'student', email: student.email, studentId: student.studentId };
+    req.jwt = decoded;
+    req.user = {
+      _id: student._id,
+      role: 'student',
+      email: student.email,
+      studentId: student.studentId,
+    };
 
     return next();
   } catch (error) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error("JWT Error:", error);
+    }
+
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: 'Token expired' });
     }
-    return res.status(403).json({ message: 'Invalid token' });
+    return res.status(401).json({ message: 'Invalid token' });
   }
 };
+
 
 
 
