@@ -22,6 +22,7 @@ import {
     deleteMyProfileImage
 } from '../controllers/student.controller.js';
 import { verifyStudentToken } from '../middleware/auth.middleware.js'
+import { uploadStudent } from '../middleware/upload.js'; // Assuming you have a middleware for file uploads
 
 const router = express.Router();
 

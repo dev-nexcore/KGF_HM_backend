@@ -4,7 +4,6 @@ import {
   forgotPasswordWarden,
   verifyOtpWarden,
   resetPasswordWarden,
-  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,
@@ -27,6 +26,7 @@ import {
   getInspectionStats,
   getWardenDashboardStats,
   updateEmergencyContact,
+    getAllWarden, 
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -82,11 +82,13 @@ router.get('/leave-filter', verifyWardenToken, filterLeaveRequests);
 // Warden Profile Page.
 router.get("/profile/:id", getWardenProfile);
 router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
+router.get("/all", getAllWarden);
 
 
 // Emergency Contacts.
 router.get("/emergency-contact", getEmergencyContacts);
 router.put('/emergency-contact/:studentId', updateEmergencyContact);
+
 
 
 export default router;

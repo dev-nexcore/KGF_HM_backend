@@ -904,7 +904,42 @@ const updateWardenProfile = async (req, res) => {
 };
 
 
+
+
+const getAllWarden = async (req, res) => {
+  try {
+    const wardens = await Warden.find({}, 'wardenId firstName lastName email contactNumber profilePhoto attendanceLog');
+
+    res.status(200).json({
+      success: true,
+      wardens: wardens.map(warden => ({
+        id: warden._id,
+        wardenId: warden.wardenId,
+        firstName: warden.firstName,
+        lastName: warden.lastName,
+        email: warden.email,
+        contactNumber: warden.contactNumber,
+        profilePhoto: warden.profilePhoto ? `${process.env.BASE_URL}/uploads/${warden.profilePhoto}` : null,
+        attendanceLog: warden.attendanceLog.map(log => ({
+          date: log.date,
+          punchIn: log.punchIn,
+          punchOut: log.punchOut,
+          totalHours: log.totalHours,
+        }))
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching wardens:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch wardens",
+      error: error.message,
+    });
+  }
+};
+
 // <--------- Emergency Contact Page ----------->
+
 
 const getEmergencyContacts = async (req, res) => {
   try {
@@ -913,27 +948,64 @@ const getEmergencyContacts = async (req, res) => {
     let filter = {};
 
     if (studentName || studentId) {
-      const searchTerm = studentName || studentId;
-      filter = {
-        $or: [
-          { studentName: { $regex: searchTerm, $options: 'i' } },
-          { studentId: { $regex: searchTerm, $options: 'i' } },
-        ],
-      };
+      const searchTerm = studentName?.trim() || studentId?.trim();
+
+      if (studentName) {
+        // Split the name into parts to match first and last names separately
+        const nameParts = searchTerm.split(" ");
+        const nameConditions = [];
+
+        if (nameParts.length === 1) {
+          // If only one name part, search in both first and last name
+          nameConditions.push(
+            { firstName: { $regex: nameParts[0], $options: 'i' } },
+            { lastName: { $regex: nameParts[0], $options: 'i' } }
+          );
+        } else {
+          // If two or more parts, match both first and last name
+          nameConditions.push({
+            $and: [
+              { firstName: { $regex: nameParts[0], $options: 'i' } },
+              { lastName: { $regex: nameParts[1], $options: 'i' } },
+            ]
+          });
+        }
+
+        filter = {
+          $or: [
+            ...nameConditions,
+            { studentId: { $regex: searchTerm, $options: 'i' } }
+          ]
+        };
+      } else {
+        // Only studentId search
+        filter = {
+          studentId: { $regex: searchTerm, $options: 'i' }
+        };
+      }
     }
 
     const students = await Student.find(filter, {
       studentId: 1,
-      studentName: 1,
+      firstName: 1,
+      lastName: 1,
       emergencyContactName: 1,
       relation: 1,
       emergencyContactNumber: 1,
       _id: 0,
     });
 
+    const contacts = students.map((student) => ({
+      studentId: student.studentId,
+      studentName: `${student.firstName} ${student.lastName}`,
+      emergencyContactName: student.emergencyContactName,
+      relation: student.relation,
+      emergencyContactNumber: student.emergencyContactNumber,
+    }));
+
     res.status(200).json({
       success: true,
-      contacts: students,
+      contacts,
     });
   } catch (error) {
     res.status(500).json({
@@ -999,7 +1071,6 @@ export {
   forgotPassword as forgotPasswordWarden,
   verifyOtp as verifyOtpWarden,
   resetPassword as resetPasswordWarden,
-  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,
@@ -1022,4 +1093,5 @@ export {
   getInspectionStats,
   getWardenDashboardStats,
   updateEmergencyContact,
-};
+  getAllWarden,
+}

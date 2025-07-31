@@ -93,7 +93,7 @@ const authenticateParent = async (req, res, next) => {
 };
 
 
-export const verifyStudentToken = async (req, res, next) => {
+ const verifyStudentToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -136,5 +136,5 @@ export{
     verifyAdminToken,
     verifyWardenToken,
     authenticateParent,
-    authenticateStudent // ✨ ADD THIS EXPORT
+    verifyStudentToken,
 };
