@@ -779,5 +779,7 @@ export {
   getCurrentFeesStatus,
   getNotices,
   getNextInspection,
-  getAttendanceSummary
+  getAttendanceSummary,
+  uploadMyProfileImage,
+  deleteMyProfileImage
 }
