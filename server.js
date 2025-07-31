@@ -20,6 +20,18 @@ app.use("/api/wardenauth", wardenRoutes);
 app.use('/api/studentauth', studentRoutes);
 
 
+import path from "path";
+import { fileURLToPath } from "url";
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve uploads folder statically
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+
+
 const PORT = process.env.PORT || 5001
 app.listen(PORT, ()=>{
     console.log(`Server Listening on ${PORT}`)
