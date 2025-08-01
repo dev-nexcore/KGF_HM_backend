@@ -205,7 +205,13 @@ const checkInStudent = async (req, res) => {
 
     const istTime = new Date(newCheckIn.checkInDate).toLocaleString("en-US", {
       timeZone: "Asia/Kolkata",
-      hour12: false
+      hour12: true,
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
     });
 
     return res.json({
@@ -239,8 +245,15 @@ const checkOutStudent = async (req, res) => {
 
     const istTime = new Date(latestEntry.checkOutDate).toLocaleString("en-US", {
       timeZone: "Asia/Kolkata",
-      hour12: false
+      hour12: true,
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
     });
+
 
     return res.json({
       message: "Check Out recorded successfully",
@@ -810,71 +823,135 @@ const getNextInspection = async (req, res) => {
 
 
 const getAttendanceSummary = async (req, res) => {
-  try {
-    const { studentId } = req.params;
-    const { range } = req.query;
+  const { studentId } = req.params;
+  const { range } = req.query;
 
+  if (!['day', 'week', 'month'].includes(range)) {
+    return res.status(400).json({ message: 'Invalid range parameter' });
+  }
+
+  const now = new Date();
+  let startDate;
+  let endDate = new Date(now); // include today
+
+  if (range === 'day') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  } else if (range === 'week') {
+    // Week starts from Sunday (0)
+    const dayOfWeek = now.getDay();
+    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+    // endDate = startDate + 6 days (optional, here just use now)
+  } else if (range === 'month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    // endDate = last day of the month
+    endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  }
+
+  // Helper to get number of days in the range:
+  function getTotalDays(start, end) {
+    const oneDay = 1000 * 60 * 60 * 24;
+    return Math.floor((end - start) / oneDay) + 1;
+  }
+
+  try {
     const student = await Student.findOne({ studentId });
 
-    if (!student) return res.status(404).json({ message: 'Student not found' });
-
-    const now = new Date();
-    let fromDate;
-
-    // Calculate date range
-    switch (range) {
-      case 'day':
-        fromDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        break;
-      case 'week':
-        const firstDayOfWeek = now.getDate() - now.getDay();
-        fromDate = new Date(now.getFullYear(), now.getMonth(), firstDayOfWeek);
-        break;
-      case 'month':
-        fromDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      default:
-        return res.status(400).json({ message: 'Invalid range' });
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
     }
 
-    const logs = student.attendanceLog;
+    // Group logs by day within the range
+    const logsByDay = {};
 
-    let present = 0;
-    let absent = 0;
-
-    const dateSet = new Set();
-
-    // Count present days
-    logs.forEach(log => {
+    student.attendanceLog.forEach(log => {
       const checkIn = new Date(log.checkInDate);
-      if (checkIn >= fromDate && checkIn <= now) {
-        const dateStr = checkIn.toISOString().split('T')[0];
-        dateSet.add(dateStr);
+      // Only consider logs within range
+      if (checkIn >= startDate && checkIn <= endDate) {
+        const dayKey = checkIn.toISOString().split('T')[0];
+
+        if (!logsByDay[dayKey]) {
+          logsByDay[dayKey] = { checkIns: [], checkOuts: [] };
+        }
+
+        if (log.checkInDate) {
+          logsByDay[dayKey].checkIns.push(new Date(log.checkInDate));
+        }
+
+        if (log.checkOutDate) {
+          logsByDay[dayKey].checkOuts.push(new Date(log.checkOutDate));
+        }
       }
     });
 
-    present = dateSet.size;
+    // Calculate attendance by checking for valid first check-in and last check-out each day
+    let presentDays = 0;
 
-    // Count absent days
-    const today = new Date();
-    let daysInRange = 0;
-    let iter = new Date(fromDate);
+    Object.keys(logsByDay).forEach(day => {
+      const dayLogs = logsByDay[day];
 
-    while (iter <= today) {
-      daysInRange++;
-      iter.setDate(iter.getDate() + 1);
-    }
+      if (dayLogs.checkIns.length > 0 && dayLogs.checkOuts.length > 0) {
+        // Get earliest check-in and latest check-out for the day
+        const firstCheckIn = new Date(Math.min(...dayLogs.checkIns));
+        const lastCheckOut = new Date(Math.max(...dayLogs.checkOuts));
 
-    absent = daysInRange - present;
+        // Make sure check-in is before check-out (valid attendance)
+        if (firstCheckIn < lastCheckOut) {
+          presentDays += 1;
+        }
+      }
+    });
 
-    return res.json({ present, absent });
+    const totalDays = getTotalDays(startDate, endDate);
+    const absentDays = Math.max(totalDays - presentDays, 0);
 
+    return res.json({
+      range,
+      totalDays,
+      present: presentDays,
+      absent: absentDays,
+    });
   } catch (error) {
-    console.error('Attendance summary error:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error('Error fetching attendance summary:', error);
+    res.status(500).json({ message: 'Server error while fetching attendance summary' });
   }
 };
 
+
+const getNotificationStatus = async (req, res) => {
+  const studentId = req.studentId; // e.g. "MNB125" string from token
+
+  try {
+    const student = await Student.findOne({ studentId });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    const studentObjectId = student._id;
+
+    const unseenNotices = await Notice.countDocuments({ seenBy: { $ne: studentId } }); // assuming seenBy stores string
+    const unseenRefunds = await Refund.countDocuments({ studentId: studentObjectId, statusSeen: false });
+    const unseenComplaints = await Complaint.countDocuments({ studentId: studentObjectId, adminSeen: true });
+    const unseenLeaves = await Leave.countDocuments({ studentId: studentObjectId, adminSeen: true });
+
+    const hasUnseen =
+      unseenNotices > 0 || unseenRefunds > 0 || unseenComplaints > 0 || unseenLeaves > 0;
+
+    res.json({
+      hasUnseen,
+      notifications: [
+        { message: "Your leave request was approved", link: "/leaves" },
+        { message: "New notice from admin", link: "/notices" },
+        { message: "Refund request updated", link: "/refunds" },
+        { message: "Complaint has been responded", link: "/complaints" },
+      ]
+    });
+
+  } catch (err) {
+    console.error("Notification check failed:", err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 
 
@@ -901,4 +978,5 @@ export {
   getAttendanceSummary,
   deleteMyProfileImage,
   uploadMyProfileImage,
+  getNotificationStatus
 }
