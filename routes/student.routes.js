@@ -19,7 +19,8 @@ import {
     getNextInspection,
     getAttendanceSummary,
     uploadMyProfileImage, // ✨ ADD THIS
-    deleteMyProfileImage
+    deleteMyProfileImage,
+    getNotificationStatus
 } from '../controllers/student.controller.js';
 import { verifyStudentToken } from '../middleware/auth.middleware.js'
 import { uploadStudent } from '../middleware/upload.js'; // Assuming you have a middleware for file uploads
@@ -61,5 +62,7 @@ router.post('/upload-profile-image/:studentId',
 );
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
+
+router.get('/notifications',getNotificationStatus)
 
 export default router;
