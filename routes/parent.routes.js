@@ -10,7 +10,7 @@ router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.get('/dashboard', authenticateParent,dashboard);
-router.get('/attendance',authenticateParent, attendance);
+router.get('/attendance', attendance);
 router.get('/leave-management', authenticateParent,leaveManagement);
 router.put('/leave-status', authenticateParent, updateLeaveStatus);
 router.get('/fees',authenticateParent, fees);

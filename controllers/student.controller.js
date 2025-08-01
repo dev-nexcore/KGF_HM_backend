@@ -650,7 +650,18 @@ const deleteMyProfileImage = async (req, res) => {
 
 
 const getStudentProfile = async (req, res) => {
-  const studentId = req.studentId; // from verifyStudentToken
+  // 🔧 UPDATED: Handle both parent and student tokens
+  let studentId;
+  
+  if (req.params.studentId) {
+    // Called with studentId parameter (from parent or direct access)
+    studentId = req.params.studentId;
+  } else if (req.studentId) {
+    // Called from student token (original logic)
+    studentId = req.studentId;
+  } else {
+    return res.status(400).json({ message: "Student ID not found" });
+  }
 
   try {
     const student = await Student.findOne({ studentId }).populate("roomBedNumber");
@@ -821,6 +832,35 @@ const getNextInspection = async (req, res) => {
   }
 };
 
+const getAttendanceLog = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+
+    // Find the student with their attendance log
+    const student = await Student.findOne({ studentId });
+
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Return the attendance log
+    const attendanceLog = student.attendanceLog || [];
+
+    return res.json({
+      studentId: student.studentId,
+      attendanceLog: attendanceLog,
+      totalEntries: attendanceLog.length
+    });
+
+  } catch (error) {
+    console.error('Error fetching attendance log:', error);
+    return res.status(500).json({ 
+      message: 'Internal server error while fetching attendance log' 
+    });
+  }
+};
+
+
 
 const getAttendanceSummary = async (req, res) => {
   const { studentId } = req.params;
@@ -976,6 +1016,7 @@ export {
   getNotices,
   getNextInspection,
   getAttendanceSummary,
+  getAttendanceLog,
   deleteMyProfileImage,
   uploadMyProfileImage,
   getNotificationStatus
