@@ -5,6 +5,7 @@ import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { Student } from "../models/student.model.js";
+import { Parent } from "../models/parent.model.js";
 import { Otp } from "../models/otp.model.js";
 import { Complaint } from "../models/complaint.model.js";
 import { Leave } from "../models/leave.model.js";
@@ -315,6 +316,12 @@ const applyForLeave = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Find the parent associated with this student
+    const parent = await Parent.findOne({ studentId: student.studentId });
+    if (!parent) {
+      return res.status(404).json({ message: "Parent not found for this student" });
+    }
+
     const newLeave = new Leave({
       studentId: student._id,
       leaveType,
@@ -326,6 +333,26 @@ const applyForLeave = async (req, res) => {
 
     await newLeave.save();
 
+    // Format dates for email
+    const formattedStartDate = new Date(startDate).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    });
+    
+    const formattedEndDate = new Date(endDate).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    });
+
+    // Calculate duration
+    const durationMs = new Date(endDate) - new Date(startDate);
+    const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
+
+    // Send email to admin (existing functionality)
     await transporter.sendMail({
       from: `<${student.email}>`,
       to: process.env.MAIL_USER,
@@ -333,7 +360,73 @@ const applyForLeave = async (req, res) => {
       text: `${newLeave.reason}`,
     });
 
-    return res.json({ message: "Leave application submitted", leave: newLeave });
+    // Send email to parent with leave details and link
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: parent.email,
+      subject: `Leave Application from ${student.firstName} ${student.lastName}`,
+      text: `Dear ${parent.firstName} ${parent.lastName},
+
+Your child ${student.firstName} ${student.lastName} (Student ID: ${student.studentId}) has submitted a leave application.
+
+Leave Details:
+• Leave Type: ${leaveType}
+• From Date: ${formattedStartDate}
+• To Date: ${formattedEndDate}
+• Duration: ${durationDays} day${durationDays !== 1 ? 's' : ''}
+• Reason: ${reason}
+• Status: Pending Approval
+
+Please review this leave application by visiting the Parent Portal:
+👉 https://www.KGF-HM.com/dashboard/leave-management
+
+You can view all leave applications and their current status in the Leave Management section.
+
+If you have any questions or concerns, please contact the hostel administration.
+
+– Hostel Admin`,
+    // Replace the HTML section in your applyForLeave controller:
+
+html: `
+  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+    <h2 style="color: #333; text-align: center;">Leave Application Notification</h2>
+    
+    <p>Dear <strong>${parent.firstName} ${parent.lastName}</strong>,</p>
+    
+    <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has submitted a leave application.</p>
+    
+    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+      <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
+      <ul style="list-style: none; padding: 0;">
+        <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leaveType}</li>
+        <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
+        <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
+        <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
+        <li style="margin: 8px 0;"><strong>Reason:</strong> ${reason}</li>
+        <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: #orange;">Pending Approval</span></li>
+      </ul>
+    </div>
+    
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="http://localhost:3000/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+        View Leave Application
+      </a>
+    </div>
+    
+    <p>You can view all leave applications and their current status in the Leave Management section of the Parent Portal.</p>
+    
+    <p>If you have any questions or concerns, please contact the hostel administration.</p>
+    
+    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+    <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
+  </div>
+      `
+    });
+
+    return res.json({ 
+      message: "Leave application submitted successfully. Parent has been notified via email.", 
+      leave: newLeave 
+    });
   } catch (err) {
     console.error("Apply leave error:", err);
     return res.status(500).json({ message: "Server error while applying for leave." });
