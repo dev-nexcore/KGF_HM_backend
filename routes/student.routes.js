@@ -18,19 +18,24 @@ import {
     getNotices,
     getNextInspection,
     getAttendanceSummary,
-    uploadMyProfileImage, // ✨ ADD THIS
+    getAttendanceLog,
+    uploadMyProfileImage,
     deleteMyProfileImage
 } from '../controllers/student.controller.js';
-import { verifyStudentToken } from '../middleware/auth.middleware.js'
-import { uploadStudent } from '../middleware/upload.js'; // Assuming you have a middleware for file uploads
+import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
+import { uploadStudent } from '../middleware/upload.js';
 
 const router = express.Router();
 
+// Public routes (no authentication required)
 router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
-router.get("/notices",getNotices);
+router.get("/notices", getNotices);
+
+router.get('/attendance-log/:studentId', verifyStudentOrParentToken, getAttendanceLog);
+router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile); 
 
 router.use(verifyStudentToken);
 
@@ -46,7 +51,7 @@ router.get("/leaves/:studentId", getLeaveHistory);
 router.post("/refund", requestRefund);
 router.get("/refunds/:studentId", getRefundHistory);
 
-router.get("/profile", getStudentProfile);
+
 router.put("/profile/:studentId", updateStudentProfile);
 
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);

@@ -298,9 +298,50 @@ const dashboard = async (req, res) => {
   }
 
   try {
-    const student = await Student.findOne({ studentId });
+    // Populate the roomBedNumber field to get actual room/bed details
+    const student = await Student.findOne({ studentId })
+      .populate({
+        path: 'roomBedNumber',
+        select: 'location floor roomNo itemName description barCodeId' // Select specific fields you need
+      })
+      .exec();
+
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Create detailed room and bed information
+    let roomBedDisplay = 'Not Assigned';
+    let roomBedDetails = {
+      display: 'Not Assigned',
+      floor: 'N/A',
+      room: 'N/A',
+      bedType: 'N/A',
+      location: 'N/A'
+    };
+
+    if (student.roomBedNumber) {
+      const bed = student.roomBedNumber;
+      
+      // Create a readable display format
+      if (bed.location) {
+        roomBedDisplay = bed.location; // e.g., "Floor 1, Room 101"
+      } else if (bed.floor && bed.roomNo) {
+        roomBedDisplay = `Floor ${bed.floor}, Room ${bed.roomNo}`;
+      } else if (bed.roomNo) {
+        roomBedDisplay = `Room ${bed.roomNo}`;
+      } else {
+        roomBedDisplay = bed.itemName || 'Bed Assigned';
+      }
+
+      roomBedDetails = {
+        display: roomBedDisplay,
+        floor: bed.floor || 'N/A',
+        room: bed.roomNo || 'N/A',
+        bedType: bed.itemName || bed.description || 'Bed',
+        location: bed.location || 'N/A',
+        barCodeId: bed.barCodeId || 'N/A'
+      };
     }
 
     // Fetch warden name directly using wardenId "W123"
@@ -315,7 +356,8 @@ const dashboard = async (req, res) => {
         photo: student.photo || null,
         contactNumber: student.contactNumber,
         email: student.email,
-        roomBedNumber: student.roomBedNumber,
+        roomBedNumber: roomBedDisplay, // Now shows readable format instead of ObjectId
+        roomBedDetails: roomBedDetails, // Additional detailed info if needed
         admissionDate: student.admissionDate,
         emergencyContactName: student.emergencyContactName,
         emergencyContactNumber: student.emergencyContactNumber,
@@ -330,6 +372,7 @@ const dashboard = async (req, res) => {
       feesOverview: {
         status: student.feeStatus || "Not Available",
         amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
+        totalAmount: student.feeAmount || 0, // Add total amount for better fee display
       },
       wardenInfo: {
         wardenName: wardenName
@@ -345,7 +388,6 @@ const dashboard = async (req, res) => {
   }
 };
 
-// Attendance controller for parent panel (unchanged)
 const attendance = async (req, res) => {
   const { studentId } = req.query;
 
@@ -360,18 +402,68 @@ const attendance = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Assuming you have a term start date - adjust as needed
+    const termStartDate = new Date('2024-08-01'); // Replace with your actual term start
+    const today = new Date();
+    
+    // Calculate total school days (excluding weekends)
+    let totalSchoolDays = 0;
+    let currentDate = new Date(termStartDate);
+    
+    while (currentDate <= today) {
+      const dayOfWeek = currentDate.getDay();
+      // Exclude Saturdays (6) and Sundays (0) - adjust based on your school schedule
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        totalSchoolDays++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Process attendance log
+    const attendanceLog = student.attendanceLog || [];
+    const presentDates = new Set();
+    
+    attendanceLog.forEach(entry => {
+      const entryDate = new Date(entry.checkInDate);
+      presentDates.add(entryDate.toDateString());
+    });
+    
+    const presentDays = presentDates.size;
+    const absentDays = Math.max(0, totalSchoolDays - presentDays);
+    const attendancePercentage = totalSchoolDays > 0 ? Math.round((presentDays / totalSchoolDays) * 100) : 0;
+    
+    // Check today's status
+    const todayString = today.toDateString();
+    const isPresentToday = presentDates.has(todayString);
+    
+    // Find most recent absence
+    let lastAbsenceDate = null;
+    let checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - 1); // Start from yesterday
+    
+    while (checkDate >= termStartDate) {
+      const dayOfWeek = checkDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
+        if (!presentDates.has(checkDate.toDateString())) {
+          lastAbsenceDate = checkDate.toDateString();
+          break;
+        }
+      }
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
     const attendanceData = {
       studentId: student.studentId,
       firstName: student.firstName,
       lastName: student.lastName,
-      checkInDate: student.checkInDate || null,
-      checkOutDate: student.checkOutDate || null,
       attendanceSummary: {
-        totalDays: 1,
-        presentDays: student.checkInDate ? 1 : 0,
-        absentDays: student.checkInDate ? 0 : 1,
-        attendancePercentage: student.checkInDate ? 100 : 0,
-      },
+        totalDays: totalSchoolDays,
+        presentDays,
+        absentDays,
+        attendancePercentage,
+        isPresentToday,
+        lastAbsence: lastAbsenceDate || "No recent absences"
+      }
     };
 
     return res.json(attendanceData);
@@ -382,6 +474,8 @@ const attendance = async (req, res) => {
       .json({ message: "Server error while fetching attendance data." });
   }
 };
+
+//
 
 // Leave Management controller for parent panel (unchanged)
 const leaveManagement = async (req, res) => {
