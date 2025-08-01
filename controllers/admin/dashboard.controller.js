@@ -105,19 +105,30 @@ const getTodaysCheckInOutStatus = async (req, res) => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-    // Find students who checked in today
-    const checkIns = await Student.find({
-      checkInDate: { $gte: startOfDay, $lte: endOfDay }
-    });
+    // Get all students
+    const students = await Student.find({}, { attendanceLog: 1 });
 
-    // Find students who checked out today
-    const checkOuts = await Student.find({
-      checkOutDate: { $gte: startOfDay, $lte: endOfDay }
+    let checkIns = 0;
+    let checkOuts = 0;
+
+    students.forEach((student) => {
+      student.attendanceLog?.forEach((entry) => {
+        const checkIn = entry.checkInDate ? new Date(entry.checkInDate) : null;
+        const checkOut = entry.checkOutDate ? new Date(entry.checkOutDate) : null;
+
+        if (checkIn && checkIn >= startOfDay && checkIn <= endOfDay) {
+          checkIns++;
+        }
+
+        if (checkOut && checkOut >= startOfDay && checkOut <= endOfDay) {
+          checkOuts++;
+        }
+      });
     });
 
     return res.json({
-      checkIns: checkIns.length,
-      checkOuts: checkOuts.length
+      checkIns,
+      checkOuts
     });
   } catch (err) {
     console.error("Error fetching today's check-in/check-out data:", err);
