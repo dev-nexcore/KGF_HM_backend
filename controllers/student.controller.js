@@ -427,7 +427,7 @@ const getRefundHistory = async (req, res) => {
 const uploadMyProfileImage = async (req, res) => {
   try {
     const { studentId } = req.params; // Get from URL params like your other routes
-    
+
     // Check if file was uploaded
     if (!req.file) {
       return res.status(400).json({
@@ -444,7 +444,7 @@ const uploadMyProfileImage = async (req, res) => {
         fs.unlinkSync(req.file.path);
       }
       return res.status(404).json({
-        success: false, 
+        success: false,
         message: 'Student not found'
       });
     }
@@ -483,7 +483,7 @@ const uploadMyProfileImage = async (req, res) => {
 
   } catch (error) {
     console.error('Upload error:', error);
-    
+
     // Clean up uploaded file if there was an error
     if (req.file && fs.existsSync(req.file.path)) {
       try {
@@ -553,13 +553,10 @@ const getStudentProfile = async (req, res) => {
 
     const inventoryData = student.roomBedNumber || {};
 
-    const roomNo = inventoryData.roomNo || student.roomBedNumber;
+    const roomNo = inventoryData.roomNo || "N/A";
     const bedAllotment = inventoryData.itemName || "N/A";
-
-    const roommate = await Student.findOne({
-      studentId: { $ne: studentId },
-      roomBedNumber: student.roomBedNumber,
-    });
+    const barcodeId = inventoryData.barcodeId || "N/A";
+    const floor = inventoryData.floor || "N/A";
 
     const lastLog = student.attendanceLog.at(-1);
 
@@ -588,13 +585,16 @@ const getStudentProfile = async (req, res) => {
       studentId: student.studentId,
       email: student.email,
       contactNumber: student.contactNumber,
+      profileImage: student.profileImage || null,
       roomNo,
-      roommateName: roommate?.firstName || "No roommate",
       bedAllotment,
+      barcodeId,
+      floor,
       lastCheckInDate: lastLog?.checkInDate || null,
       checkStatus,
       checkTime,
     });
+
   } catch (err) {
     console.error("Fetch student profile error:", err);
     return res.status(500).json({ message: "Server error while fetching profile." });
