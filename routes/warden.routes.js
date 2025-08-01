@@ -27,6 +27,8 @@ import {
   getWardenDashboardStats,
   updateEmergencyContact,
     getAllWarden, 
+    deleteLeaveRequest,
+  getAllAvailableBed,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -59,6 +61,7 @@ router.get('/bed-status', getBedStatusOverview);
 router.get("/students", getStudentListForWarden);
 router.put("/students/:studentId", updateStudentRoom);
 router.get('/students/count', getTotalStudents);
+router.get('/students/available-bed', getAllAvailableBed);
 
 
 
@@ -72,11 +75,11 @@ router.get('/inspection-stats', getInspectionStats);
 
 
 // Leave Management Page
-router.get('/requested-leave', verifyWardenToken, getAllLeaveRequests);
+router.get('/requested-leave', getAllLeaveRequests);
 router.put('/:leaveId/status', verifyWardenToken, updateLeaveStatusWarden);
 router.get('/leave-stats', verifyWardenToken, getLeaveRequestStats);
 router.get('/leave-filter', verifyWardenToken, filterLeaveRequests);
-
+router.delete('/leave/:leaveId', verifyWardenToken, deleteLeaveRequest);
 
 
 // Warden Profile Page.

@@ -21,7 +21,8 @@ const transporter = nodemailer.createTransport({
 
 const registerStudent = async (req, res) => {
   const {
-    studentName,
+    firstName,
+    lastName,
     studentId,
     contactNumber,
     roomBedNumber,
@@ -33,13 +34,14 @@ const registerStudent = async (req, res) => {
   } = req.body;
 
   // Generate a password: lowercase name (no spaces) + studentId
-  const cleanName = studentName.replace(/\s+/g, '').toLowerCase();
+  const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
   const password = `${cleanName}${studentId}`;
 
   try {
     // Create student record
     const newStudent = new Student({
-      studentName,
+      firstName,
+      lastName,
       studentId,
       contactNumber,
       roomBedNumber,
@@ -58,7 +60,7 @@ const registerStudent = async (req, res) => {
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
       subject: 'Your Student Panel Credentials',
-      text: `Hello ${studentName},
+      text: `Hello ${firstName} ${lastName},
 
 Your student account has been created.
 
@@ -74,10 +76,10 @@ Please log in at https://www.KGF-HM.com and change your password after first log
       adminId: req.admin?._id, // Assuming you have admin info in req from auth middleware
       adminName: req.admin?.adminId || 'System',
       actionType: AuditActionTypes.STUDENT_REGISTERED,
-      description: `Registered new student: ${studentName} (ID: ${studentId})`,
+      description: `Registered new student: ${firstName} ${lastName} (ID: ${studentId})`,
       targetType: 'Student',
       targetId: studentId,
-      targetName: studentName,
+      targetName: `${firstName} ${lastName}`,
       additionalData: {
         email,
         roomBedNumber,
@@ -87,7 +89,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { studentName, studentId, email, password }
+      student: { firstName,lastName, studentId, email, password }
     });
   } catch (err) {
     console.error('Error registering student:', err);
@@ -103,7 +105,7 @@ const registerParent = async (req, res) => {
     // Check if the parent already exists
     const existingParent = await Parent.findOne({ studentId });
     if (existingParent) {
-      return res.status(409).json({ message: "Parent already exists with the same ID or email." });
+      return res.status(409).json({ message: "Parent already exists with the same student ID." });
     }
 
     // Fetch the student details from the database using studentId
@@ -112,43 +114,54 @@ const registerParent = async (req, res) => {
       return res.status(404).json({ message: "Student not found with the provided studentId." });
     }
 
-    // Generate password for the parent
-    const cleanName = firstName.replace(/\s+/g, '').toLowerCase(); // Remove spaces from first name
-    const parentPassword = `${cleanName}${studentId}`; // Password will be a combination of firstName and student's studentId
-
-    // Create new parent record
+    // Create new parent record (NO PASSWORD NEEDED for OTP login)
     const newParent = new Parent({
       firstName,
       lastName,
       email,
       contactNumber,
-      studentId,
-      password: parentPassword 
+      studentId
+      // Remove password field completely
     });
 
     await newParent.save();
 
-    // Send email with the login credentials
+    // Send welcome email with OTP login instructions
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: 'Your Parent Panel Credentials',
+      subject: 'Parent Account Created - Login Instructions',
       text: `Hello ${firstName} ${lastName},
 
-Your parent account has been created.
+Your parent account has been created successfully!
 
+Login Details:
+• Student ID: ${studentId}
+• Login Method: OTP (One-Time Password)
 
-• Your Child's Student ID: ${studentId}
-• Your Login Password: ${parentPassword}
+How to Login:
+1. Visit https://www.KGF-HM.com
+2. Enter your child's Student ID: ${studentId}
+3. Click "Send OTP" button
+4. Check your email for the 6-digit OTP code
+5. Enter the OTP to access your parent panel
 
-Please log in at https://www.KGF-HM.com and change your password after first login.
+The OTP will be valid for 5 minutes each time you request it.
+
+If you have any questions, please contact the hostel administration.
 
 – Hostel Admin`
     });
 
     return res.json({
-      message: 'Parent registered and login credentials emailed.',
-      parent: { firstName, lastName, email, studentId, parentPassword }
+      message: 'Parent registered successfully. Login instructions sent via email.',
+      parent: { 
+        firstName, 
+        lastName, 
+        email, 
+        studentId 
+        // Remove parentPassword from response
+      }
     });
   } catch (err) {
     console.error("Error registering parent:", err);

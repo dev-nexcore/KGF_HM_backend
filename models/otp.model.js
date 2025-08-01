@@ -4,7 +4,12 @@ const otpSchema = new mongoose.Schema({
   email: { type: String, required: true },
   code: { type: String, required: true },
   expires: { type: Date, required: true },
-  verified: { type: Boolean, default: false }
+  verified: { type: Boolean, default: false },
+  purpose: { 
+    type: String, 
+    enum: ['login', 'password_reset'], 
+    default: 'password_reset' 
+  }
 });
 
 export const Otp = mongoose.model('Otp', otpSchema);

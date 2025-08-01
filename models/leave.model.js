@@ -40,6 +40,8 @@ const leaveSchema = new mongoose.Schema({
     type: Date,
     default: null,
   },
+  parentComment: { type: String, default: '' },
+  parentApprovalDate: { type: Date },
 });
 
 export const Leave = mongoose.model('Leave', leaveSchema);
