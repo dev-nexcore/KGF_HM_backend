@@ -18,10 +18,11 @@ import {
     getNotices,
     getNextInspection,
     getAttendanceSummary,
-     uploadMyProfileImage, // ✨ ADD THIS
+    uploadMyProfileImage, // ✨ ADD THIS
     deleteMyProfileImage
 } from '../controllers/student.controller.js';
 import { verifyStudentToken } from '../middleware/auth.middleware.js'
+import { uploadStudent } from '../middleware/upload.js'; // Assuming you have a middleware for file uploads
 
 const router = express.Router();
 
@@ -55,7 +56,7 @@ router.get('/inspectionSchedule/:studentId', getNextInspection);
 router.get('/attendanceSummary/:studentId', getAttendanceSummary);
 
 router.post('/upload-profile-image/:studentId', 
-  uploadStudent.single('profileImage'), // Use your existing upload middleware
+  uploadStudent.single('profileImage'),
   uploadMyProfileImage
 );
 

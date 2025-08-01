@@ -152,8 +152,6 @@ const resetPassword = async (req, res) => {
 
 
 
-
-
 //  <--------  Warden Punch In and Punch Out Page. ----------->
 
 
@@ -218,7 +216,6 @@ const punchOut = async (req, res) => {
     res.status(500).json({ message: 'Server Error' });
   }
 };
-
 
 
 const getAttendanceLog = async (req, res) => {
@@ -371,6 +368,7 @@ const getBedStatusOverview = async (req, res) => {
 // <-----------  Student Management Page ---------->
 
 
+
 const getStudentListForWarden = async (req, res) => {
   try {
     const { studentId, roomNo } = req.query;
@@ -393,7 +391,7 @@ const getStudentListForWarden = async (req, res) => {
       bedIds = matchedBeds.map(bed => bed._id);
 
       if (bedIds.length === 0) {
-        return res.status(200).json({ success: true, students: [] }); // No results if no beds match
+        return res.status(200).json({ success: true, students: [] });
       }
 
       studentFilter.roomBedNumber = { $in: bedIds };
@@ -404,11 +402,11 @@ const getStudentListForWarden = async (req, res) => {
         path: 'roomBedNumber',
         select: 'barcodeId roomNo',
       })
-      .select('studentId studentName contactNumber roomBedNumber');
+      .select('studentId firstName lastName contactNumber roomBedNumber');
 
     const formattedStudents = students.map(student => ({
       studentId: student.studentId,
-      studentName: student.studentName,
+      studentName: `${student.firstName} ${student.lastName}`,
       contactNumber: student.contactNumber,
       barcodeId: student.roomBedNumber?.barcodeId || null,
       roomNo: student.roomBedNumber?.roomNo || null,
@@ -427,7 +425,6 @@ const getStudentListForWarden = async (req, res) => {
     });
   }
 };
-
 
 
 const updateStudentRoom = async (req, res) => {
@@ -494,6 +491,16 @@ const updateStudentRoom = async (req, res) => {
       message: 'Internal server error while assigning bed',
       error: error.message,
     });
+  }
+};
+
+
+const getAllAvailableBed = async (req, res) => {
+  try {
+    const beds = await Inventory.find({ status: 'Available', itemName:'Bed' }).select('barcodeId roomNo');
+    res.status(200).json({ success: true, beds });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch beds', error: error.message });
   }
 };
 
@@ -617,7 +624,7 @@ const getFilteredInspections = async (req, res) => {
       { $sort: { datetime: -1 } },
       {
         $project: {
-          _id: 1, // ✅ include _id
+          _id: 1, 
           title: 1,
           target: 1,
           status: 1,
@@ -720,14 +727,15 @@ const getInspectionStats = async (req, res) => {
 
 
 
-
 // <--------- Leave Request Management Page ----------->
+
 
 const getAllLeaveRequests = async (req, res) => {
   try {
     const leaves = await Leave.find()
-      .populate('studentId', 'studentName studentId')
+      .populate('studentId', 'firstName lastName studentId')  // fixed line
       .sort({ appliedAt: -1 });
+
     res.json(leaves);
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err });
@@ -750,12 +758,18 @@ const updateLeaveStatus = async (req, res) => {
       { new: true }
     ).populate('studentId');
 
+    if (!leave) {
+      return res.status(404).json({ message: 'Leave request not found' });
+    }
+
     const student = leave.studentId;
+    const fullName = `${student.firstName} ${student.lastName}`;
+
     const emailContent = `
-      Dear ${student.studentName},
-      
-      Your leave request from ${leave.startDate.toDateString()} to ${leave.endDate.toDateString()} has been ${status}.
-      
+      Dear ${fullName},
+
+      Your leave request from ${new Date(leave.startDate).toDateString()} to ${new Date(leave.endDate).toDateString()} has been ${status}.
+
       Regards,
       Hostel Management
     `;
@@ -768,7 +782,8 @@ const updateLeaveStatus = async (req, res) => {
 
     res.json({ message: `Leave ${status}`, leave });
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err });
+    console.error(err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 };
 
@@ -792,6 +807,7 @@ const getLeaveRequestStats = async (req, res) => {
 };
 
 
+
 const filterLeaveRequests = async (req, res) => {
   try {
     const { studentName, studentId, status, startDate, endDate } = req.query;
@@ -801,28 +817,38 @@ const filterLeaveRequests = async (req, res) => {
     // Status filter
     if (status) matchStage.status = status;
 
-    // Date filters
+    // Date filter
     if (startDate || endDate) {
       matchStage.startDate = {};
       if (startDate) matchStage.startDate.$gte = new Date(startDate);
       if (endDate) matchStage.startDate.$lte = new Date(endDate);
     }
 
-    // Build student filters using $or for both name and ID
+    // Student filters
     const studentFilter = {};
     if (studentName || studentId) {
       const searchTerm = studentName || studentId;
 
       studentFilter.$or = [
-        { studentName: { $regex: searchTerm, $options: 'i' } },
-        { studentId: { $regex: searchTerm, $options: 'i' } }
+        { studentId: { $regex: searchTerm, $options: 'i' } },
+        { firstName: { $regex: searchTerm, $options: 'i' } },
+        { lastName: { $regex: searchTerm, $options: 'i' } },
+        {
+          $expr: {
+            $regexMatch: {
+              input: { $concat: ['$firstName', ' ', '$lastName'] },
+              regex: searchTerm,
+              options: 'i'
+            }
+          }
+        }
       ];
     }
 
-    // Find matching student IDs
+    // Get matching students
     let studentIds = [];
     if (studentName || studentId) {
-      const students = await Student.find(studentFilter).select("_id");
+      const students = await Student.find(studentFilter).select('_id');
       studentIds = students.map((s) => s._id);
 
       if (studentIds.length > 0) {
@@ -835,13 +861,28 @@ const filterLeaveRequests = async (req, res) => {
 
     // Fetch filtered leaves
     const leaves = await Leave.find(matchStage)
-      .populate("studentId", "studentName studentId")
+      .populate('studentId', 'firstName lastName studentId')
       .sort({ appliedAt: -1 });
 
     res.status(200).json(leaves);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+
+
+const deleteLeaveRequest = async (req, res) => {
+  const { leaveId } = req.params;   
+  try {
+    const leave = await Leave.findByIdAndDelete(leaveId); 
+    if (!leave) {
+      return res.status(404).json({ message: 'Leave request not found' });
+    }
+    res.status(200).json({ message: 'Leave request deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting leave request:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
   }
 };
 
@@ -884,7 +925,7 @@ const updateWardenProfile = async (req, res) => {
     if (req.file) {
       // Delete old photo if it exists
       if (warden.profilePhoto) {
-        const oldPath = path.join(__dirname, "../uploads", warden.profilePhoto);
+        const oldPath = path.join(__dirname, "../uploads/wardens/", warden.profilePhoto);
         if (fs.existsSync(oldPath)) {
           fs.unlinkSync(oldPath);
         }
@@ -904,7 +945,42 @@ const updateWardenProfile = async (req, res) => {
 };
 
 
+const getAllWarden = async (req, res) => {
+  try {
+    const wardens = await Warden.find({}, 'wardenId firstName lastName email contactNumber profilePhoto attendanceLog');
+
+    res.status(200).json({
+      success: true,
+      wardens: wardens.map(warden => ({
+        id: warden._id,
+        wardenId: warden.wardenId,
+        firstName: warden.firstName,
+        lastName: warden.lastName,
+        email: warden.email,
+        contactNumber: warden.contactNumber,
+        profilePhoto: warden.profilePhoto ? `${process.env.BASE_URL}/uploads/${warden.profilePhoto}` : null,
+        attendanceLog: warden.attendanceLog.map(log => ({
+          date: log.date,
+          punchIn: log.punchIn,
+          punchOut: log.punchOut,
+          totalHours: log.totalHours,
+        }))
+      })),
+    });
+  } catch (error) {
+    console.error("Error fetching wardens:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch wardens",
+      error: error.message,
+    });
+  }
+};
+
+
+
 // <--------- Emergency Contact Page ----------->
+
 
 const getEmergencyContacts = async (req, res) => {
   try {
@@ -913,27 +989,64 @@ const getEmergencyContacts = async (req, res) => {
     let filter = {};
 
     if (studentName || studentId) {
-      const searchTerm = studentName || studentId;
-      filter = {
-        $or: [
-          { studentName: { $regex: searchTerm, $options: 'i' } },
-          { studentId: { $regex: searchTerm, $options: 'i' } },
-        ],
-      };
+      const searchTerm = studentName?.trim() || studentId?.trim();
+
+      if (studentName) {
+        // Split the name into parts to match first and last names separately
+        const nameParts = searchTerm.split(" ");
+        const nameConditions = [];
+
+        if (nameParts.length === 1) {
+          // If only one name part, search in both first and last name
+          nameConditions.push(
+            { firstName: { $regex: nameParts[0], $options: 'i' } },
+            { lastName: { $regex: nameParts[0], $options: 'i' } }
+          );
+        } else {
+          // If two or more parts, match both first and last name
+          nameConditions.push({
+            $and: [
+              { firstName: { $regex: nameParts[0], $options: 'i' } },
+              { lastName: { $regex: nameParts[1], $options: 'i' } },
+            ]
+          });
+        }
+
+        filter = {
+          $or: [
+            ...nameConditions,
+            { studentId: { $regex: searchTerm, $options: 'i' } }
+          ]
+        };
+      } else {
+        // Only studentId search
+        filter = {
+          studentId: { $regex: searchTerm, $options: 'i' }
+        };
+      }
     }
 
     const students = await Student.find(filter, {
       studentId: 1,
-      studentName: 1,
+      firstName: 1,
+      lastName: 1,
       emergencyContactName: 1,
       relation: 1,
       emergencyContactNumber: 1,
       _id: 0,
     });
 
+    const contacts = students.map((student) => ({
+      studentId: student.studentId,
+      studentName: `${student.firstName} ${student.lastName}`,
+      emergencyContactName: student.emergencyContactName,
+      relation: student.relation,
+      emergencyContactNumber: student.emergencyContactNumber,
+    }));
+
     res.status(200).json({
       success: true,
-      contacts: students,
+      contacts,
     });
   } catch (error) {
     res.status(500).json({
@@ -999,7 +1112,6 @@ export {
   forgotPassword as forgotPasswordWarden,
   verifyOtp as verifyOtpWarden,
   resetPassword as resetPasswordWarden,
-  getAllWardens,
   getWardenProfile,
   updateWardenProfile,
   getEmergencyContacts,
@@ -1022,4 +1134,7 @@ export {
   getInspectionStats,
   getWardenDashboardStats,
   updateEmergencyContact,
-};
+  getAllWarden,
+  deleteLeaveRequest,
+  getAllAvailableBed
+}

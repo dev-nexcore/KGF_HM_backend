@@ -7,13 +7,13 @@ const studentSchema = new mongoose.Schema({
   lastName: { type: String, required: true },
   studentId: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
-  roomBedNumber: { type: String, required: true },
-//   roomBedNumber: {
-//   type: mongoose.Schema.Types.ObjectId,
-//   ref: 'Inventory',
-//   required: true
-// },
-
+  // roomBedNumber: { type: String, required: true },
+  roomBedNumber: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'Inventory',
+  required: true
+},
+  profileImage: { type: String, default: null },
   email: { type: String, required: true, unique: true },
   admissionDate: { type: Date, required: true },
   feeStatus: { type: String, required: true },
