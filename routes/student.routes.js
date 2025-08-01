@@ -20,7 +20,8 @@ import {
     getAttendanceSummary,
     getAttendanceLog,
     uploadMyProfileImage,
-    deleteMyProfileImage
+    deleteMyProfileImage,
+    getNotificationStatus
 } from '../controllers/student.controller.js';
 import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
 import { uploadStudent } from '../middleware/upload.js';
