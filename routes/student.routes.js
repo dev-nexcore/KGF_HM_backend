@@ -18,8 +18,8 @@ import {
     getNotices,
     getNextInspection,
     getAttendanceSummary,
-    //  uploadMyProfileImage, // ✨ ADD THIS
-    // deleteMyProfileImage
+    uploadMyProfileImage, // ✨ ADD THIS
+    deleteMyProfileImage
 } from '../controllers/student.controller.js';
 import { verifyStudentToken } from '../middleware/auth.middleware.js'
 import { uploadStudent } from '../middleware/upload.js'; // Assuming you have a middleware for file uploads
@@ -55,11 +55,11 @@ router.get('/inspectionSchedule/:studentId', getNextInspection);
 
 router.get('/attendanceSummary/:studentId', getAttendanceSummary);
 
-// router.post('/upload-profile-image/:studentId', 
-//   uploadStudent.single('profileImage'), // Use your existing upload middleware
-//   uploadMyProfileImage
-// );
+router.post('/upload-profile-image/:studentId', 
+  uploadStudent.single('profileImage'),
+  uploadMyProfileImage
+);
 
-// router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
+router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 
 export default router;
