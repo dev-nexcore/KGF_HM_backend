@@ -67,4 +67,6 @@ router.post('/upload-profile-image/:studentId',
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 
+router.get('/notifications',getNotificationStatus)
+
 export default router;
