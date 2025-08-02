@@ -30,6 +30,7 @@ const transporter = nodemailer.createTransport({
 });
 
 
+
 // <------------    Login Page For Warden  -------------->
 
  const login = async (req, res) => {
@@ -287,7 +288,6 @@ const getWardenDashboardStats = async (req, res) => {
 
 
 
-
 // <---------- bed allotment page -------->
 
 
@@ -368,28 +368,23 @@ const getBedStatusOverview = async (req, res) => {
 // <-----------  Student Management Page ---------->
 
 
-
 const getStudentListForWarden = async (req, res) => {
   try {
-    const { studentId, roomNo } = req.query;
-
+    const { studentId, roomNo, status } = req.query;
     let studentFilter = {};
 
-    // Filter by studentId (partial match)
+    // Filter by partial studentId
     if (studentId) {
-      studentFilter.studentId = { $regex: studentId, $options: 'i' };
+      studentFilter.studentId = { $regex: studentId, $options: "i" };
     }
 
-    let bedIds = [];
-
-    // Filter by roomNo (partial match from Inventory)
+    // Filter by partial roomNo (from Inventory)
     if (roomNo) {
       const matchedBeds = await Inventory.find({
-        roomNo: { $regex: roomNo, $options: 'i' },
-      }).select('_id');
+        roomNo: { $regex: roomNo, $options: "i" },
+      }).select("_id");
 
-      bedIds = matchedBeds.map(bed => bed._id);
-
+      const bedIds = matchedBeds.map((bed) => bed._id);
       if (bedIds.length === 0) {
         return res.status(200).json({ success: true, students: [] });
       }
@@ -397,30 +392,77 @@ const getStudentListForWarden = async (req, res) => {
       studentFilter.roomBedNumber = { $in: bedIds };
     }
 
-    const students = await Student.find(studentFilter)
-      .populate({
-        path: 'roomBedNumber',
-        select: 'barcodeId roomNo',
-      })
-      .select('studentId firstName lastName contactNumber roomBedNumber');
+    // Fetch students with attendance log and bed info
+    const allStudents = await Student.find(studentFilter)
+      .populate({ path: "roomBedNumber", select: "barcodeId roomNo" })
+      .select("studentId firstName lastName contactNumber roomBedNumber attendanceLog");
 
-    const formattedStudents = students.map(student => ({
-      studentId: student.studentId,
-      studentName: `${student.firstName} ${student.lastName}`,
-      contactNumber: student.contactNumber,
-      barcodeId: student.roomBedNumber?.barcodeId || null,
-      roomNo: student.roomBedNumber?.roomNo || null,
-    }));
+    const today = new Date();
+
+    // Get students currently on leave
+    const activeLeaveRecords = await Leave.find({
+      status: "approved",
+      startDate: { $lte: today },
+      endDate: { $gte: today },
+    });
+
+    const leaveStudentIds = activeLeaveRecords.map((leave) =>
+      leave.studentId.toString()
+    );
+
+    // Filter students based on status query
+    const filteredStudents = allStudents.filter((student) => {
+      const studentIdStr = student._id.toString();
+      const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
+      const isCheckedOut =
+        latestLog?.checkOutDate && new Date(latestLog.checkOutDate) <= today;
+      const isOnLeave = leaveStudentIds.includes(studentIdStr);
+
+      if (status === "Active") {
+        return !isOnLeave && !isCheckedOut;
+      } else if (status === "On Leave") {
+        return isOnLeave;
+      } else if (status === "Checked Out") {
+        return isCheckedOut && !isOnLeave; // Exclude if also on leave
+      } else {
+        return true; // No filter
+      }
+    });
+
+    // Format the final response
+    const formattedStudents = filteredStudents.map((student) => {
+      const studentIdStr = student._id.toString();
+      const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
+      const isCheckedOut =
+        latestLog?.checkOutDate && new Date(latestLog.checkOutDate) <= today;
+      const isOnLeave = leaveStudentIds.includes(studentIdStr);
+
+      let currentStatus = "Active";
+      if (isOnLeave) {
+        currentStatus = "On Leave"; // Highest priority
+      } else if (isCheckedOut) {
+        currentStatus = "Checked Out";
+      }
+
+      return {
+        studentId: student.studentId,
+        studentName: `${student.firstName} ${student.lastName}`,
+        contactNumber: student.contactNumber,
+        barcodeId: student.roomBedNumber?.barcodeId || null,
+        roomNo: student.roomBedNumber?.roomNo || null,
+        status: currentStatus,
+      };
+    });
 
     res.status(200).json({
       success: true,
       students: formattedStudents,
     });
   } catch (error) {
-    console.error('Error fetching student list:', error);
+    console.error("Error fetching student list:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch student list',
+      message: "Failed to fetch student list",
       error: error.message,
     });
   }
@@ -508,22 +550,53 @@ const getAllAvailableBed = async (req, res) => {
 
 const getTotalStudents = async (req, res) => {
   try {
-    const count = await Student.countDocuments();
+    const totalStudents = await Student.countDocuments();
+    const today = new Date();
+
+    // Fetch on leave students
+    const onLeaveRecords = await Leave.find({
+      status: "approved",
+      startDate: { $lte: today },
+      endDate: { $gte: today },
+    });
+    const onLeaveStudentIds = new Set(onLeaveRecords.map(record => record.studentId.toString()));
+
+    // Fetch all students with attendance log
+    const allStudents = await Student.find().select("attendanceLog");
+    
+    let checkedOutCount = 0;
+    
+    for (let student of allStudents) {
+      const studentIdStr = student._id.toString();
+      const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
+
+      const isCheckedOut = latestLog?.checkOutDate && new Date(latestLog.checkOutDate) <= today;
+      const isOnLeave = onLeaveStudentIds.has(studentIdStr);
+
+      // Count as Checked Out only if not On Leave
+      if (isCheckedOut && !isOnLeave) {
+        checkedOutCount++;
+      }
+    }
+
+    const onLeave = onLeaveStudentIds.size;
+    const active = totalStudents - onLeave - checkedOutCount;
 
     res.status(200).json({
       success: true,
-      totalStudents: count,
+      totalStudents,
+      activeStudents: active,
+      onLeaveStudents: onLeave,
+      checkedOutStudents: checkedOutCount,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Failed to get total students",
+      message: "Failed to get student counts",
       error: error.message,
     });
   }
 };
-
-
 
 
 // <--------  inspection management Page ----------->
@@ -576,7 +649,7 @@ const getFilteredInspections = async (req, res) => {
 
     const match = {};
 
-    // Case-insensitive filters
+    //  Case-insensitive exact match for status and target
     if (status) {
       match.status = new RegExp(`^${status}$`, 'i');
     }
@@ -585,7 +658,7 @@ const getFilteredInspections = async (req, res) => {
       match.target = new RegExp(`^${target}$`, 'i');
     }
 
-    // Date range filter
+    //  Filter by exact date range (00:00 to 23:59 of that day)
     if (date) {
       const start = new Date(date);
       const end = new Date(date);
@@ -593,13 +666,15 @@ const getFilteredInspections = async (req, res) => {
       match.datetime = { $gte: start, $lt: end };
     }
 
+    //  Start aggregation pipeline
     const pipeline = [];
 
+    // Initial match stage if filters exist
     if (Object.keys(match).length > 0) {
       pipeline.push({ $match: match });
     }
 
-    // Extract time string
+    //  Add timeStr field from datetime
     pipeline.push({
       $addFields: {
         timeStr: {
@@ -612,19 +687,21 @@ const getFilteredInspections = async (req, res) => {
       },
     });
 
+    //  Match inspections by time string (e.g. "09", "10:30")
     if (time) {
       pipeline.push({
         $match: {
-          timeStr: { $regex: `^${time}` }, // partial match like "09" or "09:30"
+          timeStr: { $regex: `^${time}` }, // partial match
         },
       });
     }
 
+    //  Final formatting: sort and return only required fields
     pipeline.push(
       { $sort: { datetime: -1 } },
       {
         $project: {
-          _id: 1, 
+          _id: 1,
           title: 1,
           target: 1,
           status: 1,
@@ -640,6 +717,7 @@ const getFilteredInspections = async (req, res) => {
       }
     );
 
+    // Execute aggregation
     const inspections = await Inspection.aggregate(pipeline);
 
     res.status(200).json({
@@ -647,6 +725,7 @@ const getFilteredInspections = async (req, res) => {
       inspections,
     });
   } catch (error) {
+    console.error("Error in getFilteredInspections:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch inspections",
@@ -669,7 +748,6 @@ const getInspectionById = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to fetch inspection', error: error.message });
   }
 };
-
 
 
 const completeInspection = async (req, res) => {
@@ -724,6 +802,20 @@ const getInspectionStats = async (req, res) => {
   }
 };
 
+
+const deleteInspection = async (req, res) => {  
+  const { id } = req.params;
+  try {         
+    const inspection = await Inspection.findByIdAndDelete(id);
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: 'Inspection not found' });
+    }   
+    res.status(200).json({ success: true, message: 'Inspection deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting inspection:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
 
 
 
@@ -805,7 +897,6 @@ const getLeaveRequestStats = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
-
 
 
 const filterLeaveRequests = async (req, res) => {
@@ -1058,7 +1149,7 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
-// Update emergency contact info for a student by studentId
+
 const updateEmergencyContact = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -1136,5 +1227,6 @@ export {
   updateEmergencyContact,
   getAllWarden,
   deleteLeaveRequest,
-  getAllAvailableBed
+  getAllAvailableBed,
+  deleteInspection
 }
