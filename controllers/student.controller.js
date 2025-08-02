@@ -353,7 +353,7 @@ const applyForLeave = async (req, res) => {
       year: 'numeric',
       timeZone: 'Asia/Kolkata'
     });
-    
+
     const formattedEndDate = new Date(endDate).toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
@@ -398,9 +398,9 @@ You can view all leave applications and their current status in the Leave Manage
 If you have any questions or concerns, please contact the hostel administration.
 
 – Hostel Admin`,
-    // Replace the HTML section in your applyForLeave controller:
+      // Replace the HTML section in your applyForLeave controller:
 
-html: `
+      html: `
   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
     <h2 style="color: #333; text-align: center;">Leave Application Notification</h2>
     
@@ -436,9 +436,9 @@ html: `
       `
     });
 
-    return res.json({ 
-      message: "Leave application submitted successfully. Parent has been notified via email.", 
-      leave: newLeave 
+    return res.json({
+      message: "Leave application submitted successfully. Parent has been notified via email.",
+      leave: newLeave
     });
   } catch (err) {
     console.error("Apply leave error:", err);
@@ -652,7 +652,7 @@ const deleteMyProfileImage = async (req, res) => {
 const getStudentProfile = async (req, res) => {
   // 🔧 UPDATED: Handle both parent and student tokens
   let studentId;
-  
+
   if (req.params.studentId) {
     // Called with studentId parameter (from parent or direct access)
     studentId = req.params.studentId;
@@ -854,8 +854,8 @@ const getAttendanceLog = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching attendance log:', error);
-    return res.status(500).json({ 
-      message: 'Internal server error while fetching attendance log' 
+    return res.status(500).json({
+      message: 'Internal server error while fetching attendance log'
     });
   }
 };
@@ -958,33 +958,63 @@ const getAttendanceSummary = async (req, res) => {
 
 
 const getNotificationStatus = async (req, res) => {
-  const studentId = req.studentId; // e.g. "MNB125" string from token
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
-
-    if (!student) {
-      return res.status(404).json({ message: 'Student not found' });
-    }
+    if (!student) return res.status(404).json({ message: 'Student not found' });
 
     const studentObjectId = student._id;
 
-    const unseenNotices = await Notice.countDocuments({ seenBy: { $ne: studentId } }); // assuming seenBy stores string
-    const unseenRefunds = await Refund.countDocuments({ studentId: studentObjectId, statusSeen: false });
-    const unseenComplaints = await Complaint.countDocuments({ studentId: studentObjectId, adminSeen: true });
-    const unseenLeaves = await Leave.countDocuments({ studentId: studentObjectId, adminSeen: true });
+    const notifications = [];
 
-    const hasUnseen =
-      unseenNotices > 0 || unseenRefunds > 0 || unseenComplaints > 0 || unseenLeaves > 0;
+    const latestNotice = await Notice.findOne({ seenBy: { $ne: studentId } })
+      .sort({ createdAt: -1 });
+    if (latestNotice) {
+      notifications.push({
+        message: `New notice: ${latestNotice.title}`,
+        link: '/notices',
+        type: 'notice',
+        id: latestNotice._id
+      });
+    }
+
+    const latestRefund = await Refund.findOne({ studentId: studentObjectId, statusSeen: false })
+      .sort({ updatedAt: -1 });
+    if (latestRefund) {
+      notifications.push({
+        message: 'Refund status updated',
+        link: '/refunds',
+        type: 'refund',
+        id: latestRefund._id
+      });
+    }
+
+    const latestComplaint = await Complaint.findOne({ studentId: studentObjectId, adminSeen: true })
+      .sort({ updatedAt: -1 });
+    if (latestComplaint) {
+      notifications.push({
+        message: 'Admin responded to your complaint',
+        link: '/complaints',
+        type: 'complaint',
+        id: latestComplaint._id
+      });
+    }
+
+    const latestLeave = await Leave.findOne({ studentId: studentObjectId, adminSeen: true })
+      .sort({ updatedAt: -1 });
+    if (latestLeave) {
+      notifications.push({
+        message: 'Your leave request was reviewed',
+        link: '/leaves',
+        type: 'leave',
+        id: latestLeave._id
+      });
+    }
 
     res.json({
-      hasUnseen,
-      notifications: [
-        { message: "Your leave request was approved", link: "/leaves" },
-        { message: "New notice from admin", link: "/notices" },
-        { message: "Refund request updated", link: "/refunds" },
-        { message: "Complaint has been responded", link: "/complaints" },
-      ]
+      hasUnseen: notifications.length > 0,
+      notifications
     });
 
   } catch (err) {
@@ -992,6 +1022,73 @@ const getNotificationStatus = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
+const markNotificationsSeen = async (req, res) => {
+  const studentId = req.studentId;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) return res.status(404).json({ message: "Student not found" });
+
+    const studentObjectId = student._id;
+
+    const { type, id } = req.body;
+
+    if (id) {
+      if (type === "notice") {
+        await Notice.updateOne(
+          { _id: id, seenBy: { $ne: studentObjectId } },
+          { $addToSet: { seenBy: studentObjectId } }
+        );
+      } else if (type === "refund") {
+        await Refund.updateOne(
+          { _id: id, studentId: studentObjectId },
+          { statusSeen: true }
+        );
+      } else if (type === "complaint") {
+        await Complaint.updateOne(
+          { _id: id, studentId: studentObjectId },
+          { adminSeen: false }
+        );
+      } else if (type === "leave") {
+        await Leave.updateOne(
+          { _id: id, studentId: studentObjectId },
+          { adminSeen: false }
+        );
+      }
+    } else {
+      if (type === "notice") {
+        await Notice.updateMany(
+          { seenBy: { $ne: studentObjectId } },
+          { $addToSet: { seenBy: studentObjectId } }
+        );
+      } else if (type === "refund") {
+        await Refund.updateMany(
+          { studentId: studentObjectId, statusSeen: false },
+          { statusSeen: true }
+        );
+      } else if (type === "complaint") {
+        await Complaint.updateMany(
+          { studentId: studentObjectId, adminSeen: true },
+          { adminSeen: false }
+        );
+      } else if (type === "leave") {
+        await Leave.updateMany(
+          { studentId: studentObjectId, adminSeen: true },
+          { adminSeen: false }
+        );
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Marking notification as seen failed:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
 
 
 
@@ -1019,5 +1116,6 @@ export {
   getAttendanceLog,
   deleteMyProfileImage,
   uploadMyProfileImage,
-  getNotificationStatus
+  getNotificationStatus,
+  markNotificationsSeen
 }
