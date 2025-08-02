@@ -1,4 +1,4 @@
-// middleware/auth.middleware.js (ADD STUDENT AUTH)
+
 import jwt from 'jsonwebtoken';
 import { Parent } from '../models/parent.model.js';
 import { Student } from '../models/student.model.js'
@@ -92,8 +92,7 @@ const authenticateParent = async (req, res, next) => {
   }
 };
 
-
- const verifyStudentToken = async (req, res, next) => {
+const verifyStudentToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -136,14 +135,98 @@ const authenticateParent = async (req, res, next) => {
   }
 };
 
+const verifyStudentOrParentToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'No token provided' });
+    }
 
+    const token = authHeader.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    console.log('🔍 Token decoded:', decoded);
+    
+    // 🔧 UPDATED LOGIC based on your actual token structure
+    if (decoded.studentId && decoded.email && !decoded.role && !decoded.sub) {
+      // Parent token logic - has studentId and email, but no role or sub
+      console.log('🔍 Detected parent token (studentId + email)');
+      
+      const parent = await Parent.findOne({ studentId: decoded.studentId });
+      if (!parent) {
+        console.log('❌ Parent not found for studentId:', decoded.studentId);
+        return res.status(401).json({ message: 'Invalid parent token - parent not found' });
+      }
+      
+      console.log('✅ Parent found:', parent.firstName, parent.lastName);
+      
+      req.parent = parent;
+      req.studentId = decoded.studentId;
+      req.userType = 'parent';
+      req.user = {
+        _id: parent._id,
+        role: 'parent',
+        email: decoded.email,
+        studentId: decoded.studentId,
+      };
+      
+    } else if (decoded.role === 'student' && decoded.sub) {
+      // Student token logic - has role=student and sub
+      console.log('🔍 Detected student token (role + sub)');
+      
+      const student = await Student.findById(decoded.sub).select('-password');
+      if (!student) {
+        console.log('❌ Student not found for sub:', decoded.sub);
+        return res.status(401).json({ message: 'Invalid student token - student not found' });
+      }
+      
+      console.log('✅ Student found:', student.firstName, student.lastName);
+      
+      req.student = student;
+      req.studentId = student.studentId;
+      req.userType = 'student';
+      req.user = {
+        _id: student._id,
+        role: 'student',
+        email: student.email,
+        studentId: student.studentId,
+      };
+      
+    } else {
+      console.log('❌ Invalid token format. Token contents:', decoded);
+      console.log('Token keys:', Object.keys(decoded));
+      return res.status(401).json({ 
+        message: 'Invalid token format',
+        debug: {
+          hasStudentId: !!decoded.studentId,
+          hasEmail: !!decoded.email,
+          hasRole: !!decoded.role,
+          hasSub: !!decoded.sub
+        }
+      });
+    }
+    
+    console.log('✅ Authentication successful for:', req.userType);
+    next();
+    
+  } catch (error) {
+    console.error('❌ Authentication error:', error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
+    } else if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    
+    return res.status(500).json({ message: 'Server error during authentication' });
+  }
+};
 
-
-
-
-export{
+export {
     verifyAdminToken,
     verifyWardenToken,
     authenticateParent,
     verifyStudentToken,
+    verifyStudentOrParentToken,
 };

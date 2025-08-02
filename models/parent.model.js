@@ -16,7 +16,7 @@ const parentSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+    required: false, // Changed from true to false - now optional
     select: false // This ensures password is not included by default
   },
   firstName: {
@@ -39,10 +39,10 @@ const parentSchema = new mongoose.Schema({
   timestamps: true // Add createdAt and updatedAt fields
 });
 
-// Password hash middleware
+// Password hash middleware - only runs if password exists
 parentSchema.pre("save", async function (next) {
-  // Only hash the password if it has been modified (or is new)
-  if (!this.isModified("password")) return next();
+  // Only hash the password if it exists and has been modified (or is new)
+  if (!this.password || !this.isModified("password")) return next();
   
   try {
     // Hash password with cost of 12 (more secure than 10)
@@ -53,7 +53,7 @@ parentSchema.pre("save", async function (next) {
   }
 });
 
-// Password verification method
+// Password verification method - only works if password exists
 parentSchema.methods.comparePassword = async function (candidatePassword) {
   try {
     if (!candidatePassword || !this.password) {

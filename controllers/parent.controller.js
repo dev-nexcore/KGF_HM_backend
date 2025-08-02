@@ -20,7 +20,6 @@ const transporter = nodemailer.createTransport({
 });
 
 // Generate access token for parent
-
 const generateToken = (parent) => {
   if (!process.env.JWT_SECRET || !process.env.JWT_EXPIRES_IN) {
     throw new Error("JWT_SECRET or JWT_EXPIRES_IN is not defined in environment variables");
@@ -52,57 +51,103 @@ const generateRefreshToken = async (parent) => {
   return refreshToken;
 };
 
-// Login controller for parent panel
-const login = async (req, res) => {
-  const { studentId, password } = req.body;
+// NEW: Send OTP for login
+const sendLoginOTP = async (req, res) => {
+  const { studentId } = req.body;
 
-  // Input validation
-  if (!studentId || !password) {
-    return res.status(400).json({ message: "Student ID and password are required" });
+  if (!studentId) {
+    return res.status(400).json({ message: "Student ID is required" });
   }
 
   try {
-    // Find parent by studentId, explicitly select password
-    const parent = await Parent.findOne({ studentId }).select("+password");
+    // Find parent by studentId
+    const parent = await Parent.findOne({ studentId });
     if (!parent) {
-      return res.status(401).json({ message: "Invalid student ID" });
+      return res.status(404).json({ message: "No parent account found for this Student ID" });
     }
 
-    // Detailed debugging
-   
-
-    // Test direct bcrypt comparison
-    const directBcryptResult = await bcrypt.compare(password, parent.password);
-    console.log("Direct bcrypt.compare result:", directBcryptResult);
-
-    // Test the model method
-    const modelMethodResult = await parent.comparePassword(password);
-    console.log("Model comparePassword result:", modelMethodResult);
-
-    // Test with string conversion (in case of type issues)
-    const stringPassword = String(password);
-    const stringDirectResult = await bcrypt.compare(stringPassword, parent.password);
-    console.log("String converted direct result:", stringDirectResult);
-
-    // Test if password contains hidden characters
-    console.log("Password char codes:", Array.from(password).map(char => char.charCodeAt(0)));
-    console.log("Hash char codes (first 20):", Array.from(parent.password.substring(0, 20)).map(char => char.charCodeAt(0)));
-
-    // Generate a new hash with the plain password to compare
-    const newHash = await bcrypt.hash(password, 12);
-    console.log("Newly generated hash:", newHash);
-    const newHashTest = await bcrypt.compare(password, newHash);
-    console.log("New hash comparison test:", newHashTest);
-
-
-
-
-    // Use direct bcrypt comparison as fallback
-    const isMatch = directBcryptResult;
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid password" });
+    // Set OTP expiry (5 minutes from now)
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    // Save OTP using the existing Otp model or create a new record
+    await Otp.findOneAndUpdate(
+      { email: parent.email },
+      { 
+        code: otp, 
+        expires: otpExpiry, 
+        verified: false,
+        purpose: 'login' // Add purpose to distinguish from password reset
+      },
+      { upsert: true }
+    );
+
+    // Send OTP via email
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: parent.email,
+      subject: 'Your Parent Login OTP',
+      text: `Hello ${parent.firstName},
+
+Your OTP for parent panel login is: ${otp}
+
+This OTP is valid for 5 minutes only.
+
+If you didn't request this OTP, please ignore this email.
+
+– Hostel Admin`
+    });
+
+    return res.json({
+      message: 'OTP sent successfully to your registered email address',
+      email: parent.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email for security
+      expiresIn: '5 minutes'
+    });
+
+  } catch (err) {
+    console.error("Error sending login OTP:", err);
+    return res.status(500).json({ message: "Error sending OTP" });
+  }
+};
+
+// UPDATED: Login controller with OTP verification (replaces old password-based login)
+const login = async (req, res) => {
+  const { studentId, otp } = req.body;
+
+  // Input validation
+  if (!studentId || !otp) {
+    return res.status(400).json({ message: "Student ID and OTP are required" });
+  }
+
+  try {
+    // Find parent by studentId
+    const parent = await Parent.findOne({ studentId });
+    if (!parent) {
+      return res.status(401).json({ message: "Invalid Student ID" });
     }
+
+    // Find OTP record for this parent's email
+    const otpRecord = await Otp.findOne({ 
+      email: parent.email, 
+      code: otp, 
+      purpose: 'login' // Make sure it's a login OTP, not password reset
+    });
+
+    if (!otpRecord) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    // Check if OTP is expired
+    if (new Date() > otpRecord.expires) {
+      // Delete expired OTP
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+    }
+
+    // OTP is valid, delete it after successful verification
+    await Otp.deleteOne({ _id: otpRecord._id });
 
     // Generate tokens
     const token = generateToken(parent);
@@ -115,10 +160,10 @@ const login = async (req, res) => {
       refreshToken,
       parent: {
         studentId: parent.studentId,
-        email: parent.email, 
-        firstname: parent.firstName,
+        email: parent.email,
+        firstName: parent.firstName,
         lastName: parent.lastName,
-        contactNumber:parent.contactNumber
+        contactNumber: parent.contactNumber
       },
     });
   } catch (err) {
@@ -127,7 +172,7 @@ const login = async (req, res) => {
   }
 };
 
-// Refresh access token controller
+// Refresh access token controller (unchanged)
 const refreshAccessToken = async (req, res) => {
   const { refreshToken } = req.body;
 
@@ -164,7 +209,8 @@ const refreshAccessToken = async (req, res) => {
     return res.status(500).json({ message: "Server error during token refresh" });
   }
 };
-// Forgot password controller for parent panel
+
+// Forgot password controller for parent panel (unchanged)
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
 
@@ -179,7 +225,7 @@ const forgotPassword = async (req, res) => {
 
     await Otp.findOneAndUpdate(
       { email },
-      { code: otp, expires, verified: false },
+      { code: otp, expires, verified: false, purpose: 'password_reset' },
       { upsert: true }
     );
 
@@ -199,10 +245,10 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-// Verify OTP controller for parent panel
+// Verify OTP controller for parent panel (unchanged)
 const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
-  const record = await Otp.findOne({ email, code: otp });
+  const record = await Otp.findOne({ email, code: otp, purpose: 'password_reset' });
 
   if (!record || record.code !== otp || record.expires < Date.now()) {
     return res.status(400).json({ message: "Invalid or expired OTP" });
@@ -213,10 +259,10 @@ const verifyOtp = async (req, res) => {
   return res.json({ message: "OTP verified" });
 };
 
-// Reset password controller for parent panel
+// Reset password controller for parent panel (unchanged)
 const resetPassword = async (req, res) => {
   const { email, otp, newPassword } = req.body;
-  const record = await Otp.findOne({ email, code: otp, verified: true });
+  const record = await Otp.findOne({ email, code: otp, verified: true, purpose: 'password_reset' });
 
   if (!record || record.code !== otp || !record.verified) {
     return res.status(400).json({ message: "OTP not verified" });
@@ -232,13 +278,7 @@ const resetPassword = async (req, res) => {
     parent.password = newPassword; // Set plain password, let middleware hash it
     await parent.save();
 
-    // OPTION 2: Alternative - Use updateOne to bypass middleware entirely
-    // await Parent.updateOne(
-    //   { email },
-    //   { $set: { password: await bcrypt.hash(newPassword, 12) } }
-    // );
-
-    await Otp.deleteOne({ email });
+    await Otp.deleteOne({ email, purpose: 'password_reset' });
 
     return res.json({ message: "Password has been reset" });
   } catch (err) {
@@ -249,7 +289,7 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// Dashboard controller for parent panel
+// Dashboard controller for parent panel (unchanged)
 const dashboard = async (req, res) => {
   const { studentId } = req.query;
 
@@ -258,9 +298,50 @@ const dashboard = async (req, res) => {
   }
 
   try {
-    const student = await Student.findOne({ studentId });
+    // Populate the roomBedNumber field to get actual room/bed details
+    const student = await Student.findOne({ studentId })
+      .populate({
+        path: 'roomBedNumber',
+        select: 'location floor roomNo itemName description barCodeId' // Select specific fields you need
+      })
+      .exec();
+
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Create detailed room and bed information
+    let roomBedDisplay = 'Not Assigned';
+    let roomBedDetails = {
+      display: 'Not Assigned',
+      floor: 'N/A',
+      room: 'N/A',
+      bedType: 'N/A',
+      location: 'N/A'
+    };
+
+    if (student.roomBedNumber) {
+      const bed = student.roomBedNumber;
+      
+      // Create a readable display format
+      if (bed.location) {
+        roomBedDisplay = bed.location; // e.g., "Floor 1, Room 101"
+      } else if (bed.floor && bed.roomNo) {
+        roomBedDisplay = `Floor ${bed.floor}, Room ${bed.roomNo}`;
+      } else if (bed.roomNo) {
+        roomBedDisplay = `Room ${bed.roomNo}`;
+      } else {
+        roomBedDisplay = bed.itemName || 'Bed Assigned';
+      }
+
+      roomBedDetails = {
+        display: roomBedDisplay,
+        floor: bed.floor || 'N/A',
+        room: bed.roomNo || 'N/A',
+        bedType: bed.itemName || bed.description || 'Bed',
+        location: bed.location || 'N/A',
+        barCodeId: bed.barCodeId || 'N/A'
+      };
     }
 
     // Fetch warden name directly using wardenId "W123"
@@ -270,11 +351,13 @@ const dashboard = async (req, res) => {
     const dashboardData = {
       studentInfo: {
         studentId: student.studentId,
-        studentName: student.studentName,
+        firstName: student.firstName,
+        lastName: student.lastName,
         photo: student.photo || null,
         contactNumber: student.contactNumber,
         email: student.email,
-        roomBedNumber: student.roomBedNumber,
+        roomBedNumber: roomBedDisplay, // Now shows readable format instead of ObjectId
+        roomBedDetails: roomBedDetails, // Additional detailed info if needed
         admissionDate: student.admissionDate,
         emergencyContactName: student.emergencyContactName,
         emergencyContactNumber: student.emergencyContactNumber,
@@ -289,6 +372,7 @@ const dashboard = async (req, res) => {
       feesOverview: {
         status: student.feeStatus || "Not Available",
         amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
+        totalAmount: student.feeAmount || 0, // Add total amount for better fee display
       },
       wardenInfo: {
         wardenName: wardenName
@@ -304,9 +388,6 @@ const dashboard = async (req, res) => {
   }
 };
 
-
-
-// Attendance controller for parent panel
 const attendance = async (req, res) => {
   const { studentId } = req.query;
 
@@ -321,17 +402,68 @@ const attendance = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Assuming you have a term start date - adjust as needed
+    const termStartDate = new Date('2024-08-01'); // Replace with your actual term start
+    const today = new Date();
+    
+    // Calculate total school days (excluding weekends)
+    let totalSchoolDays = 0;
+    let currentDate = new Date(termStartDate);
+    
+    while (currentDate <= today) {
+      const dayOfWeek = currentDate.getDay();
+      // Exclude Saturdays (6) and Sundays (0) - adjust based on your school schedule
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        totalSchoolDays++;
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    // Process attendance log
+    const attendanceLog = student.attendanceLog || [];
+    const presentDates = new Set();
+    
+    attendanceLog.forEach(entry => {
+      const entryDate = new Date(entry.checkInDate);
+      presentDates.add(entryDate.toDateString());
+    });
+    
+    const presentDays = presentDates.size;
+    const absentDays = Math.max(0, totalSchoolDays - presentDays);
+    const attendancePercentage = totalSchoolDays > 0 ? Math.round((presentDays / totalSchoolDays) * 100) : 0;
+    
+    // Check today's status
+    const todayString = today.toDateString();
+    const isPresentToday = presentDates.has(todayString);
+    
+    // Find most recent absence
+    let lastAbsenceDate = null;
+    let checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - 1); // Start from yesterday
+    
+    while (checkDate >= termStartDate) {
+      const dayOfWeek = checkDate.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
+        if (!presentDates.has(checkDate.toDateString())) {
+          lastAbsenceDate = checkDate.toDateString();
+          break;
+        }
+      }
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
     const attendanceData = {
       studentId: student.studentId,
-      studentName: student.studentName,
-      checkInDate: student.checkInDate || null,
-      checkOutDate: student.checkOutDate || null,
+      firstName: student.firstName,
+      lastName: student.lastName,
       attendanceSummary: {
-        totalDays: 1,
-        presentDays: student.checkInDate ? 1 : 0,
-        absentDays: student.checkInDate ? 0 : 1,
-        attendancePercentage: student.checkInDate ? 100 : 0,
-      },
+        totalDays: totalSchoolDays,
+        presentDays,
+        absentDays,
+        attendancePercentage,
+        isPresentToday,
+        lastAbsence: lastAbsenceDate || "No recent absences"
+      }
     };
 
     return res.json(attendanceData);
@@ -343,8 +475,9 @@ const attendance = async (req, res) => {
   }
 };
 
+//
 
-// Leave Management controller for parent panel
+// Leave Management controller for parent panel (unchanged)
 const leaveManagement = async (req, res) => {
   const { studentId } = req.query;
 
@@ -363,7 +496,7 @@ const leaveManagement = async (req, res) => {
     // Fetch leave history from Leave model
     const leaves = await Leave.find({ studentId: student._id })
       .select("leaveType startDate endDate reason status appliedAt _id")
-      .sort({ appliedAt: -1 }); // Fixed missing closing parenthesis
+      .sort({ appliedAt: -1 });
 
     console.log("Leaves found:", leaves);
 
@@ -398,10 +531,163 @@ const leaveManagement = async (req, res) => {
   }
 };
 
+// Approve or reject leave request by parent
+const updateLeaveStatus = async (req, res) => {
+  const { leaveId, status, parentComment } = req.body;
+  const parentStudentId = req.studentId; // From authentication middleware
 
-// Fees controller for parent panel
+  // Validate status
+  if (!['approved', 'rejected'].includes(status.toLowerCase())) {
+    return res.status(400).json({ message: "Status must be 'approved' or 'rejected'" });
+  }
+
+  try {
+    // Find the leave request
+    const leave = await Leave.findById(leaveId).populate('studentId');
+    if (!leave) {
+      return res.status(404).json({ message: "Leave request not found" });
+    }
+
+    // Verify this parent has permission to update this leave (their child's leave)
+    const student = leave.studentId;
+    if (student.studentId !== parentStudentId) {
+      return res.status(403).json({ message: "You can only update your child's leave requests" });
+    }
+
+    // Check if leave is still pending
+    if (leave.status.toLowerCase() !== 'pending') {
+      return res.status(400).json({ 
+        message: `Leave request is already ${leave.status}. Cannot update.` 
+      });
+    }
+
+    // Update leave status
+    leave.status = status.toLowerCase();
+    leave.parentComment = parentComment || '';
+    leave.parentApprovalDate = new Date();
+    await leave.save();
+
+    // Format dates for email
+    const formattedStartDate = new Date(leave.startDate).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit', 
+      year: 'numeric',
+      timeZone: 'Asia/Kolkata'
+    });
+    
+    const formattedEndDate = new Date(leave.endDate).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric', 
+      timeZone: 'Asia/Kolkata'
+    });
+
+    // Calculate duration
+    const durationMs = new Date(leave.endDate) - new Date(leave.startDate);
+    const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
+
+    // Get parent info
+    const parent = await Parent.findOne({ studentId: student.studentId });
+
+    // Send email notification to student
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: student.email,
+      subject: `Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'} - ${leave.leaveType}`,
+      text: `Dear ${student.firstName} ${student.lastName},
+
+Your leave request has been ${status} by your parent.
+
+Leave Details:
+• Leave Type: ${leave.leaveType}
+• From Date: ${formattedStartDate}  
+• To Date: ${formattedEndDate}
+• Duration: ${durationDays} day${durationDays !== 1 ? 's' : ''}
+• Reason: ${leave.reason}
+• Status: ${status.toUpperCase()}
+${parentComment ? `• Parent Comment: ${parentComment}` : ''}
+
+${status === 'approved' ? 
+  'Your leave has been approved. Please follow hostel guidelines for your leave period.' : 
+  'Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
+}
+
+– Hostel Admin`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+          <h2 style="color: #333; text-align: center;">Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'}</h2>
+          
+          <p>Dear <strong>${student.firstName} ${student.lastName}</strong>,</p>
+          
+          <p>Your leave request has been <strong style="color: ${status === 'approved' ? '#4CAF50' : '#f44336'};">${status.toUpperCase()}</strong> by your parent.</p>
+          
+          <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
+            <ul style="list-style: none; padding: 0;">
+              <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leave.leaveType}</li>
+              <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
+              <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
+              <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
+              <li style="margin: 8px 0;"><strong>Reason:</strong> ${leave.reason}</li>
+              <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: ${status === 'approved' ? '#4CAF50' : '#f44336'};">${status.toUpperCase()}</span></li>
+              ${parentComment ? `<li style="margin: 8px 0;"><strong>Parent Comment:</strong> ${parentComment}</li>` : ''}
+            </ul>
+          </div>
+          
+          <div style="background-color: ${status === 'approved' ? '#e8f5e8' : '#ffebee'}; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 0; color: ${status === 'approved' ? '#2e7d32' : '#c62828'};">
+              ${status === 'approved' ? 
+                '✅ Your leave has been approved. Please follow hostel guidelines for your leave period.' : 
+                '❌ Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
+              }
+            </p>
+          </div>
+          
+          <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+          <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
+        </div>
+      `
+    });
+
+    // Send email to admin about parent's decision
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: process.env.MAIL_USER,
+      subject: `Parent ${status === 'approved' ? 'Approved' : 'Rejected'} Leave - ${student.firstName} ${student.lastName}`,
+      text: `Parent has ${status} a leave request.
+
+Student: ${student.firstName} ${student.lastName} (${student.studentId})
+Parent: ${parent ? `${parent.firstName} ${parent.lastName}` : 'Unknown'}
+Leave Type: ${leave.leaveType}
+From: ${formattedStartDate} To: ${formattedEndDate}
+Status: ${status.toUpperCase()}
+${parentComment ? `Parent Comment: ${parentComment}` : ''}
+
+Please update your records accordingly.`
+    });
+
+    return res.json({
+      message: `Leave request ${status} successfully`,
+      leave: {
+        _id: leave._id,
+        leaveType: leave.leaveType,
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        reason: leave.reason,
+        status: leave.status,
+        parentComment: leave.parentComment,
+        parentApprovalDate: leave.parentApprovalDate
+      }
+    });
+
+  } catch (err) {
+    console.error("Update leave status error:", err);
+    return res.status(500).json({ message: "Server error while updating leave status." });
+  }
+};
+// Fees controller for parent panel (unchanged)
 const fees = async (req, res) => {
-  const { studentId } = req.query; // Changed from req.body to req.query
+  const { studentId } = req.query;
 
   if (!studentId) {
     return res.status(400).json({ message: "studentId is required" });
@@ -438,8 +724,7 @@ const fees = async (req, res) => {
   }
 };
 
-// Notices controller for parent panel
-// Updated notices controller for parent panel
+// Notices controller for parent panel (unchanged)
 const notices = async (req, res) => {
   const { studentId } = req.query;
 
@@ -524,18 +809,19 @@ const markNoticeAsRead = async (req, res) => {
   }
 };
 
-
 export {
-  login,
+  sendLoginOTP,      // NEW: Added for OTP login
+  login,             // UPDATED: Now uses OTP instead of password
   generateToken, 
   generateRefreshToken, 
   refreshAccessToken,
-  forgotPassword,
+  forgotPassword,    
   verifyOtp,
   resetPassword,
   dashboard,
   attendance,
   leaveManagement,
+  updateLeaveStatus,
   fees,
   notices,
   markNoticeAsRead

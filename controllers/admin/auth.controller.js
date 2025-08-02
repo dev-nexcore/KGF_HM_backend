@@ -4,7 +4,7 @@ import { Otp } from '../../models/otp.model.js'; // ← ADD: Missing import
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js'; // ← FIX: Update path
-
+import bcrypt from 'bcrypt';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
     host: process.env.MAIL_HOST,
@@ -75,7 +75,7 @@ const login = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const isMatch = await admin.comparePassword(password);
+    const isMatch = await admin.comparePassword(password,admin.password);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
@@ -203,8 +203,9 @@ const resetPassword = async (req, res) => {
     return res.status(404).json({ message: "Admin not found" });
   }
 
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-  admin.password = hashedPassword;
+  // const hashedPassword = await bcrypt.hash(newPassword, 10);
+  // admin.password = hashedPassword;
+  admin.password = newPassword; // just for resetting the password . 
   await admin.save();
 
   await Otp.deleteOne({ email });
