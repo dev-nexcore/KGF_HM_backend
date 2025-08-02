@@ -21,7 +21,8 @@ import {
     getAttendanceLog,
     uploadMyProfileImage,
     deleteMyProfileImage,
-    getNotificationStatus
+    getNotificationStatus,
+    markNotificationsSeen
 } from '../controllers/student.controller.js';
 import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
 import { uploadStudent } from '../middleware/upload.js';
@@ -68,6 +69,8 @@ router.post('/upload-profile-image/:studentId',
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 
-router.get('/notifications',getNotificationStatus)
+router.get('/notifications',getNotificationStatus);
+
+router.post('/notifications/mark-seen',markNotificationsSeen)
 
 export default router;
