@@ -368,28 +368,23 @@ const getBedStatusOverview = async (req, res) => {
 // <-----------  Student Management Page ---------->
 
 
-
 const getStudentListForWarden = async (req, res) => {
   try {
-    const { studentId, roomNo } = req.query;
-
+    const { studentId, roomNo, status } = req.query;
     let studentFilter = {};
 
-    // Filter by studentId (partial match)
+    // Filter by partial studentId
     if (studentId) {
-      studentFilter.studentId = { $regex: studentId, $options: 'i' };
+      studentFilter.studentId = { $regex: studentId, $options: "i" };
     }
 
-    let bedIds = [];
-
-    // Filter by roomNo (partial match from Inventory)
+    // Filter by partial roomNo (from Inventory)
     if (roomNo) {
       const matchedBeds = await Inventory.find({
-        roomNo: { $regex: roomNo, $options: 'i' },
-      }).select('_id');
+        roomNo: { $regex: roomNo, $options: "i" },
+      }).select("_id");
 
-      bedIds = matchedBeds.map(bed => bed._id);
-
+      const bedIds = matchedBeds.map((bed) => bed._id);
       if (bedIds.length === 0) {
         return res.status(200).json({ success: true, students: [] });
       }
@@ -397,34 +392,82 @@ const getStudentListForWarden = async (req, res) => {
       studentFilter.roomBedNumber = { $in: bedIds };
     }
 
-    const students = await Student.find(studentFilter)
-      .populate({
-        path: 'roomBedNumber',
-        select: 'barcodeId roomNo',
-      })
-      .select('studentId firstName lastName contactNumber roomBedNumber');
+    // Fetch students with attendance log and bed info
+    const allStudents = await Student.find(studentFilter)
+      .populate({ path: "roomBedNumber", select: "barcodeId roomNo" })
+      .select("studentId firstName lastName contactNumber roomBedNumber attendanceLog");
 
-    const formattedStudents = students.map(student => ({
-      studentId: student.studentId,
-      studentName: `${student.firstName} ${student.lastName}`,
-      contactNumber: student.contactNumber,
-      barcodeId: student.roomBedNumber?.barcodeId || null,
-      roomNo: student.roomBedNumber?.roomNo || null,
-    }));
+    const today = new Date();
+
+    // Get students currently on leave
+    const activeLeaveRecords = await Leave.find({
+      status: "approved",
+      startDate: { $lte: today },
+      endDate: { $gte: today },
+    });
+
+    const leaveStudentIds = activeLeaveRecords.map((leave) =>
+      leave.studentId.toString()
+    );
+
+    // Filter students based on status query
+    const filteredStudents = allStudents.filter((student) => {
+      const studentIdStr = student._id.toString();
+      const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
+      const isCheckedOut =
+        latestLog?.checkOutDate && new Date(latestLog.checkOutDate) <= today;
+      const isOnLeave = leaveStudentIds.includes(studentIdStr);
+
+      if (status === "Active") {
+        return !isOnLeave && !isCheckedOut;
+      } else if (status === "On Leave") {
+        return isOnLeave;
+      } else if (status === "Checked Out") {
+        return isCheckedOut && !isOnLeave; // Exclude if also on leave
+      } else {
+        return true; // No filter
+      }
+    });
+
+    // Format the final response
+    const formattedStudents = filteredStudents.map((student) => {
+      const studentIdStr = student._id.toString();
+      const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
+      const isCheckedOut =
+        latestLog?.checkOutDate && new Date(latestLog.checkOutDate) <= today;
+      const isOnLeave = leaveStudentIds.includes(studentIdStr);
+
+      let currentStatus = "Active";
+      if (isOnLeave) {
+        currentStatus = "On Leave"; // Highest priority
+      } else if (isCheckedOut) {
+        currentStatus = "Checked Out";
+      }
+
+      return {
+        studentId: student.studentId,
+        studentName: `${student.firstName} ${student.lastName}`,
+        contactNumber: student.contactNumber,
+        barcodeId: student.roomBedNumber?.barcodeId || null,
+        roomNo: student.roomBedNumber?.roomNo || null,
+        status: currentStatus,
+      };
+    });
 
     res.status(200).json({
       success: true,
       students: formattedStudents,
     });
   } catch (error) {
-    console.error('Error fetching student list:', error);
+    console.error("Error fetching student list:", error);
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch student list',
+      message: "Failed to fetch student list",
       error: error.message,
     });
   }
 };
+
 
 
 const updateStudentRoom = async (req, res) => {
@@ -508,23 +551,53 @@ const getAllAvailableBed = async (req, res) => {
 
 const getTotalStudents = async (req, res) => {
   try {
-    const count = await Student.countDocuments();
+    const totalStudents = await Student.countDocuments();
+    const today = new Date();
+
+    // Fetch on leave students
+    const onLeaveRecords = await Leave.find({
+      status: "approved",
+      startDate: { $lte: today },
+      endDate: { $gte: today },
+    });
+    const onLeaveStudentIds = new Set(onLeaveRecords.map(record => record.studentId.toString()));
+
+    // Fetch all students with attendance log
+    const allStudents = await Student.find().select("attendanceLog");
+    
+    let checkedOutCount = 0;
+    
+    for (let student of allStudents) {
+      const studentIdStr = student._id.toString();
+      const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
+
+      const isCheckedOut = latestLog?.checkOutDate && new Date(latestLog.checkOutDate) <= today;
+      const isOnLeave = onLeaveStudentIds.has(studentIdStr);
+
+      // Count as Checked Out only if not On Leave
+      if (isCheckedOut && !isOnLeave) {
+        checkedOutCount++;
+      }
+    }
+
+    const onLeave = onLeaveStudentIds.size;
+    const active = totalStudents - onLeave - checkedOutCount;
 
     res.status(200).json({
       success: true,
-      totalStudents: count,
+      totalStudents,
+      activeStudents: active,
+      onLeaveStudents: onLeave,
+      checkedOutStudents: checkedOutCount,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Failed to get total students",
+      message: "Failed to get student counts",
       error: error.message,
     });
   }
 };
-
-
-
 
 // <--------  inspection management Page ----------->
 
@@ -1072,7 +1145,7 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
-// Update emergency contact info for a student by studentId
+
 const updateEmergencyContact = async (req, res) => {
   try {
     const { studentId } = req.params;
