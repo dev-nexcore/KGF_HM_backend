@@ -30,6 +30,7 @@ const transporter = nodemailer.createTransport({
 });
 
 
+
 // <------------    Login Page For Warden  -------------->
 
  const login = async (req, res) => {
@@ -287,7 +288,6 @@ const getWardenDashboardStats = async (req, res) => {
 
 
 
-
 // <---------- bed allotment page -------->
 
 
@@ -469,7 +469,6 @@ const getStudentListForWarden = async (req, res) => {
 };
 
 
-
 const updateStudentRoom = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -599,6 +598,7 @@ const getTotalStudents = async (req, res) => {
   }
 };
 
+
 // <--------  inspection management Page ----------->
 
 
@@ -649,7 +649,7 @@ const getFilteredInspections = async (req, res) => {
 
     const match = {};
 
-    // Case-insensitive filters
+    //  Case-insensitive exact match for status and target
     if (status) {
       match.status = new RegExp(`^${status}$`, 'i');
     }
@@ -658,7 +658,7 @@ const getFilteredInspections = async (req, res) => {
       match.target = new RegExp(`^${target}$`, 'i');
     }
 
-    // Date range filter
+    //  Filter by exact date range (00:00 to 23:59 of that day)
     if (date) {
       const start = new Date(date);
       const end = new Date(date);
@@ -666,13 +666,15 @@ const getFilteredInspections = async (req, res) => {
       match.datetime = { $gte: start, $lt: end };
     }
 
+    //  Start aggregation pipeline
     const pipeline = [];
 
+    // Initial match stage if filters exist
     if (Object.keys(match).length > 0) {
       pipeline.push({ $match: match });
     }
 
-    // Extract time string
+    //  Add timeStr field from datetime
     pipeline.push({
       $addFields: {
         timeStr: {
@@ -685,19 +687,21 @@ const getFilteredInspections = async (req, res) => {
       },
     });
 
+    //  Match inspections by time string (e.g. "09", "10:30")
     if (time) {
       pipeline.push({
         $match: {
-          timeStr: { $regex: `^${time}` }, // partial match like "09" or "09:30"
+          timeStr: { $regex: `^${time}` }, // partial match
         },
       });
     }
 
+    //  Final formatting: sort and return only required fields
     pipeline.push(
       { $sort: { datetime: -1 } },
       {
         $project: {
-          _id: 1, 
+          _id: 1,
           title: 1,
           target: 1,
           status: 1,
@@ -713,6 +717,7 @@ const getFilteredInspections = async (req, res) => {
       }
     );
 
+    // Execute aggregation
     const inspections = await Inspection.aggregate(pipeline);
 
     res.status(200).json({
@@ -720,6 +725,7 @@ const getFilteredInspections = async (req, res) => {
       inspections,
     });
   } catch (error) {
+    console.error("Error in getFilteredInspections:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch inspections",
@@ -742,7 +748,6 @@ const getInspectionById = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to fetch inspection', error: error.message });
   }
 };
-
 
 
 const completeInspection = async (req, res) => {
@@ -892,7 +897,6 @@ const getLeaveRequestStats = async (req, res) => {
     res.status(500).json({ message: 'Server error', error });
   }
 };
-
 
 
 const filterLeaveRequests = async (req, res) => {
