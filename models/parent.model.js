@@ -14,6 +14,10 @@ const parentSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
+  profileImage: {
+  type: String,
+  default: null,
+},
   password: {
     type: String,
     required: false, // Changed from true to false - now optional

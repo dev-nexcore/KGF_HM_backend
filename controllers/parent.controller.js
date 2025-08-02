@@ -8,6 +8,9 @@ import { Warden } from "../models/warden.model.js";
 import { Otp } from "../models/otp.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Notice } from "../models/notice.model.js"; 
+import path from 'path';
+import fs from 'fs';
+
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -288,6 +291,190 @@ const resetPassword = async (req, res) => {
       .json({ message: "Server error during password reset." });
   }
 };
+
+const getProfile = async (req, res) => {
+  const parentStudentId = req.studentId; // From authenticateParent middleware
+
+  try {
+    // Find parent by studentId
+    const parent = await Parent.findOne({ studentId: parentStudentId });
+    if (!parent) {
+      return res.status(404).json({ message: "Parent not found" });
+    }
+
+    // Find associated student
+    const student = await Student.findOne({ studentId: parentStudentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Prepare profile data
+    const profileData = {
+      parentInfo: {
+        _id: parent._id,
+        studentId: parent.studentId,
+        firstName: parent.firstName,
+        lastName: parent.lastName,
+        email: parent.email,
+        contactNumber: parent.contactNumber,
+        profileImage: parent.profileImage || null,
+        createdAt: parent.createdAt,
+        updatedAt: parent.updatedAt
+      },
+      studentInfo: {
+        firstName: student.firstName,
+        lastName: student.lastName,
+        email: student.email,
+        contactNumber: student.contactNumber,
+        admissionDate: student.admissionDate,
+        emergencyContactName: student.emergencyContactName,
+        emergencyContactNumber: student.emergencyContactNumber
+      }
+    };
+
+    return res.json({
+      message: "Profile data fetched successfully",
+      profile: profileData
+    });
+
+  } catch (err) {
+    console.error("Get profile error:", err);
+    return res.status(500).json({ message: "Server error while fetching profile data." });
+  }
+};
+
+// Upload profile image
+const uploadProfileImage = async (req, res) => {
+  const parentStudentId = req.studentId; // From authenticateParent middleware
+
+  try {
+    // Find parent by studentId
+    const parent = await Parent.findOne({ studentId: parentStudentId });
+    if (!parent) {
+      return res.status(404).json({ message: "Parent not found" });
+    }
+
+    // Check if file was uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: "No image file provided" });
+    }
+
+    // Delete old profile image if exists
+    if (parent.profileImage) {
+      const oldImagePath = path.join(process.cwd(), parent.profileImage);
+      if (fs.existsSync(oldImagePath)) {
+        try {
+          fs.unlinkSync(oldImagePath);
+        } catch (error) {
+          console.log("Warning: Could not delete old profile image:", error.message);
+        }
+      }
+    }
+
+    // Update parent with new profile image path
+    const imagePath = `uploads/parents/${req.file.filename}`;
+    parent.profileImage = imagePath;
+    await parent.save();
+
+    return res.json({
+      message: "Profile image uploaded successfully",
+      profileImage: imagePath,
+      imageUrl: `${req.protocol}://${req.get('host')}/${imagePath}`
+    });
+
+  } catch (err) {
+    console.error("Upload profile image error:", err);
+    
+    // Delete uploaded file if there was an error
+    if (req.file) {
+      const filePath = path.join(process.cwd(), 'uploads/parents', req.file.filename);
+      if (fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (deleteError) {
+          console.log("Warning: Could not delete uploaded file after error:", deleteError.message);
+        }
+      }
+    }
+    
+    return res.status(500).json({ message: "Server error while uploading profile image." });
+  }
+};
+
+// Update profile information
+const updateProfile = async (req, res) => {
+  const parentStudentId = req.studentId; // From authenticateParent middleware
+  const { firstName, lastName, contactNumber } = req.body;
+
+  try {
+    // Find parent by studentId
+    const parent = await Parent.findOne({ studentId: parentStudentId });
+    if (!parent) {
+      return res.status(404).json({ message: "Parent not found" });
+    }
+
+    // Update fields if provided
+    if (firstName && firstName.trim()) parent.firstName = firstName.trim();
+    if (lastName && lastName.trim()) parent.lastName = lastName.trim();
+    if (contactNumber && contactNumber.trim()) parent.contactNumber = contactNumber.trim();
+
+    await parent.save();
+
+    return res.json({
+      message: "Profile updated successfully",
+      parent: {
+        studentId: parent.studentId,
+        firstName: parent.firstName,
+        lastName: parent.lastName,
+        email: parent.email,
+        contactNumber: parent.contactNumber,
+        profileImage: parent.profileImage
+      }
+    });
+
+  } catch (err) {
+    console.error("Update profile error:", err);
+    return res.status(500).json({ message: "Server error while updating profile." });
+  }
+};
+
+// Remove profile image
+const removeProfileImage = async (req, res) => {
+  const parentStudentId = req.studentId; // From authenticateParent middleware
+
+  try {
+    // Find parent by studentId
+    const parent = await Parent.findOne({ studentId: parentStudentId });
+    if (!parent) {
+      return res.status(404).json({ message: "Parent not found" });
+    }
+
+    // Delete profile image file if exists
+    if (parent.profileImage) {
+      const imagePath = path.join(process.cwd(), parent.profileImage);
+      if (fs.existsSync(imagePath)) {
+        try {
+          fs.unlinkSync(imagePath);
+        } catch (error) {
+          console.log("Warning: Could not delete profile image file:", error.message);
+        }
+      }
+    }
+
+    // Remove profile image from database
+    parent.profileImage = null;
+    await parent.save();
+
+    return res.json({
+      message: "Profile image removed successfully"
+    });
+
+  } catch (err) {
+    console.error("Remove profile image error:", err);
+    return res.status(500).json({ message: "Server error while removing profile image." });
+  }
+};
+
 
 // Dashboard controller for parent panel (unchanged)
 const dashboard = async (req, res) => {
@@ -818,6 +1005,10 @@ export {
   forgotPassword,    
   verifyOtp,
   resetPassword,
+  getProfile,
+  uploadProfileImage,
+  updateProfile,
+  removeProfileImage,
   dashboard,
   attendance,
   leaveManagement,
