@@ -29,6 +29,7 @@ import {
     getAllWarden, 
     deleteLeaveRequest,
   getAllAvailableBed,
+  deleteInspection,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -71,6 +72,7 @@ router.get('/filtered-inspections', getFilteredInspections);
 router.get('/recent-inspections/:id', getInspectionById); 
 router.patch('/recent-inspections/complete/:id', completeInspection);
 router.get('/inspection-stats', getInspectionStats);
+router.delete('/recent-inspections/:id', deleteInspection);
 
 
 

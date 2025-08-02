@@ -725,6 +725,20 @@ const getInspectionStats = async (req, res) => {
 };
 
 
+const deleteInspection = async (req, res) => {  
+  const { id } = req.params;
+  try {         
+    const inspection = await Inspection.findByIdAndDelete(id);
+    if (!inspection) {
+      return res.status(404).json({ success: false, message: 'Inspection not found' });
+    }   
+    res.status(200).json({ success: true, message: 'Inspection deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting inspection:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+};
+
 
 
 // <--------- Leave Request Management Page ----------->
@@ -1136,5 +1150,6 @@ export {
   updateEmergencyContact,
   getAllWarden,
   deleteLeaveRequest,
-  getAllAvailableBed
+  getAllAvailableBed,
+  deleteInspection
 }
