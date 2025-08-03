@@ -650,13 +650,26 @@ const getStudentProfile = async (req, res) => {
       }
     }
 
+    let imageUrl = null;
+
+    if (student.profileImage && typeof student.profileImage === "string" && student.profileImage.trim() !== "") {
+      const imgPath = student.profileImage.replace(/\\/g, "/");
+
+      // Avoid double prefix
+      imageUrl = imgPath.startsWith("http")
+        ? imgPath
+        : `${req.protocol}://${req.get("host")}/${imgPath}`;
+    }
+
+    console.log("✔️ Profile image URL sent:", imageUrl);
+
     return res.json({
       firstName: student.firstName,
       lastName: student.lastName,
       studentId: student.studentId,
       email: student.email,
       contactNumber: student.contactNumber,
-      profileImage: student.profileImage || null,
+      profileImage: imageUrl,
       roomNo,
       bedAllotment,
       barcodeId,
