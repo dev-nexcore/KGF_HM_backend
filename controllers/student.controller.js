@@ -181,7 +181,7 @@ const resetPassword = async (req, res) => {
 
 
 const checkInStudent = async (req, res) => {
-  const { studentId } = req.body;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -226,7 +226,7 @@ const checkInStudent = async (req, res) => {
 
 
 const checkOutStudent = async (req, res) => {
-  const { studentId } = req.body;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -267,7 +267,8 @@ const checkOutStudent = async (req, res) => {
 
 
 const fileComplaint = async (req, res) => {
-  const { studentId, complaintType, subject, description } = req.body;
+  const { complaintType, subject, description } = req.body;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -300,7 +301,7 @@ const fileComplaint = async (req, res) => {
 
 
 const getComplaintHistory = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -309,7 +310,7 @@ const getComplaintHistory = async (req, res) => {
     }
 
     const complaints = await Complaint.find({ studentId: student._id }).select(
-      "complaintType subject filedDate status createdAt"
+      "complaintType subject description filedDate status createdAt"
     );
 
     return res.json({ complaints });
@@ -321,18 +322,14 @@ const getComplaintHistory = async (req, res) => {
 
 
 const applyForLeave = async (req, res) => {
-  const { studentId, leaveType, startDate, endDate, reason } = req.body;
+  const studentId = req.studentId; // From token
+
+  const { leaveType, startDate, endDate, reason } = req.body;
 
   try {
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
-    }
-
-    // Find the parent associated with this student
-    const parent = await Parent.findOne({ studentId: student.studentId });
-    if (!parent) {
-      return res.status(404).json({ message: "Parent not found for this student" });
     }
 
     const newLeave = new Leave({
@@ -346,7 +343,7 @@ const applyForLeave = async (req, res) => {
 
     await newLeave.save();
 
-    // Format dates for email
+    // Format dates
     const formattedStartDate = new Date(startDate).toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
@@ -361,83 +358,30 @@ const applyForLeave = async (req, res) => {
       timeZone: 'Asia/Kolkata'
     });
 
-    // Calculate duration
     const durationMs = new Date(endDate) - new Date(startDate);
     const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
 
-    // Send email to admin (existing functionality)
+    // Send email to admin only
     await transporter.sendMail({
       from: `<${student.email}>`,
       to: process.env.MAIL_USER,
       subject: `Leave Application: ${leaveType} from ${student.firstName}`,
-      text: `${newLeave.reason}`,
-    });
-
-    // Send email to parent with leave details and link
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: parent.email,
-      subject: `Leave Application from ${student.firstName} ${student.lastName}`,
-      text: `Dear ${parent.firstName} ${parent.lastName},
-
-Your child ${student.firstName} ${student.lastName} (Student ID: ${student.studentId}) has submitted a leave application.
-
-Leave Details:
-• Leave Type: ${leaveType}
-• From Date: ${formattedStartDate}
-• To Date: ${formattedEndDate}
-• Duration: ${durationDays} day${durationDays !== 1 ? 's' : ''}
-• Reason: ${reason}
-• Status: Pending Approval
-
-Please review this leave application by visiting the Parent Portal:
-👉 https://www.KGF-HM.com/dashboard/leave-management
-
-You can view all leave applications and their current status in the Leave Management section.
-
-If you have any questions or concerns, please contact the hostel administration.
-
-– Hostel Admin`,
-      // Replace the HTML section in your applyForLeave controller:
-
       html: `
-  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-    <h2 style="color: #333; text-align: center;">Leave Application Notification</h2>
-    
-    <p>Dear <strong>${parent.firstName} ${parent.lastName}</strong>,</p>
-    
-    <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has submitted a leave application.</p>
-    
-    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-      <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
-      <ul style="list-style: none; padding: 0;">
-        <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leaveType}</li>
-        <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
-        <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
-        <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
-        <li style="margin: 8px 0;"><strong>Reason:</strong> ${reason}</li>
-        <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: #orange;">Pending Approval</span></li>
-      </ul>
-    </div>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="http://localhost:3000/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-        View Leave Application
-      </a>
-    </div>
-    
-    <p>You can view all leave applications and their current status in the Leave Management section of the Parent Portal.</p>
-    
-    <p>If you have any questions or concerns, please contact the hostel administration.</p>
-    
-    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-    <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
-  </div>
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Leave Application</h2>
+          <p><strong>Student:</strong> ${student.firstName} ${student.lastName} (ID: ${student.studentId})</p>
+          <p><strong>Type:</strong> ${leaveType}</p>
+          <p><strong>From:</strong> ${formattedStartDate}</p>
+          <p><strong>To:</strong> ${formattedEndDate}</p>
+          <p><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</p>
+          <p><strong>Reason:</strong> ${reason}</p>
+          <p>Status: <strong style="color: orange;">Pending</strong></p>
+        </div>
       `
     });
 
     return res.json({
-      message: "Leave application submitted successfully. Parent has been notified via email.",
+      message: "Leave application submitted successfully.",
       leave: newLeave
     });
   } catch (err) {
@@ -447,8 +391,9 @@ If you have any questions or concerns, please contact the hostel administration.
 };
 
 
+
 const getLeaveHistory = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -469,7 +414,8 @@ const getLeaveHistory = async (req, res) => {
 
 
 const requestRefund = async (req, res) => {
-  const { studentId, refundType, amount, reason } = req.body;
+  const { refundType, amount, reason } = req.body;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -508,7 +454,7 @@ const requestRefund = async (req, res) => {
 
 
 const getRefundHistory = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -651,7 +597,11 @@ const deleteMyProfileImage = async (req, res) => {
 
 const getStudentProfile = async (req, res) => {
   // 🔧 UPDATED: Handle both parent and student tokens
-  let studentId;
+  let studentId = req.params.studentId || req.studentId;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "Student ID not found" });
+  }
 
   if (req.params.studentId) {
     // Called with studentId parameter (from parent or direct access)
@@ -719,7 +669,7 @@ const getStudentProfile = async (req, res) => {
 };
 
 const updateStudentProfile = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.studentId;
   const {
     firstName,
     lastName,
@@ -751,7 +701,7 @@ const updateStudentProfile = async (req, res) => {
 
 
 const getCurrentFeesStatus = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.studentId;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -817,7 +767,7 @@ const getNextInspection = async (req, res) => {
     }).sort({ datetime: 1 });
 
     if (!nextInspection) {
-      return res.status(404).json({ message: 'No upcoming inspections for this room' });
+      return res.status(200).json({ message: 'No upcoming inspections for this room' });
     }
 
     return res.json({
@@ -863,8 +813,13 @@ const getAttendanceLog = async (req, res) => {
 
 
 const getAttendanceSummary = async (req, res) => {
-  const { studentId } = req.params;
+  const studentId = req.params.studentId;
+  const authenticatedStudentId = req.studentId; // set by verifyStudentOrParentToken middleware
   const { range } = req.query;
+
+  if (studentId !== authenticatedStudentId) {
+    return res.status(403).json({ message: 'Forbidden: Access denied to this student\'s attendance.' });
+  }
 
   if (!['day', 'week', 'month'].includes(range)) {
     return res.status(400).json({ message: 'Invalid range parameter' });
@@ -876,12 +831,19 @@ const getAttendanceSummary = async (req, res) => {
 
   if (range === 'day') {
     startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  } else if (range === 'week') {
-    // Week starts from Sunday (0)
-    const dayOfWeek = now.getDay();
+    endDate = new Date(startDate);
+    endDate.setHours(23, 59, 59, 999);
+  }
+  else if (range === 'week') {
+    const dayOfWeek = now.getDay(); // 0 (Sun) to 6 (Sat)
     startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
-    // endDate = startDate + 6 days (optional, here just use now)
-  } else if (range === 'month') {
+    startDate.setHours(0, 0, 0, 0); // Ensure start at midnight
+
+    endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6); // Full 7-day week
+    endDate.setHours(23, 59, 59, 999); // End of last day
+  }
+  else if (range === 'month') {
     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     // endDate = last day of the month
     endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
@@ -955,7 +917,6 @@ const getAttendanceSummary = async (req, res) => {
     res.status(500).json({ message: 'Server error while fetching attendance summary' });
   }
 };
-
 
 const getNotificationStatus = async (req, res) => {
   const studentId = req.studentId;
