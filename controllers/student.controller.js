@@ -275,26 +275,170 @@ const fileComplaint = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Process uploaded files (if any)
+    const attachments = [];
+    if (req.files && req.files.length > 0) {
+      req.files.forEach(file => {
+        attachments.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          mimeType: file.mimetype,
+          size: file.size,
+          path: file.path
+        });
+      });
+    }
+
     const newComplaint = new Complaint({
       studentId: student._id,
       complaintType,
       subject,
       description,
+      attachments
     });
 
     await newComplaint.save();
 
+    // Prepare email content
+    let emailText = `New Complaint Filed:
+
+Student Details:
+- Name: ${student.studentName}
+- Student ID: ${student.studentId}
+- Email: ${student.email}
+- Room/Bed: ${student.roomBedNumber || 'Not specified'}
+
+Complaint Details:
+- Type: ${complaintType}
+- Subject: ${subject}
+- Description: ${description}
+- Filed Date: ${new Date().toLocaleDateString('en-IN')}
+
+${attachments.length > 0 ? `\nAttachments: ${attachments.length} file(s) attached` : ''}
+
+Please review and respond accordingly.
+
+Hostel Management System`;
+
+    // Send email notification to admin
     await transporter.sendMail({
-      from: `<${student.email}>`,
-      to: process.env.MAIL_USER,
-      subject: `${subject}`,
-      text: `${description}`
+      from: `"Hostel System" <${process.env.MAIL_USER}>`,
+      to: process.env.MAIL_USER, // Admin email
+      subject: `New Complaint: ${subject} - ${student.studentName}`,
+      text: emailText
     });
 
-    return res.json({ message: "Complaint filed successfully", complaint: newComplaint });
+    // Send confirmation email to student
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: student.email,
+      subject: `Complaint Filed Successfully - ${subject}`,
+      text: `Hello ${student.studentName},
+
+Your complaint has been filed successfully and assigned ticket ID: #${String(newComplaint._id).slice(-4).toUpperCase()}
+
+Complaint Details:
+- Subject: ${subject}
+- Type: ${complaintType}
+- Status: In Progress
+- Filed Date: ${new Date().toLocaleDateString('en-IN')}
+
+${attachments.length > 0 ? `Attachments: ${attachments.length} file(s) uploaded` : ''}
+
+We will review your complaint and get back to you soon.
+
+Thank you for bringing this to our attention.
+
+- Hostel Administration`
+    });
+
+    return res.json({ 
+      message: "Complaint filed successfully", 
+      complaint: {
+        _id: newComplaint._id,
+        ticketId: `#${String(newComplaint._id).slice(-4).toUpperCase()}`,
+        subject: newComplaint.subject,
+        complaintType: newComplaint.complaintType,
+        status: newComplaint.status,
+        filedDate: newComplaint.filedDate,
+        attachments: newComplaint.attachments.length
+      }
+    });
   } catch (err) {
     console.error("File complaint error:", err);
     return res.status(500).json({ message: "Server error while filing complaint." });
+  }
+};
+
+// Get student complaints with attachments
+const getStudentComplaints = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const complaints = await Complaint.find({ studentId: student._id })
+      .select('complaintType subject description status filedDate attachments createdAt')
+      .sort({ filedDate: -1 });
+
+    const formattedComplaints = complaints.map(complaint => ({
+      _id: complaint._id,
+      ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
+      complaintType: complaint.complaintType,
+      subject: complaint.subject,
+      description: complaint.description,
+      status: complaint.status,
+      filedDate: complaint.filedDate,
+      createdAt: complaint.createdAt,
+      hasAttachments: complaint.attachments.length > 0,
+      attachmentCount: complaint.attachments.length
+    }));
+
+    return res.json({ 
+      message: "Complaints fetched successfully",
+      complaints: formattedComplaints
+    });
+  } catch (err) {
+    console.error("Get student complaints error:", err);
+    return res.status(500).json({ message: "Server error while fetching complaints." });
+  }
+};
+
+// Get complaint attachment (for downloading/viewing)
+const getComplaintAttachment = async (req, res) => {
+  const { complaintId, attachmentId } = req.params;
+
+  try {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    const attachment = complaint.attachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: "Attachment not found" });
+    }
+
+    // Check if file exists
+    const fs = await import('fs');
+    if (!fs.existsSync(attachment.path)) {
+      return res.status(404).json({ message: "File not found on server" });
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', attachment.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${attachment.originalName}"`);
+
+    // Stream the file
+    const path = await import('path');
+    return res.sendFile(path.resolve(attachment.path));
+
+  } catch (err) {
+    console.error("Get attachment error:", err);
+    return res.status(500).json({ message: "Server error while fetching attachment." });
   }
 };
 
@@ -1102,6 +1246,8 @@ export {
   checkInStudent,
   checkOutStudent,
   fileComplaint,
+  getStudentComplaints,
+  getComplaintAttachment,
   getComplaintHistory,
   applyForLeave,
   getLeaveHistory,

@@ -4,8 +4,7 @@ import { Complaint } from '../../models/complaint.model.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
 // configure SMTP transporter
-const transporter = nodemailer.createTransport({
-
+const transporter = nodemailer.createTransporter({
     host:    process.env.MAIL_HOST,      // smtp.gmail.com
   port:   +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
@@ -40,7 +39,7 @@ const getAllComplaints = async (req, res) => {
     // Get complaints with student details
     const complaints = await Complaint.find(query)
       .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
-      .select('complaintType subject description status filedDate createdAt updatedAt')
+      .select('complaintType subject description status filedDate createdAt updatedAt attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -77,10 +76,13 @@ const getAllComplaints = async (req, res) => {
         complaintType: complaint.complaintType,
         status: complaint.status,
         filedDate: complaint.filedDate,
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length,
         raisedBy: complaint.studentId ? {
           name: complaint.studentId.studentName,
           studentId: complaint.studentId.studentId,
-          email: complaint.studentId.email
+          email: complaint.studentId.email,
+          roomBedNumber: complaint.studentId.roomBedNumber
         } : null
       })),
       counts,
@@ -106,7 +108,7 @@ const getOpenComplaints = async (req, res) => {
 
     const openComplaints = await Complaint.find({ status: 'in progress' })
       .populate('studentId', 'studentName studentId email contactNumber')
-      .select('complaintType subject description status filedDate')
+      .select('complaintType subject description status filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -123,6 +125,8 @@ const getOpenComplaints = async (req, res) => {
         complaintType: complaint.complaintType,
         status: complaint.status,
         filedDate: complaint.filedDate,
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length,
         raisedBy: complaint.studentId ? {
           name: complaint.studentId.studentName,
           studentId: complaint.studentId.studentId,
@@ -151,7 +155,7 @@ const getResolvedComplaints = async (req, res) => {
 
     const resolvedComplaints = await Complaint.find({ status: 'resolved' })
       .populate('studentId', 'studentName studentId email contactNumber')
-      .select('complaintType subject description status filedDate updatedAt')
+      .select('complaintType subject description status filedDate updatedAt attachments')
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -169,6 +173,8 @@ const getResolvedComplaints = async (req, res) => {
         status: complaint.status,
         filedDate: complaint.filedDate,
         resolvedDate: complaint.updatedAt,
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length,
         raisedBy: complaint.studentId ? {
           name: complaint.studentId.studentName,
           studentId: complaint.studentId.studentId,
@@ -231,6 +237,7 @@ Complaint Details:
 • Type: ${complaint.complaintType}
 • Status: ${statusText}
 • Filed Date: ${new Date(complaint.filedDate).toLocaleDateString("en-IN")}
+${complaint.attachments.length > 0 ? `• Attachments: ${complaint.attachments.length} file(s)` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
 ${status === 'resolved' ? 
@@ -255,7 +262,7 @@ If you have any questions, please contact the hostel administration.
       // Don't fail the entire operation if email fails
     }
 
-        await createAuditLog({
+    await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: status === 'resolved' ? AuditActionTypes.COMPLAINT_RESOLVED : AuditActionTypes.COMPLAINT_UPDATED,
@@ -266,7 +273,9 @@ If you have any questions, please contact the hostel administration.
       additionalData: {
         complaintType: complaint.complaintType,
         subject: complaint.subject,
-        adminNotes
+        adminNotes,
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length
       }
     });
 
@@ -281,6 +290,8 @@ If you have any questions, please contact the hostel administration.
         status: complaint.status,
         filedDate: complaint.filedDate,
         updatedAt: new Date(),
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length,
         student: {
           studentName: student.studentName,
           studentId: student.studentId
@@ -318,10 +329,15 @@ const getComplaintStatistics = async (req, res) => {
       }
     ]);
 
+    // Get complaints with attachments count
+    const complaintsWithAttachments = await Complaint.countDocuments({
+      'attachments.0': { $exists: true }
+    });
+
     // Get recent complaints (last 5)
     const recentComplaints = await Complaint.find()
       .populate('studentId', 'studentName studentId')
-      .select('complaintType subject status filedDate')
+      .select('complaintType subject status filedDate attachments')
       .sort({ filedDate: -1 })
       .limit(5);
 
@@ -331,7 +347,8 @@ const getComplaintStatistics = async (req, res) => {
         open: totalOpen,
         resolved: totalResolved,
         thisMonth: thisMonthComplaints,
-        total: totalOpen + totalResolved
+        total: totalOpen + totalResolved,
+        withAttachments: complaintsWithAttachments
       },
       complaintTypeBreakdown: complaintTypeStats,
       recentComplaints: recentComplaints.map(complaint => ({
@@ -341,6 +358,8 @@ const getComplaintStatistics = async (req, res) => {
         complaintType: complaint.complaintType,
         status: complaint.status,
         filedDate: complaint.filedDate,
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length,
         raisedBy: complaint.studentId ? complaint.studentId.studentName : 'Unknown'
       }))
     });
@@ -351,7 +370,7 @@ const getComplaintStatistics = async (req, res) => {
   }
 };
 
-// Get specific complaint details
+// Get specific complaint details with attachments
 const getComplaintDetails = async (req, res) => {
   const { complaintId } = req.params;
 
@@ -374,6 +393,15 @@ const getComplaintDetails = async (req, res) => {
         status: complaint.status,
         filedDate: complaint.filedDate,
         updatedAt: complaint.updatedAt,
+        adminNotes: complaint.adminNotes || '',
+        attachments: complaint.attachments.map(attachment => ({
+          _id: attachment._id,
+          filename: attachment.filename,
+          originalName: attachment.originalName,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          uploadedAt: attachment.uploadedAt
+        })),
         student: complaint.studentId ? {
           name: complaint.studentId.studentName,
           studentId: complaint.studentId.studentId,
@@ -387,6 +415,41 @@ const getComplaintDetails = async (req, res) => {
   } catch (err) {
     console.error("Fetch complaint details error:", err);
     return res.status(500).json({ message: "Server error while fetching complaint details." });
+  }
+};
+
+// Get complaint attachment (for downloading/viewing)
+const getComplaintAttachment = async (req, res) => {
+  const { complaintId, attachmentId } = req.params;
+
+  try {
+    const complaint = await Complaint.findById(complaintId);
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+
+    const attachment = complaint.attachments.id(attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ message: "Attachment not found" });
+    }
+
+    // Check if file exists
+    const fs = await import('fs');
+    if (!fs.existsSync(attachment.path)) {
+      return res.status(404).json({ message: "File not found on server" });
+    }
+
+    // Set appropriate headers
+    res.setHeader('Content-Type', attachment.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${attachment.originalName}"`);
+
+    // Stream the file
+    const path = await import('path');
+    return res.sendFile(path.resolve(attachment.path));
+
+  } catch (err) {
+    console.error("Get attachment error:", err);
+    return res.status(500).json({ message: "Server error while fetching attachment." });
   }
 };
 
@@ -439,6 +502,7 @@ Complaint Details:
 • Subject: ${complaint.subject}
 • Type: ${complaint.complaintType}
 • Status: ${statusText}
+${complaint.attachments && complaint.attachments.length > 0 ? `• Attachments: ${complaint.attachments.length} file(s)` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
 Filed Date: ${new Date(complaint.filedDate).toLocaleDateString("en-IN")}
@@ -463,6 +527,23 @@ ${status === 'resolved' ?
 
     await Promise.all(emailPromises);
 
+    // Create audit log for bulk update
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: status === 'resolved' ? AuditActionTypes.COMPLAINT_RESOLVED : AuditActionTypes.COMPLAINT_UPDATED,
+      description: `Bulk ${status === 'resolved' ? 'resolved' : 'updated'} ${updateResult.modifiedCount} complaints`,
+      targetType: 'Complaint',
+      targetId: 'bulk_update',
+      targetName: `Bulk Update - ${updateResult.modifiedCount} complaints`,
+      additionalData: {
+        complaintIds,
+        status,
+        adminNotes,
+        affectedCount: updateResult.modifiedCount
+      }
+    });
+
     return res.json({ 
       message: `${updateResult.modifiedCount} complaints marked as ${status} successfully`,
       updatedCount: updateResult.modifiedCount,
@@ -482,6 +563,6 @@ export{
     updateComplaintStatus,
     getComplaintStatistics,
     getComplaintDetails,
-    bulkUpdateComplaintStatus
+    bulkUpdateComplaintStatus,
+    getComplaintAttachment
 }
-

@@ -7,6 +7,8 @@ import {
     checkInStudent,
     checkOutStudent,
     fileComplaint,
+    getStudentComplaints,
+    getComplaintAttachment,
     getComplaintHistory,
     applyForLeave,
     getLeaveHistory,
@@ -25,7 +27,7 @@ import {
     markNotificationsSeen
 } from '../controllers/student.controller.js';
 import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
-import { uploadStudent } from '../middleware/upload.js';
+import { uploadStudent, uploadComplaint } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -44,7 +46,9 @@ router.use(verifyStudentToken);
 router.post('/check-in', checkInStudent);
 router.post('/check-out', checkOutStudent);
 
-router.post("/complaint", fileComplaint);
+router.post('/complaint', uploadComplaint.array('attachments', 5), fileComplaint);
+router.get('/complaints/:studentId', getStudentComplaints);
+router.get('/complaint/:complaintId/attachment/:attachmentId', getComplaintAttachment);
 router.get("/complaints/:studentId", getComplaintHistory);
 
 router.post("/leave", applyForLeave);

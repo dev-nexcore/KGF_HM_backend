@@ -10,7 +10,7 @@ const complaintSchema = new mongoose.Schema(
     complaintType: {
       type: String,
       required: true,
-      enum: ["Maintenance issue", "Noice Disturbance", "Damages fee"],
+      enum: ["Maintenance issue", "Noise Disturbance", "Damages fee"],
     },
     subject: {
       type: String,
@@ -29,6 +29,32 @@ const complaintSchema = new mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    attachments: [{
+    filename: {
+      type: String,
+      required: true
+    },
+    originalName: {
+      type: String,
+      required: true
+    },
+    mimeType: {
+      type: String,
+      required: true
+    },
+    size: {
+      type: Number,
+      required: true
+    },
+    path: {
+      type: String,
+      required: true
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
   },
   { timestamps: true }
 );

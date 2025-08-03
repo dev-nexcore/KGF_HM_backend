@@ -114,6 +114,7 @@ router.get('/complaints/open', getOpenComplaints);
 router.get('/complaints/resolved', getResolvedComplaints);
 router.get('/complaints/statistics', getComplaintStatistics);
 router.get('/complaints/:complaintId', getComplaintDetails);
+router.get('/complaints/:complaintId/attachment/:attachmentId', getComplaintAttachment);
 router.put('/complaints/:complaintId/status', updateComplaintStatus);
 router.put('/complaints/bulk-status', bulkUpdateComplaintStatus);
 
