@@ -10,7 +10,11 @@ const refundSchema = new mongoose.Schema(
     refundType: {
       type: String,
       required: true,
-      enum: ["Security Deposit", "Damages Fee", "Mess fee Overpayment"],
+      enum: ["Security Deposit", "Damages Fee", "Mess fee Overpayment", "Others"],
+    },
+    otherRefundType: {
+      type: String,
+      default: "",
     },
     amount: {
       type: Number,

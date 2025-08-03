@@ -267,7 +267,7 @@ const checkOutStudent = async (req, res) => {
 
 
 const fileComplaint = async (req, res) => {
-  const { complaintType, subject, description } = req.body;
+  const { complaintType, subject, description, otherComplaintType } = req.body;
   const studentId = req.studentId;
 
   try {
@@ -279,6 +279,7 @@ const fileComplaint = async (req, res) => {
     const newComplaint = new Complaint({
       studentId: student._id,
       complaintType,
+      otherComplaintType: complaintType === "Others" ? otherComplaintType : "",
       subject,
       description,
     });
@@ -288,7 +289,7 @@ const fileComplaint = async (req, res) => {
     await transporter.sendMail({
       from: `<${student.email}>`,
       to: process.env.MAIL_USER,
-      subject: `${subject}`,
+      subject: `${complaintType === "Others" ? otherComplaintType : complaintType} - ${subject}`,
       text: `${description}`
     });
 
@@ -324,7 +325,7 @@ const getComplaintHistory = async (req, res) => {
 const applyForLeave = async (req, res) => {
   const studentId = req.studentId; // From token
 
-  const { leaveType, startDate, endDate, reason } = req.body;
+  const { leaveType, startDate, endDate, reason, otherLeaveType } = req.body;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -335,6 +336,7 @@ const applyForLeave = async (req, res) => {
     const newLeave = new Leave({
       studentId: student._id,
       leaveType,
+      otherLeaveType: leaveType === 'Others' ? otherLeaveType : '',
       startDate,
       endDate,
       reason,
@@ -414,7 +416,7 @@ const getLeaveHistory = async (req, res) => {
 
 
 const requestRefund = async (req, res) => {
-  const { refundType, amount, reason } = req.body;
+  const { refundType, amount, reason, otherRefundType } = req.body;
   const studentId = req.studentId;
 
   try {
@@ -426,6 +428,7 @@ const requestRefund = async (req, res) => {
     const newRefund = new Refund({
       studentId: student._id,
       refundType,
+      otherRefundType: refundType === "Others" ? otherRefundType : "",
       amount,
       reason,
       status: "pending",
@@ -436,7 +439,8 @@ const requestRefund = async (req, res) => {
     await transporter.sendMail({
       from: `<${student.email}>`,
       to: process.env.MAIL_USER,
-      subject: `Refund Request: ${refundType} from ${student.firstName}`,
+      subject: `Refund Request: ${refundType === "Others" ? `Other (${otherRefundType})` : refundType
+        } from ${student.firstName}`,
       text: `Refund Amount: ${amount}\nReason: ${reason}`,
     });
 
