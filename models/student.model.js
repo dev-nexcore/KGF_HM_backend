@@ -9,10 +9,10 @@ const studentSchema = new mongoose.Schema({
   contactNumber: { type: String, required: true },
   // roomBedNumber: { type: String, required: true },
   roomBedNumber: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'Inventory',
-  required: true
-},
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Inventory',
+    required: true
+  },
   profileImage: { type: String, default: null },
   email: { type: String, required: true, unique: true },
   admissionDate: { type: Date, required: true },
@@ -21,10 +21,14 @@ const studentSchema = new mongoose.Schema({
   relation: { type: String },
   emergencyContactNumber: { type: String },
   password: { type: String, required: true },
-   attendanceLog: [
+  attendanceLog: [
     {
       checkInDate: { type: Date, required: true },
       checkOutDate: { type: Date, default: null },
+      checkInSelfie: { type: String },
+      checkOutSelfie: { type: String },
+      checkInLocation: { lat: Number, lng: Number },
+      checkOutLocation: { lat: Number, lng: Number }
     }
   ],
 });
