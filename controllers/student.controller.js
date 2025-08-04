@@ -182,9 +182,22 @@ const resetPassword = async (req, res) => {
 
 
 const checkInStudent = async (req, res) => {
+  const { selfie, location } = req.body;
   const studentId = req.studentId;
 
   try {
+
+    if (!selfie || !location) {
+      return res.status(400).json({ message: 'Missing selfie or location' });
+    }
+
+    const { lat, lng } = location;
+    const hostelLat = 19.0760, hostelLng = 72.8777;
+    const distance = getDistanceKm(lat, lng, hostelLat, hostelLng);
+    if (distance > 0.3) {
+      return res.status(403).json({ message: 'You are not near the hostel.' });
+    }
+
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
@@ -196,9 +209,13 @@ const checkInStudent = async (req, res) => {
     if (latestEntry && !latestEntry.checkOutDate) {
       return res.status(400).json({ message: "Already checked in, checkout first" });
     }
+    
+    const selfieURL = await uploadSelfie(selfie, `${studentId}_checkin_${Date.now()}.jpg`);
 
     const newCheckIn = {
-      checkInDate: new Date()
+      checkInDate: new Date(),
+      selfie: selfieURL,
+      checkInLocation: { lat, lng },
     };
 
     student.attendanceLog.push(newCheckIn);
@@ -227,9 +244,21 @@ const checkInStudent = async (req, res) => {
 
 
 const checkOutStudent = async (req, res) => {
+  const { selfie, location } = req.body;
   const studentId = req.studentId;
 
   try {
+    if (!selfie || !location) {
+      return res.status(400).json({ message: "Missing selfie or location" });
+    }
+
+    const { lat, lng } = location;
+    const hostelLat = 19.0760, hostelLng = 72.8777;
+    const distance = getDistanceKm(lat, lng, hostelLat, hostelLng);
+
+    if (distance > 0.3) {
+      return res.status(403).json({ message: 'You are not near the hostel.' });
+    }
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
@@ -240,8 +269,12 @@ const checkOutStudent = async (req, res) => {
     if (!latestEntry || latestEntry.checkOutDate) {
       return res.status(400).json({ message: "No active check-in found" });
     }
+    
+    const selfieURL = await uploadSelfie(selfie, `${studentId}_checkout_${Date.now()}.jpg`);
 
     latestEntry.checkOutDate = new Date();
+    latestEntry.checkOutSelfie = selfieURL;
+    latestEntry.checkOutLocation = { lat, lng };
     await student.save();
 
     const istTime = new Date(latestEntry.checkOutDate).toLocaleString("en-US", {
@@ -1112,7 +1145,7 @@ const getNotifications = async (req, res) => {
   try {
     const studentObjectId = req.student._id;  // get ObjectId from middleware
 
-    const notifications = await Notification.find({ studentId: studentObjectId,seen: false, })
+    const notifications = await Notification.find({ studentId: studentObjectId, seen: false, })
       .sort({ createdAt: -1 })
       .limit(50);
 

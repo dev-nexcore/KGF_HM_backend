@@ -25,6 +25,10 @@ const studentSchema = new mongoose.Schema({
     {
       checkInDate: { type: Date, required: true },
       checkOutDate: { type: Date, default: null },
+      checkInSelfie: { type: String },
+      checkOutSelfie: { type: String },
+      checkInLocation: { lat: Number, lng: Number },
+      checkOutLocation: { lat: Number, lng: Number }
     }
   ],
 });
