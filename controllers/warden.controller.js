@@ -246,11 +246,12 @@ const punchOut = async (req, res) => {
     await warden.save();
 
     return res.status(200).json({
-      message: 'Punch out recorded successfully',
-      punchIn: log.punchIn,
-      punchOut: log.punchOut,
-      totalHours: log.totalHours,
-    });
+  message: 'Punch out recorded successfully',
+  punchIn: log.punchIn?.toISOString(),   // ✅ ensure valid string
+  punchOut: log.punchOut?.toISOString(), // ✅ ensure valid string
+  totalHours: log.totalHours,
+});
+
   } catch (error) {
     console.error('Punch Out Error:', error);
     res.status(500).json({ message: 'Server Error' });

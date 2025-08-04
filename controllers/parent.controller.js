@@ -343,6 +343,46 @@ const getProfile = async (req, res) => {
   }
 };
 
+const getStudentProfile = async (req, res) => {
+  try {
+    const parentStudentId = req.studentId; // From the parent's JWT token
+    
+    // Fetch student data
+    const student = await Student.findOne({ studentId: parentStudentId })
+      .select('firstName lastName studentId email contactNumber roomNo bedAllotment lastCheckInDate profileImage createdAt updatedAt');
+    
+    if (!student) {
+      return res.status(404).json({ message: 'Student not found' });
+    }
+
+    // Format the response to match what the parent panel expects
+    const studentProfile = {
+      firstName: student.firstName,
+      lastName: student.lastName,
+      studentId: student.studentId,
+      email: student.email,
+      contactNumber: student.contactNumber,
+      roomNo: student.roomNo,
+      bedAllotment: student.bedAllotment,
+      lastCheckInDate: student.lastCheckInDate,
+      profileImage: student.profileImage ? `${req.protocol}://${req.get('host')}/${student.profileImage}` : null,
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt
+    };
+
+    res.json({
+      success: true,
+      student: studentProfile
+    });
+
+  } catch (error) {
+    console.error('Error fetching student profile for parent:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to fetch student profile' 
+    });
+  }
+};
 // Upload profile image
 const uploadProfileImage = async (req, res) => {
   const parentStudentId = req.studentId; // From authenticateParent middleware
@@ -1006,6 +1046,7 @@ export {
   verifyOtp,
   resetPassword,
   getProfile,
+  getStudentProfile,
   uploadProfileImage,
   updateProfile,
   removeProfileImage,
