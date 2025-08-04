@@ -214,7 +214,7 @@ const checkInStudent = async (req, res) => {
 
     const newCheckIn = {
       checkInDate: new Date(),
-      selfie: selfieURL,
+      checkInSelfie: selfieURL,
       checkInLocation: { lat, lng },
     };
 
