@@ -14,6 +14,7 @@ import { Fee } from "../models/fee.model.js";
 import { Notice } from "../models/notice.model.js";
 import { Inspection } from '../models/inspection.model.js';
 import { Inventory } from '../models/inventory.model.js';
+import { Notification } from '../models/notification.model.js';
 // import { Payment } from "../models/payment.model.js";
 
 
@@ -302,8 +303,8 @@ const fileComplaint = async (req, res) => {
     await newComplaint.save();
 
     // Determine display type for emails
-    const displayType = complaintType === "Others" && otherComplaintType 
-      ? `Others (${otherComplaintType})` 
+    const displayType = complaintType === "Others" && otherComplaintType
+      ? `Others (${otherComplaintType})`
       : complaintType;
 
     // Prepare email content
@@ -359,8 +360,8 @@ Thank you for bringing this to our attention.
 - Hostel Administration`
     });
 
-    return res.json({ 
-      message: "Complaint filed successfully", 
+    return res.json({
+      message: "Complaint filed successfully",
       complaint: {
         _id: newComplaint._id,
         ticketId: `#${String(newComplaint._id).slice(-4).toUpperCase()}`,
@@ -406,7 +407,7 @@ const getStudentComplaints = async (req, res) => {
       attachmentCount: complaint.attachments.length
     }));
 
-    return res.json({ 
+    return res.json({
       message: "Complaints fetched successfully",
       complaints: formattedComplaints
     });
@@ -481,9 +482,9 @@ const getComplaintHistory = async (req, res) => {
       attachmentCount: complaint.attachments ? complaint.attachments.length : 0
     }));
 
-    return res.json({ 
+    return res.json({
       message: "Complaints fetched successfully",
-      complaints: formattedComplaints 
+      complaints: formattedComplaints
     });
   } catch (err) {
     console.error("Fetch complaint history error:", err);
@@ -1105,136 +1106,38 @@ const getAttendanceSummary = async (req, res) => {
   }
 };
 
-const getNotificationStatus = async (req, res) => {
-  const studentId = req.studentId;
 
+// 📥 Get all notifications for a student
+const getNotifications = async (req, res) => {
   try {
-    const student = await Student.findOne({ studentId });
-    if (!student) return res.status(404).json({ message: 'Student not found' });
+    const studentObjectId = req.student._id;  // get ObjectId from middleware
 
-    const studentObjectId = student._id;
+    const notifications = await Notification.find({ studentId: studentObjectId })
+      .sort({ createdAt: -1 })
+      .limit(50);
 
-    const notifications = [];
-
-    const latestNotice = await Notice.findOne({ seenBy: { $ne: studentId } })
-      .sort({ createdAt: -1 });
-    if (latestNotice) {
-      notifications.push({
-        message: `New notice: ${latestNotice.title}`,
-        link: '/notices',
-        type: 'notice',
-        id: latestNotice._id
-      });
-    }
-
-    const latestRefund = await Refund.findOne({ studentId: studentObjectId, statusSeen: false })
-      .sort({ updatedAt: -1 });
-    if (latestRefund) {
-      notifications.push({
-        message: 'Refund status updated',
-        link: '/refunds',
-        type: 'refund',
-        id: latestRefund._id
-      });
-    }
-
-    const latestComplaint = await Complaint.findOne({ studentId: studentObjectId, adminSeen: true })
-      .sort({ updatedAt: -1 });
-    if (latestComplaint) {
-      notifications.push({
-        message: 'Admin responded to your complaint',
-        link: '/complaints',
-        type: 'complaint',
-        id: latestComplaint._id
-      });
-    }
-
-    const latestLeave = await Leave.findOne({ studentId: studentObjectId, adminSeen: true })
-      .sort({ updatedAt: -1 });
-    if (latestLeave) {
-      notifications.push({
-        message: 'Your leave request was reviewed',
-        link: '/leaves',
-        type: 'leave',
-        id: latestLeave._id
-      });
-    }
-
-    res.json({
-      hasUnseen: notifications.length > 0,
-      notifications
-    });
-
+    res.status(200).json({ notifications });
   } catch (err) {
-    console.error("Notification check failed:", err);
-    res.status(500).json({ message: 'Server error' });
+    console.error("❌ Error fetching notifications:", err);
+    res.status(500).json({ message: "Failed to fetch notifications" });
   }
 };
 
 
-const markNotificationsSeen = async (req, res) => {
-  const studentId = req.studentId;
-
+// ✅ Mark all notifications as seen for a student
+const markNotificationsAsSeen = async (req, res) => {
   try {
-    const student = await Student.findOne({ studentId });
-    if (!student) return res.status(404).json({ message: "Student not found" });
+    const studentId = req.studentId;
 
-    const studentObjectId = student._id;
+    await Notification.updateMany({ studentId, seen: false }, { $set: { seen: true } });
 
-    const { type, id } = req.body;
-
-    if (id) {
-      if (type === "notice") {
-        await Notice.updateOne(
-          { _id: id, seenBy: { $ne: studentObjectId } },
-          { $addToSet: { seenBy: studentObjectId } }
-        );
-      } else if (type === "refund") {
-        await Refund.updateOne(
-          { _id: id, studentId: studentObjectId },
-          { statusSeen: true }
-        );
-      } else if (type === "complaint") {
-        await Complaint.updateOne(
-          { _id: id, studentId: studentObjectId },
-          { adminSeen: false }
-        );
-      } else if (type === "leave") {
-        await Leave.updateOne(
-          { _id: id, studentId: studentObjectId },
-          { adminSeen: false }
-        );
-      }
-    } else {
-      if (type === "notice") {
-        await Notice.updateMany(
-          { seenBy: { $ne: studentObjectId } },
-          { $addToSet: { seenBy: studentObjectId } }
-        );
-      } else if (type === "refund") {
-        await Refund.updateMany(
-          { studentId: studentObjectId, statusSeen: false },
-          { statusSeen: true }
-        );
-      } else if (type === "complaint") {
-        await Complaint.updateMany(
-          { studentId: studentObjectId, adminSeen: true },
-          { adminSeen: false }
-        );
-      } else if (type === "leave") {
-        await Leave.updateMany(
-          { studentId: studentObjectId, adminSeen: true },
-          { adminSeen: false }
-        );
-      }
-    }
-
-    res.json({ success: true });
+    res.status(200).json({ message: "Notifications marked as seen" });
   } catch (err) {
-    console.error("Marking notification as seen failed:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error("❌ Error marking notifications as seen:", err);
+    res.status(500).json({ message: "Failed to update notifications" });
   }
 };
+
 
 
 
@@ -1266,6 +1169,6 @@ export {
   getAttendanceLog,
   deleteMyProfileImage,
   uploadMyProfileImage,
-  getNotificationStatus,
-  markNotificationsSeen
+  getNotifications,
+  markNotificationsAsSeen
 }

@@ -10,11 +10,14 @@ import { Leave } from "../models/leave.model.js";
 import jwt from "jsonwebtoken";
 import { Inventory } from '../models/inventory.model.js';
 import { Inspection } from '../models/inspection.model.js';
-import sendEmail from '../utils/sendEmail.js'; 
+import sendEmail from '../utils/sendEmail.js';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import mongoose from "mongoose";
+
+
+import { sendBulkNotifications, sendNotification } from '../utils/sendNotification.js';
 
 
 
@@ -33,7 +36,7 @@ const transporter = nodemailer.createTransport({
 
 // <------------    Login Page For Warden  -------------->
 
- const login = async (req, res) => {
+const login = async (req, res) => {
   const { wardenId, password } = req.body;
 
   try {
@@ -539,7 +542,7 @@ const updateStudentRoom = async (req, res) => {
 
 const getAllAvailableBed = async (req, res) => {
   try {
-    const beds = await Inventory.find({ status: 'Available', itemName:'Bed' }).select('barcodeId roomNo');
+    const beds = await Inventory.find({ status: 'Available', itemName: 'Bed' }).select('barcodeId roomNo');
     res.status(200).json({ success: true, beds });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch beds', error: error.message });
@@ -563,9 +566,9 @@ const getTotalStudents = async (req, res) => {
 
     // Fetch all students with attendance log
     const allStudents = await Student.find().select("attendanceLog");
-    
+
     let checkedOutCount = 0;
-    
+
     for (let student of allStudents) {
       const studentIdStr = student._id.toString();
       const latestLog = student.attendanceLog?.[student.attendanceLog.length - 1];
@@ -803,13 +806,13 @@ const getInspectionStats = async (req, res) => {
 };
 
 
-const deleteInspection = async (req, res) => {  
+const deleteInspection = async (req, res) => {
   const { id } = req.params;
-  try {         
+  try {
     const inspection = await Inspection.findByIdAndDelete(id);
     if (!inspection) {
       return res.status(404).json({ success: false, message: 'Inspection not found' });
-    }   
+    }
     res.status(200).json({ success: true, message: 'Inspection deleted successfully' });
   } catch (error) {
     console.error('Error deleting inspection:', error);
@@ -871,6 +874,17 @@ const updateLeaveStatus = async (req, res) => {
       subject: 'Leave Request Status',
       text: emailContent,
     });
+
+    try {
+      await sendNotification({
+        studentId: student._id,
+        message: `Your leave request has been ${status.toUpperCase()}`,
+        type: 'leave',
+        link: '/leave-history',
+      });
+    } catch (notifErr) {
+      console.error("Failed to send leave notification:", notifErr);
+    }
 
     res.json({ message: `Leave ${status}`, leave });
   } catch (err) {
@@ -964,9 +978,9 @@ const filterLeaveRequests = async (req, res) => {
 
 
 const deleteLeaveRequest = async (req, res) => {
-  const { leaveId } = req.params;   
+  const { leaveId } = req.params;
   try {
-    const leave = await Leave.findByIdAndDelete(leaveId); 
+    const leave = await Leave.findByIdAndDelete(leaveId);
     if (!leave) {
       return res.status(404).json({ message: 'Leave request not found' });
     }

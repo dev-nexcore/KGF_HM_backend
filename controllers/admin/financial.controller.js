@@ -7,13 +7,15 @@ import { StudentInvoice } from '../../models/studentInvoice.model.js';
 import { ManagementInvoice } from '../../models/managementInvoice.model.js';
 import { StaffSalary } from '../../models/staffSalary.model.js';
 import { Refund } from '../../models/refund.model.js';
+import { sendBulkNotifications, sendNotification } from '../../utils/sendNotification.js';
+
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
-    host:    process.env.MAIL_HOST,      // smtp.gmail.com
-  port:   +process.env.MAIL_PORT,      // 587
+  host: process.env.MAIL_HOST,      // smtp.gmail.com
+  port: +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
- 
+
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS
@@ -96,7 +98,7 @@ const getStudentInvoices = async (req, res) => {
     // Filter by search if provided
     let filteredInvoices = invoices;
     if (search) {
-      filteredInvoices = invoices.filter(invoice => 
+      filteredInvoices = invoices.filter(invoice =>
         invoice.studentId?.studentName?.toLowerCase().includes(search.toLowerCase()) ||
         invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase())
       );
@@ -148,7 +150,7 @@ const updateStudentInvoiceStatus = async (req, res) => {
       invoice.paidDate = new Date();
       invoice.paymentMethod = paymentMethod;
     }
-    
+
     await invoice.save();
 
     // Create audit log
@@ -617,7 +619,7 @@ const getRefunds = async (req, res) => {
     // Filter by search if provided
     let filteredRefunds = refunds;
     if (search) {
-      filteredRefunds = refunds.filter(refund => 
+      filteredRefunds = refunds.filter(refund =>
         refund.studentId?.studentName?.toLowerCase().includes(search.toLowerCase()) ||
         refund.refundId.toLowerCase().includes(search.toLowerCase())
       );
@@ -700,11 +702,11 @@ ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 Request Date: ${new Date(refund.requestDate).toLocaleDateString("en-IN")}
 ${status === 'completed' ? `Processed Date: ${new Date().toLocaleDateString("en-IN")}` : ''}
 
-${status === 'completed' ? 
-  'Your refund has been processed successfully.' : 
-  status === 'rejected' ?
-  'If you have any questions regarding this decision, please contact the hostel administration.' :
-  'Your refund is being processed. You will be notified once completed.'}
+${status === 'completed' ?
+            'Your refund has been processed successfully.' :
+            status === 'rejected' ?
+              'If you have any questions regarding this decision, please contact the hostel administration.' :
+              'Your refund is being processed. You will be notified once completed.'}
 
 – Hostel Admin`
       });
@@ -723,6 +725,18 @@ ${status === 'completed' ?
       targetName: `${refund.studentId.studentName} - ₹${refund.amount}`
     });
 
+    // 🔔 Send in-app notification
+    try {
+      await sendNotification({
+        studentId: refund.studentId._id,
+        message: `Your refund request has been ${status.toUpperCase()}`,
+        type: 'refund',
+        link: '/refund-history',
+      });
+    } catch (notifErr) {
+      console.error("Failed to send refund notification:", notifErr);
+    }
+
     return res.json({
       message: `Refund ${status} successfully`,
       refund: {
@@ -739,18 +753,18 @@ ${status === 'completed' ?
   }
 };
 
-export{
-    generateStudentInvoice,
-    getStudentInvoices,
-    updateStudentInvoiceStatus,
-    createManagementInvoice,
-    getManagementInvoices,
-    updateManagementInvoiceStatus,
-    generateStaffSalary,
-    getStaffSalaries,
-    updateSalaryStatus,
-    generateSalarySlip,
-    initiateRefund,
-    getRefunds,
-    updateRefundStatus
+export {
+  generateStudentInvoice,
+  getStudentInvoices,
+  updateStudentInvoiceStatus,
+  createManagementInvoice,
+  getManagementInvoices,
+  updateManagementInvoiceStatus,
+  generateStaffSalary,
+  getStaffSalaries,
+  updateSalaryStatus,
+  generateSalarySlip,
+  initiateRefund,
+  getRefunds,
+  updateRefundStatus
 }

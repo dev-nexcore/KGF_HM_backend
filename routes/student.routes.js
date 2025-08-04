@@ -1,30 +1,30 @@
 import express from 'express';
 import {
-    login,
-    forgotPassword,
-    verifyOtp,
-    resetPassword,
-    checkInStudent,
-    checkOutStudent,
-    fileComplaint,
-    getStudentComplaints,
-    getComplaintAttachment,
-    getComplaintHistory,
-    applyForLeave,
-    getLeaveHistory,
-    requestRefund,
-    getRefundHistory,
-    getStudentProfile,
-    updateStudentProfile,
-    getCurrentFeesStatus,
-    getNotices,
-    getNextInspection,
-    getAttendanceSummary,
-    getAttendanceLog,
-    uploadMyProfileImage,
-    deleteMyProfileImage,
-    getNotificationStatus,
-    markNotificationsSeen
+  login,
+  forgotPassword,
+  verifyOtp,
+  resetPassword,
+  checkInStudent,
+  checkOutStudent,
+  fileComplaint,
+  getStudentComplaints,
+  getComplaintAttachment,
+  getComplaintHistory,
+  applyForLeave,
+  getLeaveHistory,
+  requestRefund,
+  getRefundHistory,
+  getStudentProfile,
+  updateStudentProfile,
+  getCurrentFeesStatus,
+  getNotices,
+  getNextInspection,
+  getAttendanceSummary,
+  getAttendanceLog,
+  uploadMyProfileImage,
+  deleteMyProfileImage,
+  getNotifications,
+  markNotificationsAsSeen
 } from '../controllers/student.controller.js';
 import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
 import { uploadStudent, uploadComplaint } from '../middleware/upload.js';
@@ -40,8 +40,8 @@ router.get("/notices", getNotices);
 
 // Routes that work for both students and parents
 router.get('/attendance-log/:studentId', verifyStudentOrParentToken, getAttendanceLog);
-router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile); 
-router.get("/profile", verifyStudentOrParentToken, getStudentProfile);  
+router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile);
+router.get("/profile", verifyStudentOrParentToken, getStudentProfile);
 router.put("/profile", verifyStudentOrParentToken, updateStudentProfile);
 
 router.post('/check-in', verifyStudentOrParentToken, checkInStudent);
@@ -74,15 +74,14 @@ router.put("/profile/:studentId", updateStudentProfile);
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);
 router.get('/inspectionSchedule/:studentId', getNextInspection);
 router.get('/attendanceSummary/:studentId', getAttendanceSummary);
+router.get('/notifications',  getNotifications);
+router.post('/notifications/mark-seen', markNotificationsAsSeen);
 
-router.post('/upload-profile-image/:studentId', 
+router.post('/upload-profile-image/:studentId',
   uploadStudent.single('profileImage'),
   uploadMyProfileImage
 );
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
-
-router.get('/notifications', getNotificationStatus);
-router.post('/notifications/mark-seen', markNotificationsSeen);
 
 export default router;

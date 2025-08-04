@@ -2,13 +2,14 @@ import 'dotenv/config';
 import nodemailer from 'nodemailer';
 import { Complaint } from '../../models/complaint.model.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
+import { sendBulkNotifications, sendNotification } from '../../utils/sendNotification.js';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
-    host:    process.env.MAIL_HOST,      // smtp.gmail.com
-  port:   +process.env.MAIL_PORT,      // 587
+  host: process.env.MAIL_HOST,      // smtp.gmail.com
+  port: +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
- 
+
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS
@@ -18,7 +19,7 @@ const transporter = nodemailer.createTransport({
 const getAllComplaints = async (req, res) => {
   try {
     const { status, type, page = 1, limit = 10, search } = req.query;
-    
+
     // Build query object
     let query = {};
     if (status && status !== 'all') {
@@ -33,7 +34,7 @@ const getAllComplaints = async (req, res) => {
         { description: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     const skip = (page - 1) * limit;
 
     // Get complaints with student details
@@ -66,13 +67,13 @@ const getAllComplaints = async (req, res) => {
       counts[item._id] = item.count;
     });
 
-    return res.json({ 
+    return res.json({
       message: "Complaints fetched successfully",
       complaints: complaints.map(complaint => {
-        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType 
-          ? `Others (${complaint.otherComplaintType})` 
+        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType
+          ? `Others (${complaint.otherComplaintType})`
           : complaint.complaintType;
-          
+
         return {
           _id: complaint._id,
           ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`, // Generate ticket ID from MongoDB _id
@@ -123,13 +124,13 @@ const getOpenComplaints = async (req, res) => {
 
     const totalOpen = await Complaint.countDocuments({ status: 'in progress' });
 
-    return res.json({ 
+    return res.json({
       message: "Open complaints fetched successfully",
       complaints: openComplaints.map(complaint => {
-        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType 
-          ? `Others (${complaint.otherComplaintType})` 
+        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType
+          ? `Others (${complaint.otherComplaintType})`
           : complaint.complaintType;
-          
+
         return {
           _id: complaint._id,
           ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
@@ -178,7 +179,7 @@ const getResolvedComplaints = async (req, res) => {
 
     const totalResolved = await Complaint.countDocuments({ status: 'resolved' });
 
-    return res.json({ 
+    return res.json({
       message: "Resolved complaints fetched successfully",
       complaints: resolvedComplaints.map(complaint => ({
         _id: complaint._id,
@@ -224,7 +225,7 @@ const updateComplaintStatus = async (req, res) => {
 
     // Find the complaint
     const complaint = await Complaint.findById(complaintId).populate('studentId', 'studentName studentId email');
-    
+
     if (!complaint) {
       return res.status(404).json({ message: "Complaint not found." });
     }
@@ -234,7 +235,7 @@ const updateComplaintStatus = async (req, res) => {
     if (adminNotes) {
       complaint.adminNotes = adminNotes; // You might want to add this field to your schema
     }
-    
+
     await complaint.save();
 
     // Send email notification to student
@@ -256,9 +257,9 @@ Complaint Details:
 ${complaint.attachments.length > 0 ? `• Attachments: ${complaint.attachments.length} file(s)` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
-${status === 'resolved' ? 
-  'Thank you for reporting this issue. We appreciate your feedback.' : 
-  'We are working on resolving your complaint. You will be notified once it is resolved.'}
+${status === 'resolved' ?
+        'Thank you for reporting this issue. We appreciate your feedback.' :
+        'We are working on resolving your complaint. You will be notified once it is resolved.'}
 
 If you have any questions, please contact the hostel administration.
 
@@ -295,7 +296,18 @@ If you have any questions, please contact the hostel administration.
       }
     });
 
-    return res.json({ 
+    try {
+      await sendNotification({
+        studentId: student._id,
+        message: `Your complaint "${complaint.subject}" status changed to ${status.toUpperCase()}`,
+        type: 'complaint',
+        link: `/complaints/${complaint._id}`,
+      });
+    } catch (notifErr) {
+      console.error("Failed to send complaint notification:", notifErr);
+    }
+
+    return res.json({
       message: `Complaint marked as ${status} successfully`,
       complaint: {
         _id: complaint._id,
@@ -523,9 +535,9 @@ ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
 Filed Date: ${new Date(complaint.filedDate).toLocaleDateString("en-IN")}
 
-${status === 'resolved' ? 
-  'Thank you for reporting this issue. We appreciate your feedback.' : 
-  'We are working on resolving your complaint. You will be notified once it is resolved.'}
+${status === 'resolved' ?
+          'Thank you for reporting this issue. We appreciate your feedback.' :
+          'We are working on resolving your complaint. You will be notified once it is resolved.'}
 
 – Hostel Admin`;
 
@@ -560,7 +572,21 @@ ${status === 'resolved' ?
       }
     });
 
-    return res.json({ 
+    // Send in-app notifications to all affected students
+    const notifPromises = complaints.map(c =>
+      sendNotification({
+        studentId: c.studentId._id,
+        message: `Your complaint "${c.subject}" status changed to ${status.toUpperCase()}`,
+        type: 'complaint',
+        link: `/complaints/${c._id}`,
+      }).catch(err => {
+        console.error(`Failed to send notification for complaint ${c._id}:`, err);
+      })
+    );
+
+    await Promise.all(notifPromises);
+
+    return res.json({
       message: `${updateResult.modifiedCount} complaints marked as ${status} successfully`,
       updatedCount: updateResult.modifiedCount,
       emailsSent: complaints.length
@@ -572,13 +598,13 @@ ${status === 'resolved' ?
   }
 };
 
-export{
-    getAllComplaints,
-    getOpenComplaints,
-    getResolvedComplaints,
-    updateComplaintStatus,
-    getComplaintStatistics,
-    getComplaintDetails,
-    bulkUpdateComplaintStatus,
-    getComplaintAttachment
+export {
+  getAllComplaints,
+  getOpenComplaints,
+  getResolvedComplaints,
+  updateComplaintStatus,
+  getComplaintStatistics,
+  getComplaintDetails,
+  bulkUpdateComplaintStatus,
+  getComplaintAttachment
 }
