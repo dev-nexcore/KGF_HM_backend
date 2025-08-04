@@ -1112,7 +1112,7 @@ const getNotifications = async (req, res) => {
   try {
     const studentObjectId = req.student._id;  // get ObjectId from middleware
 
-    const notifications = await Notification.find({ studentId: studentObjectId })
+    const notifications = await Notification.find({ studentId: studentObjectId,seen: false, })
       .sort({ createdAt: -1 })
       .limit(50);
 
@@ -1124,23 +1124,29 @@ const getNotifications = async (req, res) => {
 };
 
 
-// ✅ Mark all notifications as seen for a student
 const markNotificationsAsSeen = async (req, res) => {
   try {
-    const studentId = req.studentId;
+    const studentStringId = req.studentId; // e.g., "MNB125"
 
-    await Notification.updateMany({ studentId, seen: false }, { $set: { seen: true } });
+    // Find the actual student document to get the ObjectId (_id)
+    const student = await Student.findOne({ studentId: studentStringId }).select('_id');
 
-    res.status(200).json({ message: "Notifications marked as seen" });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Use the _id for matching Notification.studentId (which is an ObjectId)
+    await Notification.updateMany(
+      { studentId: student._id, seen: false },
+      { $set: { seen: true } }
+    );
+
+    return res.status(200).json({ message: "Notifications marked as seen" });
   } catch (err) {
     console.error("❌ Error marking notifications as seen:", err);
-    res.status(500).json({ message: "Failed to update notifications" });
+    return res.status(500).json({ message: "Failed to update notifications" });
   }
 };
-
-
-
-
 
 
 

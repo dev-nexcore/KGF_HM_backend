@@ -191,7 +191,7 @@ ${status === 'approved' ?
         studentId: student._id,
         message: `Your leave request has been ${status.toUpperCase()}`,
         type: 'leave',
-        link: '/leave-history',
+        link: '/leaves',
       });
     } catch (notifErr) {
       console.error("Failed to send leave notification:", notifErr);
@@ -434,7 +434,7 @@ ${status === 'approved' ?
         studentId: leave.studentId._id,
         message: `Your leave request has been ${status.toUpperCase()}`,
         type: 'leave',
-        link: '/leave-history',
+        link: '/leaves',
       }).catch(err => {
         console.error(`Failed to send notification for leave ${leave._id}:`, err);
       })
