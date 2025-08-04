@@ -301,7 +301,7 @@ If you have any questions, please contact the hostel administration.
         studentId: student._id,
         message: `Your complaint "${complaint.subject}" status changed to ${status.toUpperCase()}`,
         type: 'complaint',
-        link: `/complaints/${complaint._id}`,
+        link: `/complaints`,
       });
     } catch (notifErr) {
       console.error("Failed to send complaint notification:", notifErr);
@@ -578,7 +578,7 @@ ${status === 'resolved' ?
         studentId: c.studentId._id,
         message: `Your complaint "${c.subject}" status changed to ${status.toUpperCase()}`,
         type: 'complaint',
-        link: `/complaints/${c._id}`,
+        link: `/complaints`,
       }).catch(err => {
         console.error(`Failed to send notification for complaint ${c._id}:`, err);
       })

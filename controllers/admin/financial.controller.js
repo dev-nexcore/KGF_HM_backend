@@ -731,7 +731,7 @@ ${status === 'completed' ?
         studentId: refund.studentId._id,
         message: `Your refund request has been ${status.toUpperCase()}`,
         type: 'refund',
-        link: '/refund-history',
+        link: '/refunds',
       });
     } catch (notifErr) {
       console.error("Failed to send refund notification:", notifErr);
