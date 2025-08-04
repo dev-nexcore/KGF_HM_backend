@@ -301,6 +301,11 @@ const fileComplaint = async (req, res) => {
 
     await newComplaint.save();
 
+    // Determine display type for emails
+    const displayType = complaintType === "Others" && otherComplaintType 
+      ? `Others (${otherComplaintType})` 
+      : complaintType;
+
     // Prepare email content
     let emailText = `New Complaint Filed:
 
@@ -311,7 +316,7 @@ Student Details:
 - Room/Bed: ${student.roomBedNumber || 'Not specified'}
 
 Complaint Details:
-- Type: ${complaintType}
+- Type: ${displayType}
 - Subject: ${subject}
 - Description: ${description}
 - Filed Date: ${new Date().toLocaleDateString('en-IN')}
@@ -341,7 +346,7 @@ Your complaint has been filed successfully and assigned ticket ID: #${String(new
 
 Complaint Details:
 - Subject: ${subject}
-- Type: ${complaintType}
+- Type: ${displayType}
 - Status: In Progress
 - Filed Date: ${new Date().toLocaleDateString('en-IN')}
 
@@ -361,6 +366,7 @@ Thank you for bringing this to our attention.
         ticketId: `#${String(newComplaint._id).slice(-4).toUpperCase()}`,
         subject: newComplaint.subject,
         complaintType: newComplaint.complaintType,
+        otherComplaintType: newComplaint.otherComplaintType,
         status: newComplaint.status,
         filedDate: newComplaint.filedDate,
         attachments: newComplaint.attachments.length
@@ -383,13 +389,14 @@ const getStudentComplaints = async (req, res) => {
     }
 
     const complaints = await Complaint.find({ studentId: student._id })
-      .select('complaintType subject description status filedDate attachments createdAt')
+      .select('complaintType otherComplaintType subject description status filedDate attachments createdAt')
       .sort({ filedDate: -1 });
 
     const formattedComplaints = complaints.map(complaint => ({
       _id: complaint._id,
       ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
       complaintType: complaint.complaintType,
+      otherComplaintType: complaint.otherComplaintType || '',
       subject: complaint.subject,
       description: complaint.description,
       status: complaint.status,
@@ -454,11 +461,30 @@ const getComplaintHistory = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const complaints = await Complaint.find({ studentId: student._id }).select(
-      "complaintType subject description filedDate status createdAt"
-    );
+    // FIXED: Include 'attachments' and 'otherComplaintType' in the select
+    const complaints = await Complaint.find({ studentId: student._id })
+      .select("complaintType otherComplaintType subject description filedDate status createdAt attachments")
+      .sort({ createdAt: -1 }); // Sort by newest first
 
-    return res.json({ complaints });
+    // FIXED: Format the response to include attachment information
+    const formattedComplaints = complaints.map(complaint => ({
+      _id: complaint._id,
+      complaintType: complaint.complaintType,
+      otherComplaintType: complaint.otherComplaintType || '',
+      subject: complaint.subject,
+      description: complaint.description,
+      status: complaint.status || 'Pending',
+      filedDate: complaint.filedDate,
+      createdAt: complaint.createdAt,
+      // FIXED: Add attachment information that frontend expects
+      hasAttachments: complaint.attachments && complaint.attachments.length > 0,
+      attachmentCount: complaint.attachments ? complaint.attachments.length : 0
+    }));
+
+    return res.json({ 
+      message: "Complaints fetched successfully",
+      complaints: formattedComplaints 
+    });
   } catch (err) {
     console.error("Fetch complaint history error:", err);
     return res.status(500).json({ message: "Server error while fetching complaints." });

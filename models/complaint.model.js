@@ -1,39 +1,46 @@
+// models/complaint.model.js
 import mongoose from 'mongoose';
 
-const complaintSchema = new mongoose.Schema(
-  {
-    studentId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Student",
-      required: true,
-    },
-    complaintType: {
-      type: String,
-      required: true,
-      enum: ["Maintenance issue", "Noice Disturbance", "Cleanliness issue", "Others"],
-    },
-    otherComplaintType: {
-      type: String,
-      default: "",
-    },
-    subject: {
-      type: String,
-      required: true,
-    },
-    description: {
-      type: String,
-      required: true,
-    },
-    status: {
-      type: String,
-      enum: ["resolved", "in progress"],
-      default: "in progress",
-    },
-    filedDate: {
-      type: Date,
-      default: Date.now,
-    },
-    attachments: [{
+const complaintSchema = new mongoose.Schema({
+  studentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Student',
+    required: true
+  },
+  complaintType: {
+    type: String,
+    required: true,
+    enum: ['Noise Disturbance', 'Maintenance issue', 'Cleanliness issue', 'Others']
+  },
+  otherComplaintType: {
+    type: String,
+    default: ''
+  },
+  subject: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  description: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['in progress', 'resolved'],
+    default: 'in progress'
+  },
+  filedDate: {
+    type: Date,
+    default: Date.now
+  },
+  adminNotes: {
+    type: String,
+    default: ''
+  },
+  // New field for attachments
+  attachments: [{
     filename: {
       type: String,
       required: true
@@ -59,8 +66,12 @@ const complaintSchema = new mongoose.Schema(
       default: Date.now
     }
   }]
-  },
-  { timestamps: true }
-);
+}, {
+  timestamps: true
+});
 
-export const Complaint = mongoose.model("Complaint", complaintSchema);
+// Index for better query performance
+complaintSchema.index({ studentId: 1, status: 1 });
+complaintSchema.index({ filedDate: -1 });
+
+export const Complaint = mongoose.model('Complaint', complaintSchema);

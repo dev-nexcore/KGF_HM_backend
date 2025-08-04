@@ -39,7 +39,7 @@ const getAllComplaints = async (req, res) => {
     // Get complaints with student details
     const complaints = await Complaint.find(query)
       .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
-      .select('complaintType subject description status filedDate createdAt updatedAt attachments')
+      .select('complaintType otherComplaintType subject description status filedDate createdAt updatedAt attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -68,23 +68,31 @@ const getAllComplaints = async (req, res) => {
 
     return res.json({ 
       message: "Complaints fetched successfully",
-      complaints: complaints.map(complaint => ({
-        _id: complaint._id,
-        ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`, // Generate ticket ID from MongoDB _id
-        subject: complaint.subject,
-        description: complaint.description,
-        complaintType: complaint.complaintType,
-        status: complaint.status,
-        filedDate: complaint.filedDate,
-        hasAttachments: complaint.attachments.length > 0,
-        attachmentCount: complaint.attachments.length,
-        raisedBy: complaint.studentId ? {
-          name: complaint.studentId.studentName,
-          studentId: complaint.studentId.studentId,
-          email: complaint.studentId.email,
-          roomBedNumber: complaint.studentId.roomBedNumber
-        } : null
-      })),
+      complaints: complaints.map(complaint => {
+        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType 
+          ? `Others (${complaint.otherComplaintType})` 
+          : complaint.complaintType;
+          
+        return {
+          _id: complaint._id,
+          ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`, // Generate ticket ID from MongoDB _id
+          subject: complaint.subject,
+          description: complaint.description,
+          complaintType: complaint.complaintType,
+          otherComplaintType: complaint.otherComplaintType || '',
+          displayType: displayType,
+          status: complaint.status,
+          filedDate: complaint.filedDate,
+          hasAttachments: complaint.attachments.length > 0,
+          attachmentCount: complaint.attachments.length,
+          raisedBy: complaint.studentId ? {
+            name: complaint.studentId.studentName,
+            studentId: complaint.studentId.studentId,
+            email: complaint.studentId.email,
+            roomBedNumber: complaint.studentId.roomBedNumber
+          } : null
+        };
+      }),
       counts,
       pagination: {
         currentPage: parseInt(page),
@@ -108,7 +116,7 @@ const getOpenComplaints = async (req, res) => {
 
     const openComplaints = await Complaint.find({ status: 'in progress' })
       .populate('studentId', 'studentName studentId email contactNumber')
-      .select('complaintType subject description status filedDate attachments')
+      .select('complaintType otherComplaintType subject description status filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -117,22 +125,30 @@ const getOpenComplaints = async (req, res) => {
 
     return res.json({ 
       message: "Open complaints fetched successfully",
-      complaints: openComplaints.map(complaint => ({
-        _id: complaint._id,
-        ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
-        subject: complaint.subject,
-        description: complaint.description,
-        complaintType: complaint.complaintType,
-        status: complaint.status,
-        filedDate: complaint.filedDate,
-        hasAttachments: complaint.attachments.length > 0,
-        attachmentCount: complaint.attachments.length,
-        raisedBy: complaint.studentId ? {
-          name: complaint.studentId.studentName,
-          studentId: complaint.studentId.studentId,
-          email: complaint.studentId.email
-        } : null
-      })),
+      complaints: openComplaints.map(complaint => {
+        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType 
+          ? `Others (${complaint.otherComplaintType})` 
+          : complaint.complaintType;
+          
+        return {
+          _id: complaint._id,
+          ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
+          subject: complaint.subject,
+          description: complaint.description,
+          complaintType: complaint.complaintType,
+          otherComplaintType: complaint.otherComplaintType || '',
+          displayType: displayType,
+          status: complaint.status,
+          filedDate: complaint.filedDate,
+          hasAttachments: complaint.attachments.length > 0,
+          attachmentCount: complaint.attachments.length,
+          raisedBy: complaint.studentId ? {
+            name: complaint.studentId.studentName,
+            studentId: complaint.studentId.studentId,
+            email: complaint.studentId.email
+          } : null
+        };
+      }),
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalOpen / limit),

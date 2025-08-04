@@ -38,17 +38,16 @@ router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 router.get("/notices", getNotices);
 
+// Routes that work for both students and parents
 router.get('/attendance-log/:studentId', verifyStudentOrParentToken, getAttendanceLog);
 router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile); 
 router.get("/profile", verifyStudentOrParentToken, getStudentProfile);  
-
 router.put("/profile", verifyStudentOrParentToken, updateStudentProfile);
 
 router.post('/check-in', verifyStudentOrParentToken, checkInStudent);
 router.post('/check-out', verifyStudentOrParentToken, checkOutStudent);
 
 router.get('/attendanceSummary/:studentId', verifyStudentOrParentToken, getAttendanceSummary);
-
 router.get('/inspectionSchedule', verifyStudentOrParentToken, getNextInspection);
 
 router.post("/leave", verifyStudentOrParentToken, applyForLeave);
@@ -56,37 +55,24 @@ router.get("/leaves", verifyStudentOrParentToken, getLeaveHistory);
 
 router.get('/feeStatus', verifyStudentOrParentToken, getCurrentFeesStatus);
 
-
 router.post("/refund", verifyStudentOrParentToken, requestRefund);
 router.get("/refunds", verifyStudentOrParentToken, getRefundHistory);
 
-
-router.post("/complaint", verifyStudentOrParentToken, fileComplaint);
+// FIXED: Complaint routes with proper multer middleware
+router.post("/complaint", verifyStudentOrParentToken, uploadComplaint.array('attachments', 5), fileComplaint);
 router.get("/complaints", verifyStudentOrParentToken, getComplaintHistory);
 
+// Student-only routes
 router.use(verifyStudentToken);
 
-router.post('/check-in', checkInStudent);
-router.post('/check-out', checkOutStudent);
-
-router.post('/complaint', uploadComplaint.array('attachments', 5), fileComplaint);
+// These routes require student authentication
 router.get('/complaints/:studentId', getStudentComplaints);
 router.get('/complaint/:complaintId/attachment/:attachmentId', getComplaintAttachment);
-router.get("/complaints/:studentId", getComplaintHistory);
-
-router.post("/leave", applyForLeave);
 router.get("/leaves/:studentId", getLeaveHistory);
-
-router.post("/refund", requestRefund);
 router.get("/refunds/:studentId", getRefundHistory);
-
-
 router.put("/profile/:studentId", updateStudentProfile);
-
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);
-
 router.get('/inspectionSchedule/:studentId', getNextInspection);
-
 router.get('/attendanceSummary/:studentId', getAttendanceSummary);
 
 router.post('/upload-profile-image/:studentId', 
@@ -96,8 +82,7 @@ router.post('/upload-profile-image/:studentId',
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 
-router.get('/notifications',getNotificationStatus);
-
-router.post('/notifications/mark-seen',markNotificationsSeen)
+router.get('/notifications', getNotificationStatus);
+router.post('/notifications/mark-seen', markNotificationsSeen);
 
 export default router;

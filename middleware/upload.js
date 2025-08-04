@@ -53,9 +53,11 @@ const parentStorage = multer.diskStorage({
 const complaintStorage = multer.diskStorage({
   destination: "uploads/complaints/",
   filename: (req, file, cb) => {
-    const { studentId } = req.body;
+    // Use a generic timestamp since req.body.studentId might not be available yet
+    // The studentId will be available in the controller via req.studentId from auth middleware
     const timestamp = Date.now();
-    cb(null, `complaint_${studentId}_${timestamp}${path.extname(file.originalname)}`);
+    const randomStr = Math.random().toString(36).substring(2, 8);
+    cb(null, `complaint_${timestamp}_${randomStr}${path.extname(file.originalname)}`);
   },
 });
 
