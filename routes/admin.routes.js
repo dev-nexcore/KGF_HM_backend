@@ -44,7 +44,8 @@ import {
   updateComplaintStatus,
   getComplaintStatistics,
   getComplaintDetails,
-  bulkUpdateComplaintStatus
+  bulkUpdateComplaintStatus,
+  getComplaintAttachment
 } from "../controllers/admin/complaint.controller.js";
 
 import {
