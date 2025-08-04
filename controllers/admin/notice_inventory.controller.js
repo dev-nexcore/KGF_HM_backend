@@ -13,17 +13,17 @@ import { Inventory } from '../../models/inventory.model.js';
 import path from 'path';
 import multer from 'multer';
 
-import {nanoid} from 'nanoid';
+import { nanoid } from 'nanoid';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
-    host:    process.env.MAIL_HOST,      // smtp.gmail.com
-  port:   +process.env.MAIL_PORT,      // 587
+  host: process.env.MAIL_HOST,      // smtp.gmail.com
+  port: +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
- 
+
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS
@@ -137,12 +137,14 @@ Issued on: ${istDateTime}
 `;
 
     let recipients = [];
+    let studentRecipients = [];
 
     if (recipientType === 'All') {
       const students = await Student.find({}, 'email');
       const parents = await Parent.find({}, 'email');
       const wardens = await Warden.find({}, 'email');
 
+      studentRecipients = students;
       recipients = [
         ...students.map(s => s.email).filter(Boolean),
         ...parents.map(p => p.email).filter(Boolean),
@@ -150,11 +152,13 @@ Issued on: ${istDateTime}
       ];
     } else if (recipientType === 'Student') {
       if (!individualRecipient) {
-        const students = await Student.find({}, 'email');
+        const students = await Student.find({}, '_id email');
+        studentRecipients = students;
         recipients = students.map(s => s.email).filter(Boolean);
       } else {
-        const student = await Student.findOne({ studentId: individualRecipient });
+        const student = await Student.findOne({ studentId: individualRecipient }, '_id email');
         if (student?.email) recipients.push(student.email);
+        if (student) studentRecipients.push(student);
       }
     } else if (recipientType === 'Parent') {
       if (!individualRecipient) {
@@ -189,6 +193,15 @@ Issued on: ${istDateTime}
       console.log(`📤 Email sent to ${email} - MessageId: ${result.messageId}`);
     }
 
+    if (studentRecipients.length > 0) {
+      await sendBulkNotifications(
+        studentRecipients,
+        `New notice: ${title}`,
+        'notice',
+        '/notices'
+      );
+    }
+
     return res.status(201).json({ message: "Notice issued and emailed successfully", notice });
   } catch (err) {
     console.error("Issue notice error:", err);
@@ -197,8 +210,8 @@ Issued on: ${istDateTime}
 };
 
 
-export{
-    addInventoryItem,
-    issueNotice,
-    upload
+export {
+  addInventoryItem,
+  issueNotice,
+  upload
 }

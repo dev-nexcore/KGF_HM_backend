@@ -4,14 +4,15 @@ import nodemailer from 'nodemailer';
 import { Leave } from '../../models/leave.model.js';
 
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
+import { sendBulkNotifications, sendNotification } from '../../utils/sendNotification.js';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
-    host:    process.env.MAIL_HOST,      // smtp.gmail.com
-  port:   +process.env.MAIL_PORT,      // 587
+  host: process.env.MAIL_HOST,      // smtp.gmail.com
+  port: +process.env.MAIL_PORT,      // 587
   secure: process.env.MAIL_SECURE === 'true',
- 
+
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS
@@ -25,9 +26,9 @@ const getPendingLeaveRequests = async (req, res) => {
       .select('leaveType startDate endDate reason status appliedAt')
       .sort({ appliedAt: -1 });
 
-    return res.json({ 
+    return res.json({
       message: "Pending leave requests fetched successfully",
-      leaves: pendingLeaves 
+      leaves: pendingLeaves
     });
   } catch (err) {
     console.error("Fetch pending leaves error:", err);
@@ -39,13 +40,13 @@ const getPendingLeaveRequests = async (req, res) => {
 const getAllLeaveRequests = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
-    
+
     // Handle filter mapping from frontend
     let query = {};
     if (status && status !== 'all') {
       query.status = status;
     }
-    
+
     const skip = (page - 1) * limit;
 
     const leaves = await Leave.find(query)
@@ -78,7 +79,7 @@ const getAllLeaveRequests = async (req, res) => {
       counts[item._id] = item.count;
     });
 
-    return res.json({ 
+    return res.json({
       message: "Leave requests fetched successfully",
       leaves,
       counts, // For the filter tab badges
@@ -109,7 +110,7 @@ const updateLeaveStatus = async (req, res) => {
 
     // Find the leave request
     const leave = await Leave.findById(leaveId).populate('studentId', 'studentName studentId email');
-    
+
     if (!leave) {
       return res.status(404).json({ message: "Leave request not found." });
     }
@@ -124,7 +125,7 @@ const updateLeaveStatus = async (req, res) => {
       leave.adminComments = adminComments;
     }
     leave.processedAt = new Date();
-    
+
     await leave.save();
 
     // Send email notification to student
@@ -148,9 +149,9 @@ ${adminComments ? `• Admin Comments: ${adminComments}` : ''}
 Applied on: ${new Date(leave.appliedAt).toLocaleDateString("en-IN")}
 Processed on: ${new Date().toLocaleDateString("en-IN")}
 
-${status === 'approved' ? 
-  'Please ensure you follow all hostel guidelines during your leave period.' : 
-  'If you have any questions regarding this decision, please contact the hostel administration.'}
+${status === 'approved' ?
+        'Please ensure you follow all hostel guidelines during your leave period.' :
+        'If you have any questions regarding this decision, please contact the hostel administration.'}
 
 – Hostel Admin`;
 
@@ -168,7 +169,7 @@ ${status === 'approved' ?
       // Don't fail the entire operation if email fails
     }
 
-       await createAuditLog({
+    await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: status === 'approved' ? AuditActionTypes.LEAVE_APPROVED : AuditActionTypes.LEAVE_REJECTED,
@@ -184,7 +185,19 @@ ${status === 'approved' ?
       }
     });
 
-    return res.json({ 
+    // Send in-app notification
+    try {
+      await sendNotification({
+        studentId: student._id,
+        message: `Your leave request has been ${status.toUpperCase()}`,
+        type: 'leave',
+        link: '/leave-history',
+      });
+    } catch (notifErr) {
+      console.error("Failed to send leave notification:", notifErr);
+    }
+
+    return res.json({
       message: `Leave request ${status} successfully`,
       leave: {
         _id: leave._id,
@@ -270,15 +283,15 @@ const getStudentLeaveHistory = async (req, res) => {
       .sort({ appliedAt: -1 });
 
     if (leaves.length === 0) {
-      return res.json({ 
+      return res.json({
         message: "No leave requests found for this student",
-        leaves: [] 
+        leaves: []
       });
     }
 
-    return res.json({ 
+    return res.json({
       message: "Student leave history fetched successfully",
-      leaves 
+      leaves
     });
 
   } catch (err) {
@@ -294,14 +307,14 @@ const sendLeaveMessage = async (req, res) => {
 
   try {
     const leave = await Leave.findById(leaveId).populate('studentId', 'studentName studentId email');
-    
+
     if (!leave) {
       return res.status(404).json({ message: "Leave request not found." });
     }
 
     const student = leave.studentId;
     const emailSubject = subject || `Regarding Your Leave Request - ${leave.leaveType}`;
-    
+
     const emailBody = `Hello ${student.studentName},
 
 ${message}
@@ -326,7 +339,7 @@ If you have any questions, please contact the hostel administration.
       text: emailBody
     });
 
-    return res.json({ 
+    return res.json({
       message: "Message sent successfully to student",
       sentTo: student.email
     });
@@ -395,9 +408,9 @@ ${adminComments ? `• Admin Comments: ${adminComments}` : ''}
 Applied on: ${new Date(leave.appliedAt).toLocaleDateString("en-IN")}
 Processed on: ${new Date().toLocaleDateString("en-IN")}
 
-${status === 'approved' ? 
-  'Please ensure you follow all hostel guidelines during your leave period.' : 
-  'If you have any questions regarding this decision, please contact the hostel administration.'}
+${status === 'approved' ?
+          'Please ensure you follow all hostel guidelines during your leave period.' :
+          'If you have any questions regarding this decision, please contact the hostel administration.'}
 
 – Hostel Admin`;
 
@@ -415,7 +428,21 @@ ${status === 'approved' ?
 
     await Promise.all(emailPromises);
 
-    return res.json({ 
+    // 🔔 Send in-app notifications to all affected students
+    const notifPromises = leaves.map(leave =>
+      sendNotification({
+        studentId: leave.studentId._id,
+        message: `Your leave request has been ${status.toUpperCase()}`,
+        type: 'leave',
+        link: '/leave-history',
+      }).catch(err => {
+        console.error(`Failed to send notification for leave ${leave._id}:`, err);
+      })
+    );
+
+    await Promise.all(notifPromises);
+
+    return res.json({
       message: `${updateResult.modifiedCount} leave requests ${status} successfully`,
       updatedCount: updateResult.modifiedCount,
       emailsSent: leaves.length
@@ -427,12 +454,12 @@ ${status === 'approved' ?
   }
 };
 
-export{
-    getPendingLeaveRequests,
-    getAllLeaveRequests,
-    updateLeaveStatus,
-    getLeaveStatistics,
-    getStudentLeaveHistory,
-    sendLeaveMessage,
-    bulkUpdateLeaveStatus
+export {
+  getPendingLeaveRequests,
+  getAllLeaveRequests,
+  updateLeaveStatus,
+  getLeaveStatistics,
+  getStudentLeaveHistory,
+  sendLeaveMessage,
+  bulkUpdateLeaveStatus
 }
