@@ -30,6 +30,7 @@ import {
     deleteLeaveRequest,
   getAllAvailableBed,
   deleteInspection,
+  checkPunchStatus,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -47,6 +48,8 @@ router.post("/reset-password", resetPasswordWarden);
 router.post('/attendance/punch-in', verifyWardenToken,  punchInWarden);
 router.post('/attendance/punch-out', verifyWardenToken,  punchOutWarden);
 router.get('/attendance/log', verifyWardenToken, getAttendanceLog);
+router.get('/punch-status', verifyWardenToken, checkPunchStatus);
+
 
 
 // warden Dashboard
