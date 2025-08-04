@@ -9,7 +9,11 @@ const leaveSchema = new mongoose.Schema({
   leaveType: {
     type: String,
     required: true,
-    enum: ['Sick Leave', 'Casual Leave', 'Earned Leave', 'Vacation'],
+    enum: ['Sick Leave', 'Casual Leave', 'Vacation', 'Others'],
+  },
+  otherLeaveType: {
+    type: String,
+    default: '',
   },
   startDate: {
     type: Date,
@@ -28,15 +32,15 @@ const leaveSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending',
   },
-   adminComments: {
+  adminComments: {
     type: String,
-    default: null, 
+    default: null,
   },
   appliedAt: {
     type: Date,
     default: Date.now,
   },
-    processedAt: {
+  processedAt: {
     type: Date,
     default: null,
   },

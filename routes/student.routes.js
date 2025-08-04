@@ -40,6 +40,29 @@ router.get("/notices", getNotices);
 
 router.get('/attendance-log/:studentId', verifyStudentOrParentToken, getAttendanceLog);
 router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile); 
+router.get("/profile", verifyStudentOrParentToken, getStudentProfile);  
+
+router.put("/profile", verifyStudentOrParentToken, updateStudentProfile);
+
+router.post('/check-in', verifyStudentOrParentToken, checkInStudent);
+router.post('/check-out', verifyStudentOrParentToken, checkOutStudent);
+
+router.get('/attendanceSummary/:studentId', verifyStudentOrParentToken, getAttendanceSummary);
+
+router.get('/inspectionSchedule', verifyStudentOrParentToken, getNextInspection);
+
+router.post("/leave", verifyStudentOrParentToken, applyForLeave);
+router.get("/leaves", verifyStudentOrParentToken, getLeaveHistory);
+
+router.get('/feeStatus', verifyStudentOrParentToken, getCurrentFeesStatus);
+
+
+router.post("/refund", verifyStudentOrParentToken, requestRefund);
+router.get("/refunds", verifyStudentOrParentToken, getRefundHistory);
+
+
+router.post("/complaint", verifyStudentOrParentToken, fileComplaint);
+router.get("/complaints", verifyStudentOrParentToken, getComplaintHistory);
 
 router.use(verifyStudentToken);
 
