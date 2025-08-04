@@ -1163,7 +1163,6 @@ const getEmergencyContacts = async (req, res) => {
 };
 
 
-
 const updateEmergencyContact = async (req, res) => {
   try {
     const { studentId } = req.params;
