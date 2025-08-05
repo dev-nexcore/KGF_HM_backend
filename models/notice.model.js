@@ -11,6 +11,7 @@ const noticeSchema = new mongoose.Schema({
     enum: ['All', 'Student', 'Parent', 'Warden'],
     required: true,
   },
+   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   readBy: [{
     studentId: {
       type: String,
@@ -29,6 +30,7 @@ const noticeSchema = new mongoose.Schema({
     default: 'Unread'
   }
 },
+
  { timestamps: true });
 
 export const Notice = mongoose.model("Notice", noticeSchema);

@@ -14,6 +14,12 @@ const app =express()
 app.use(express.json())
 connectDB()
 app.use(cors())
+
+app.get('/', (req, res) => {
+  res.send('🚀 Server is running and MongoDB is connected!');
+});
+
+
 app.use('/api/adminauth', adminRoutes);
 app.use('/api/parentauth',parentRoutes)
 app.use("/api/wardenauth", wardenRoutes);
