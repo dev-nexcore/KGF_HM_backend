@@ -1007,7 +1007,7 @@ const getNextInspection = async (req, res) => {
     }).sort({ datetime: 1 });
 
     if (!nextInspection) {
-      return res.status(200).json({ message: 'No upcoming inspections for this room' });
+      return res.status(204).send();
     }
 
     return res.json({
