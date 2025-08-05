@@ -187,7 +187,8 @@ const checkInStudent = async (req, res) => {
   const studentId = req.studentId;
 
   try {
-    console.log("📸 Selfie received:", selfie);
+    console.log("🔥 Student ID:", studentId);
+    console.log("📸 Selfie received:", selfie?.substring(0, 100)); // trim for log
 
     if (
       !selfie ||
@@ -199,7 +200,6 @@ const checkInStudent = async (req, res) => {
     ) {
       return res.status(400).json({ message: "Selfie is missing or invalid." });
     }
-
 
     const { lat, lng } = location;
     const hostelLat = 19.072618, hostelLng = 72.880419;
@@ -213,20 +213,29 @@ const checkInStudent = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const latestEntry = student.attendanceLog.at(-1); // Get last entry
+    const latestEntry = student.attendanceLog?.at(-1); // optional chaining
 
-    // Prevent multiple check-ins without checkout
     if (latestEntry && !latestEntry.checkOutDate) {
       return res.status(400).json({ message: "Already checked in, checkout first" });
     }
 
-    const selfieURL = await uploadSelfie(selfie, `${studentId}_checkin_${Date.now()}.jpg`);
+    let selfieURL;
+    try {
+      selfieURL = await uploadSelfie(selfie, `${studentId}_checkin_${Date.now()}.jpg`);
+    } catch (err) {
+      console.error("❌ Wasabi upload failed:", err);
+      return res.status(500).json({ message: "Failed to upload selfie" });
+    }
 
     const newCheckIn = {
       checkInDate: new Date(),
       checkInSelfie: selfieURL,
       checkInLocation: { lat, lng },
     };
+
+    if (!Array.isArray(student.attendanceLog)) {
+      student.attendanceLog = [];
+    }
 
     student.attendanceLog.push(newCheckIn);
     await student.save();
@@ -247,7 +256,7 @@ const checkInStudent = async (req, res) => {
       checkInDate: istTime
     });
   } catch (err) {
-    console.error("Check-in error:", err);
+    console.error("❌ Check-in server error:", err);
     return res.status(500).json({ message: "Server error during check-in." });
   }
 };
@@ -998,7 +1007,7 @@ const getNextInspection = async (req, res) => {
     }).sort({ datetime: 1 });
 
     if (!nextInspection) {
-      return res.status(200).json({ message: 'No upcoming inspections for this room' });
+      return res.status(204).send();
     }
 
     return res.json({
