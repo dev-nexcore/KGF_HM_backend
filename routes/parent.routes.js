@@ -1,5 +1,5 @@
 import express from 'express';
-import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile, uploadProfileImage, updateProfile, removeProfileImage } from '../controllers/parent.controller.js';
+import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile,getStudentProfile, uploadProfileImage, updateProfile, removeProfileImage } from '../controllers/parent.controller.js';
 import { authenticateParent } from '../middleware/auth.middleware.js';
 import {uploadParent} from '../middleware/upload.js';
 
@@ -14,6 +14,7 @@ router.get('/profile', authenticateParent, getProfile);
 router.post('/profile/image', authenticateParent, uploadParent.single('profileImage'), uploadProfileImage);
 router.put('/profile', authenticateParent, updateProfile);
 router.delete('/profile/image', authenticateParent, removeProfileImage);
+router.get('/student-profile', authenticateParent, getStudentProfile);
 router.get('/dashboard', authenticateParent,dashboard);
 router.get('/attendance', attendance);
 router.get('/leave-management', authenticateParent,leaveManagement);

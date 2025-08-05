@@ -192,36 +192,6 @@ const punchIn = async (req, res) => {
 };
 
 
-// const punchOut = async (req, res) => {
-//   try {
-//     const wardenId = req.user.id;
-
-//     const warden = await Warden.findById(wardenId);
-
-//     if (!warden) return res.status(404).json({ message: 'Warden not found' });
-
-//     const today = new Date().toDateString();
-//     const log = warden.attendanceLog.find(entry =>
-//       new Date(entry.date).toDateString() === today
-//     );
-
-//     if (!log) return res.status(400).json({ message: 'Punch in not found for today' });
-//     if (log.punchOut) return res.status(400).json({ message: 'Already punched out for today' });
-
-//     log.punchOut = new Date();
-//     const durationMs = log.punchOut - log.punchIn;
-//     log.totalHours = Math.round((durationMs / (1000 * 60 * 60)) * 100) / 100;
-
-//     await warden.save();
-//     res.status(200).json({ message: 'Punch out recorded successfully' });
-
-//   } catch (error) {
-//     console.error('Punch Out Error:', error);
-//     res.status(500).json({ message: 'Server Error' });
-//   }
-// };
-
-
 const punchOut = async (req, res) => {
   try {
     const wardenId = req.user.id;
@@ -246,11 +216,12 @@ const punchOut = async (req, res) => {
     await warden.save();
 
     return res.status(200).json({
-      message: 'Punch out recorded successfully',
-      punchIn: log.punchIn,
-      punchOut: log.punchOut,
-      totalHours: log.totalHours,
-    });
+  message: 'Punch out recorded successfully',
+  punchIn: log.punchIn?.toISOString(),   // ✅ ensure valid string
+  punchOut: log.punchOut?.toISOString(), // ✅ ensure valid string
+  totalHours: log.totalHours,
+});
+
   } catch (error) {
     console.error('Punch Out Error:', error);
     res.status(500).json({ message: 'Server Error' });
@@ -258,24 +229,6 @@ const punchOut = async (req, res) => {
 };
 
 
-// // ✅ Check Punch Status
-// const checkPunchStatus = async (req, res) => {
-//   try {
-//     const wardenId = req.user.id;
-//     const warden = await Warden.findById(wardenId);
-//     if (!warden) return res.status(404).json({ message: 'Warden not found' });
-
-//     const today = new Date().toDateString();
-//     const alreadyPunchedIn = warden.attendanceLog.some(
-//       (entry) => new Date(entry.date).toDateString() === today
-//     );
-
-//     res.status(200).json({ punchedIn: alreadyPunchedIn });
-//   } catch (error) {
-//     console.error('Punch status error:', error);
-//     res.status(500).json({ message: 'Server error checking punch status' });
-//   }
-// };
 
 
 const checkPunchStatus = async (req, res) => {
@@ -292,7 +245,17 @@ const checkPunchStatus = async (req, res) => {
     const punchedIn = !!log;
     const punchedOut = !!log?.punchOut;
 
-    return res.status(200).json({ punchedIn, punchedOut });
+    return res.status(200).json({
+      punchedIn,
+      punchedOut,
+      log: log
+        ? {
+            punchIn: log.punchIn?.toISOString() || null,
+            punchOut: log.punchOut?.toISOString() || null,
+            totalHours: log.totalHours || null,
+          }
+        : null,
+    });
   } catch (err) {
     console.error("Punch status error:", err);
     res.status(500).json({ message: "Server error checking punch status" });
