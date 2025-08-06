@@ -22,7 +22,7 @@ const transporter = nodemailer.createTransport({
 const getPendingLeaveRequests = async (req, res) => {
   try {
     const pendingLeaves = await Leave.find({ status: 'pending' })
-      .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
+      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber') // Changed from 'studentName' to 'firstName lastName'
       .select('leaveType startDate endDate reason status appliedAt')
       .sort({ appliedAt: -1 });
 
@@ -41,7 +41,6 @@ const getAllLeaveRequests = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
 
-    // Handle filter mapping from frontend
     let query = {};
     if (status && status !== 'all') {
       query.status = status;
@@ -50,7 +49,7 @@ const getAllLeaveRequests = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const leaves = await Leave.find(query)
-      .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
+      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber') // Changed from 'studentName' to 'firstName lastName'
       .select('leaveType startDate endDate reason status appliedAt processedAt adminComments')
       .sort({ appliedAt: -1 })
       .skip(skip)
@@ -58,7 +57,6 @@ const getAllLeaveRequests = async (req, res) => {
 
     const totalLeaves = await Leave.countDocuments(query);
 
-    // Add summary counts for the filter tabs
     const statusCounts = await Leave.aggregate([
       {
         $group: {
@@ -82,7 +80,7 @@ const getAllLeaveRequests = async (req, res) => {
     return res.json({
       message: "Leave requests fetched successfully",
       leaves,
-      counts, // For the filter tab badges
+      counts,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalLeaves / limit),
@@ -100,16 +98,15 @@ const getAllLeaveRequests = async (req, res) => {
 // Approve or reject a leave request
 const updateLeaveStatus = async (req, res) => {
   const { leaveId } = req.params;
-  const { status, adminComments } = req.body; // status should be 'approved' or 'rejected'
+  const { status, adminComments } = req.body;
 
   try {
-    // Validate status
     if (!['approved', 'rejected'].includes(status)) {
       return res.status(400).json({ message: "Invalid status. Must be 'approved' or 'rejected'." });
     }
 
-    // Find the leave request
-    const leave = await Leave.findById(leaveId).populate('studentId', 'studentName studentId email');
+    // Updated populate to use firstName and lastName
+    const leave = await Leave.findById(leaveId).populate('studentId', 'firstName lastName studentId email');
 
     if (!leave) {
       return res.status(404).json({ message: "Leave request not found." });
@@ -119,7 +116,6 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(400).json({ message: "Leave request has already been processed." });
     }
 
-    // Update leave status
     leave.status = status;
     if (adminComments) {
       leave.adminComments = adminComments;
@@ -128,13 +124,13 @@ const updateLeaveStatus = async (req, res) => {
 
     await leave.save();
 
-    // Send email notification to student
     const student = leave.studentId;
+    const studentName = `${student.firstName} ${student.lastName}`; // Construct full name
     const statusText = status === 'approved' ? 'APPROVED' : 'REJECTED';
     const statusEmoji = status === 'approved' ? '✅' : '❌';
 
     const emailSubject = `Leave Request ${statusText} - ${leave.leaveType}`;
-    const emailBody = `Hello ${student.studentName},
+    const emailBody = `Hello ${studentName},
 
 ${statusEmoji} Your leave request has been ${statusText.toLowerCase()}.
 
@@ -166,35 +162,6 @@ ${status === 'approved' ?
       console.log(`📤 Leave ${status} notification sent to ${student.email}`);
     } catch (emailErr) {
       console.error("Email sending error:", emailErr);
-      // Don't fail the entire operation if email fails
-    }
-
-    await createAuditLog({
-      adminId: req.admin?._id,
-      adminName: req.admin?.adminId || 'System',
-      actionType: status === 'approved' ? AuditActionTypes.LEAVE_APPROVED : AuditActionTypes.LEAVE_REJECTED,
-      description: `${status === 'approved' ? 'Approved' : 'Rejected'} leave request for ${student.studentName} (${leave.leaveType})`,
-      targetType: 'Leave',
-      targetId: leaveId,
-      targetName: `${student.studentName} - ${leave.leaveType}`,
-      additionalData: {
-        leaveType: leave.leaveType,
-        startDate: leave.startDate,
-        endDate: leave.endDate,
-        adminComments
-      }
-    });
-
-    // Send in-app notification
-    try {
-      await sendNotification({
-        studentId: student._id,
-        message: `Your leave request has been ${status.toUpperCase()}`,
-        type: 'leave',
-        link: '/leaves',
-      });
-    } catch (notifErr) {
-      console.error("Failed to send leave notification:", notifErr);
     }
 
     return res.json({
@@ -209,7 +176,7 @@ ${status === 'approved' ?
         adminComments: leave.adminComments,
         processedAt: leave.processedAt,
         student: {
-          studentName: student.studentName,
+          studentName: studentName, // Use constructed name
           studentId: student.studentId || student._id
         }
       }

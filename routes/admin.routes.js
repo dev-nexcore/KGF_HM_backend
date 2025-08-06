@@ -16,7 +16,11 @@ import {
 import {
   registerStudent,
   registerParent,
-  registerWarden
+  registerWarden,
+   getAllStudents,
+  getStudentById,
+  updateStudent,
+  deleteStudent,
 } from "../controllers/admin/user.controller.js";
 
 import {
@@ -73,9 +77,28 @@ import {
 
 import {
   issueNotice,
+  getAllNotices,
+  getNoticeById,
+  updateNotice,
+  deleteNotice,
+  updateNoticeReadStatus,
   upload,
-  addInventoryItem
+  addInventoryItem,
+  updateInventoryItem,
+  getInventoryItemById,
+  getAvailableBeds,
+  updateInventoryReceipt,
+  getInventoryItems
 } from "../controllers/admin/notice_inventory.controller.js";
+
+import{
+  createInspection,
+  getAllInspections,
+  getInspectionById,
+  updateInspection,
+  deleteInspection,
+  updateInspectionStatus
+} from "../controllers/admin/inspection.controller.js"
 
 const router = Router();
 
@@ -92,6 +115,11 @@ router.post('/reset-password', resetPassword);
 router.post('/register-student', registerStudent);
 router.post('/register-parent', registerParent);
 router.post('/register-warden', registerWarden);
+router.post('/register-student', registerStudent);
+router.get('/students', getAllStudents);
+router.get('/student/:studentId', getStudentById);
+router.put('/update-student/:studentId', updateStudent);
+router.delete('/delete-student/:studentId', deleteStudent);
 
 // ====================== DASHBOARD ROUTES ======================
 router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);
@@ -118,6 +146,14 @@ router.get('/complaints/:complaintId', getComplaintDetails);
 router.get('/complaints/:complaintId/attachment/:attachmentId', getComplaintAttachment);
 router.put('/complaints/:complaintId/status', updateComplaintStatus);
 router.put('/complaints/bulk-status', bulkUpdateComplaintStatus);
+
+
+router.post('/inspections', createInspection);
+router.get('/inspections', getAllInspections);
+router.get('/inspections/:inspectionId', getInspectionById);
+router.put('/inspections/:inspectionId', updateInspection);
+router.delete('/inspections/:inspectionId', deleteInspection);
+router.patch('/inspections/:inspectionId/status', updateInspectionStatus);
 
 // ====================== FINANCIAL MANAGEMENT ROUTES ======================
 // Student Invoices
@@ -148,8 +184,19 @@ router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
 
 // ====================== CONTENT MANAGEMENT ROUTES ======================
+router.get('/inventory', getInventoryItems)
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
+router.get('/inventory/available-beds', getAvailableBeds) 
+router.get('/inventory/:id', getInventoryItemById)
+router.put("/inventory/:id", updateInventoryItem);
+router.put("/inventory/:id/receipt", upload.single("receipt"), updateInventoryReceipt);
+
 router.post('/issue-notice', issueNotice);
+router.get('/notices', getAllNotices);
+router.get('/notices/:noticeId', getNoticeById);
+router.put('/notices/:noticeId', updateNotice);
+router.delete('/notices/:noticeId', deleteNotice);
+router.patch('/notices/:noticeId/read-status', updateNoticeReadStatus);
 
 // ====================== PUBLIC ROUTES ======================
 // GET /api/inventory/public/:slug

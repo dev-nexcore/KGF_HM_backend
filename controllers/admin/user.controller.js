@@ -227,8 +227,238 @@ Please log in at https://www.KGF-HM.com and change your password after first log
   }
 };
 
+const getAllStudents = async (req, res) => {
+  try {
+    // Get all students with selected fields
+    const students = await Student.find({})
+      .select('-password') // Exclude password from response
+      .sort({ createdAt: -1 }); // Sort by newest first
+
+    // Transform data for frontend compatibility
+    const transformedStudents = students.map(student => ({
+      id: student.studentId,
+      firstName: student.firstName,
+      lastName: student.lastName,
+      studentId: student.studentId,
+      contactNumber: student.contactNumber,
+      roomBedNumber: student.roomBedNumber,
+      email: student.email,
+      admissionDate: student.admissionDate,
+      feeStatus: student.feeStatus,
+      emergencyContactName: student.emergencyContactName,
+      emergencyContactNumber: student.emergencyContactNumber,
+      createdAt: student.createdAt,
+      updatedAt: student.updatedAt
+    }));
+
+    return res.json({
+      success: true,
+      message: 'Students fetched successfully',
+      students: transformedStudents,
+      count: transformedStudents.length
+    });
+  } catch (err) {
+    console.error('Error fetching students:', err);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error fetching students.' 
+    });
+  }
+};
+
+// PUT update student
+const updateStudent = async (req, res) => {
+  const { studentId } = req.params;
+  const {
+    firstName,
+    lastName,
+    contactNumber,
+    roomBedNumber,
+    email,
+    admissionDate,
+    feeStatus,
+    emergencyContactName,
+    emergencyContactNumber
+  } = req.body;
+
+  try {
+    // Check if student exists
+    const existingStudent = await Student.findOne({ studentId });
+    if (!existingStudent) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found.' 
+      });
+    }
+
+    // Prepare update data (only include fields that are provided)
+    const updateData = {};
+    if (firstName !== undefined) updateData.firstName = firstName;
+    if (lastName !== undefined) updateData.lastName = lastName;
+    if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
+    if (roomBedNumber !== undefined) updateData.roomBedNumber = roomBedNumber;
+    if (email !== undefined) updateData.email = email;
+    if (admissionDate !== undefined) updateData.admissionDate = admissionDate;
+    if (feeStatus !== undefined) updateData.feeStatus = feeStatus;
+    if (emergencyContactName !== undefined) updateData.emergencyContactName = emergencyContactName;
+    if (emergencyContactNumber !== undefined) updateData.emergencyContactNumber = emergencyContactNumber;
+
+    // Update student
+    const updatedStudent = await Student.findOneAndUpdate(
+      { studentId },
+      updateData,
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    // Create audit log
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.STUDENT_UPDATED,
+      description: `Updated student: ${firstName || existingStudent.firstName} ${lastName || existingStudent.lastName} (ID: ${studentId})`,
+      targetType: 'Student',
+      targetId: studentId,
+      targetName: `${firstName || existingStudent.firstName} ${lastName || existingStudent.lastName}`,
+      additionalData: {
+        updatedFields: Object.keys(updateData),
+        oldData: {
+          firstName: existingStudent.firstName,
+          lastName: existingStudent.lastName,
+          contactNumber: existingStudent.contactNumber,
+          email: existingStudent.email,
+          roomBedNumber: existingStudent.roomBedNumber,
+          feeStatus: existingStudent.feeStatus
+        },
+        newData: updateData
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Student updated successfully.',
+      student: updatedStudent
+    });
+  } catch (err) {
+    console.error('Error updating student:', err);
+    
+    // Handle validation errors
+    if (err.name === 'ValidationError') {
+      const validationErrors = Object.values(err.errors).map(e => e.message);
+      return res.status(400).json({ 
+        success: false,
+        message: 'Validation error.',
+        errors: validationErrors
+      });
+    }
+    
+    // Handle duplicate email error
+    if (err.code === 11000 && err.keyPattern?.email) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Email already exists.' 
+      });
+    }
+
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error updating student.' 
+    });
+  }
+};
+
+// DELETE student
+const deleteStudent = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    // Check if student exists
+    const existingStudent = await Student.findOne({ studentId });
+    if (!existingStudent) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found.' 
+      });
+    }
+
+    // Store student data for audit log before deletion
+    const studentData = {
+      firstName: existingStudent.firstName,
+      lastName: existingStudent.lastName,
+      email: existingStudent.email,
+      contactNumber: existingStudent.contactNumber,
+      roomBedNumber: existingStudent.roomBedNumber
+    };
+
+    // Delete student
+    await Student.deleteOne({ studentId });
+
+    // Create audit log
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.STUDENT_DELETED,
+      description: `Deleted student: ${studentData.firstName} ${studentData.lastName} (ID: ${studentId})`,
+      targetType: 'Student',
+      targetId: studentId,
+      targetName: `${studentData.firstName} ${studentData.lastName}`,
+      additionalData: {
+        deletedStudentData: studentData
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Student deleted successfully.',
+      deletedStudent: {
+        studentId,
+        name: `${studentData.firstName} ${studentData.lastName}`
+      }
+    });
+  } catch (err) {
+    console.error('Error deleting student:', err);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error deleting student.' 
+    });
+  }
+};
+
+// GET single student by ID
+const getStudentById = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const student = await Student.findOne({ studentId }).select('-password');
+    
+    if (!student) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Student not found.' 
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Student fetched successfully.',
+      student
+    });
+  } catch (err) {
+    console.error('Error fetching student:', err);
+    return res.status(500).json({ 
+      success: false,
+      message: 'Error fetching student.' 
+    });
+  }
+};
+
+
+
 export{
     registerStudent,
     registerParent,
-    registerWarden
+    registerWarden,
+     getAllStudents,
+  getStudentById,
+  updateStudent,
+  deleteStudent,
 }
