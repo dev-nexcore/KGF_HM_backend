@@ -347,12 +347,59 @@ const getStudentProfile = async (req, res) => {
   try {
     const parentStudentId = req.studentId; // From the parent's JWT token
     
-    // Fetch student data
+    console.log('🔍 Fetching profile for student ID:', parentStudentId);
+    
+    // Fetch student data with populated room information (matching your student controller)
     const student = await Student.findOne({ studentId: parentStudentId })
-      .select('firstName lastName studentId email contactNumber roomNo bedAllotment lastCheckInDate profileImage createdAt updatedAt');
+      .populate("roomBedNumber") // This is crucial for room details
+      .select('firstName lastName studentId email contactNumber profileImage createdAt updatedAt roomBedNumber attendanceLog');
     
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
+    }
+
+    console.log('👤 Found student:', student.firstName, student.lastName);
+    console.log('📸 Profile image field:', student.profileImage);
+
+    // Extract room details from populated roomBedNumber (matching your student controller logic)
+    const inventoryData = student.roomBedNumber || {};
+    const roomNo = inventoryData.roomNo || "N/A";
+    const bedAllotment = inventoryData.itemName || "N/A";
+    const barcodeId = inventoryData.barcodeId || "N/A";
+    const floor = inventoryData.floor || "N/A";
+
+    // Handle profile image properly
+    let imageUrl = null;
+    if (student.profileImage && typeof student.profileImage === "string" && student.profileImage.trim() !== "") {
+      const imgPath = student.profileImage.replace(/\\/g, "/");
+      
+      // Avoid double prefix - check if it already starts with http
+      imageUrl = imgPath.startsWith("http")
+        ? imgPath
+        : `${req.protocol}://${req.get("host")}/${imgPath}`;
+    }
+
+    console.log('🖼️ Final image URL:', imageUrl);
+
+    // Get last check-in info (matching your student controller)
+    const lastLog = student.attendanceLog?.at(-1);
+    let checkStatus = "Pending Check-in";
+    let checkTime = "--:--:--";
+
+    if (lastLog) {
+      if (!lastLog.checkOutDate) {
+        checkStatus = "Checked In";
+        checkTime = new Date(lastLog.checkInDate).toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          hour12: false,
+        });
+      } else {
+        checkStatus = "Checked Out";
+        checkTime = new Date(lastLog.checkOutDate).toLocaleTimeString("en-IN", {
+          timeZone: "Asia/Kolkata",
+          hour12: false,
+        });
+      }
     }
 
     // Format the response to match what the parent panel expects
@@ -362,13 +409,20 @@ const getStudentProfile = async (req, res) => {
       studentId: student.studentId,
       email: student.email,
       contactNumber: student.contactNumber,
-      roomNo: student.roomNo,
-      bedAllotment: student.bedAllotment,
-      lastCheckInDate: student.lastCheckInDate,
-      profileImage: student.profileImage ? `${req.protocol}://${req.get('host')}/${student.profileImage}` : null,
+      roomNo: roomNo,
+      bedAllotment: bedAllotment,
+      barcodeId: barcodeId,
+      floor: floor,
+      lastCheckInDate: lastLog?.checkInDate || null,
+      checkStatus: checkStatus,
+      checkTime: checkTime,
+      profileImage: imageUrl, // This should now work properly
+      photo: imageUrl, // Also provide as 'photo' field for compatibility
       createdAt: student.createdAt,
       updatedAt: student.updatedAt
     };
+
+    console.log('✅ Sending profile with image:', studentProfile.profileImage);
 
     res.json({
       success: true,
@@ -376,13 +430,14 @@ const getStudentProfile = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error fetching student profile for parent:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch student profile' 
+    console.error('❌ Error fetching student profile for parent:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch student profile'
     });
   }
 };
+ 
 // Upload profile image
 const uploadProfileImage = async (req, res) => {
   const parentStudentId = req.studentId; // From authenticateParent middleware
