@@ -109,6 +109,52 @@ const getInventoryItems = async (req, res) => {
   }
 };
 
+const getInventoryItemById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inventoryItem = await Inventory.findById(id);
+    
+    if (!inventoryItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inventory item not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      inventory: inventoryItem
+    });
+  } catch (error) {
+    console.error('Error fetching inventory item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching inventory item'
+    });
+  }
+};
+
+const getAvailableBeds = async (req, res) => {
+  try {
+    const availableBeds = await Inventory.find({
+      category: 'Furniture',
+      itemName: 'Bed',
+      status: 'Available'
+    }).select('_id barcodeId roomNo floor location');
+    
+    res.status(200).json({
+      success: true,
+      availableBeds: availableBeds
+    });
+  } catch (error) {
+    console.error('Error fetching available beds:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching available beds'
+    });
+  }
+};
+
 const updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
@@ -620,6 +666,8 @@ export {
   addInventoryItem,
   getInventoryItems,
   updateInventoryItem,
+  getInventoryItemById,
+  getAvailableBeds,
   updateInventoryReceipt,
   issueNotice,
   getAllNotices,

@@ -85,6 +85,8 @@ import {
   upload,
   addInventoryItem,
   updateInventoryItem,
+  getInventoryItemById,
+  getAvailableBeds,
   updateInventoryReceipt,
   getInventoryItems
 } from "../controllers/admin/notice_inventory.controller.js";
@@ -184,6 +186,8 @@ router.get('/audit-logs/export/csv', exportAuditLogs);
 // ====================== CONTENT MANAGEMENT ROUTES ======================
 router.get('/inventory', getInventoryItems)
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
+router.get('/inventory/available-beds', getAvailableBeds) 
+router.get('/inventory/:id', getInventoryItemById)
 router.put("/inventory/:id", updateInventoryItem);
 router.put("/inventory/:id/receipt", upload.single("receipt"), updateInventoryReceipt);
 
