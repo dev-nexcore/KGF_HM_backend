@@ -616,7 +616,7 @@ Leave Details:
 • Status: Pending Approval
 
 Please review this leave application by visiting the Parent Portal:
-👉 https://www.KGF-HM.com/dashboard/leave-management
+👉 https://kgf-hm-parent.nexcoreallaince.com/dashboard/Leave
 
 You can view all leave applications and their current status in the Leave Management section.
 
@@ -646,7 +646,7 @@ html: `
     </div>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="http://localhost:3000/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+      <a href="https://kgf-hm-parent.nexcoreallaince.com/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
         View Leave Application
       </a>
     </div>
