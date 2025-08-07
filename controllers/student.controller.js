@@ -646,7 +646,7 @@ html: `
     </div>
     
     <div style="text-align: center; margin: 30px 0;">
-      <a href="https://kgf-hm-parent.nexcoreallaince.com/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+      <a href="https://kgf-hm-parent.nexcorealliance.com/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
         View Leave Application
       </a>
     </div>
