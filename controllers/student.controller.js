@@ -635,9 +635,9 @@ const applyForLeave = async (req, res) => {
       }).then(() => console.log("📧 Mail sent to admin")),
 
       parent?.email ? transporter.sendMail({
-        from: `<${student.email}>`,
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
         to: parent.email,
-        subject: `Your ward ${student.firstName} has applied for leave`,
+        subject: `Your child ${student.firstName} has applied for leave`,
         html: leaveHtml
       }).then(() => console.log("📧 Mail sent to parent:", parent.email))
         .catch((err) => console.error("❌ Failed to send mail to parent:", err)) : Promise.resolve()
