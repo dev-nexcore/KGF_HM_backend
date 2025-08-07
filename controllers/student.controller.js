@@ -556,6 +556,18 @@ const applyForLeave = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    let parent = req.parent;
+
+    if (!parent) {
+      parent = await Parent.findOne({ studentId });
+    }
+
+    if (!parent || !parent.email) {
+      console.log("❌ Parent not found or missing email for studentId:", studentId);
+    } else {
+      console.log("📘 Parent found in applyForLeave:", parent.email);
+    }
+
     const newLeave = new Leave({
       studentId: student._id,
       leaveType,
@@ -586,12 +598,7 @@ const applyForLeave = async (req, res) => {
     const durationMs = new Date(endDate) - new Date(startDate);
     const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
 
-    // Send email to admin only
-    await transporter.sendMail({
-      from: `<${student.email}>`,
-      to: process.env.MAIL_USER,
-      subject: `Leave Application: ${leaveType} from ${student.firstName}`,
-      html: `
+    const leaveHtml = `
         <div style="font-family: Arial, sans-serif; padding: 20px;">
           <h2>Leave Application</h2>
           <p><strong>Student:</strong> ${student.firstName} ${student.lastName} (ID: ${student.studentId})</p>
@@ -602,8 +609,39 @@ const applyForLeave = async (req, res) => {
           <p><strong>Reason:</strong> ${reason}</p>
           <p>Status: <strong style="color: orange;">Pending</strong></p>
         </div>
-      `
+      `;
+
+    //Send email to admin only
+    await transporter.sendMail({
+      from: `<${student.email}>`,
+      to: process.env.MAIL_USER,
+      subject: `Leave Application: ${leaveType} from ${student.firstName}`,
+      html: leaveHtml
     });
+
+    await transporter.sendMail({
+      from: `<${student.email}>`,
+      to: process.env.MAIL_USER,
+      subject: `Leave Application: ${leaveType} from ${student.firstName}`,
+      html: leaveHtml
+    });
+
+    await Promise.all([
+      transporter.sendMail({
+        from: `<${student.email}>`,
+        to: process.env.MAIL_USER,
+        subject: `Leave Application: ${leaveType} from ${student.firstName}`,
+        html: leaveHtml
+      }).then(() => console.log("📧 Mail sent to admin")),
+
+      parent?.email ? transporter.sendMail({
+        from: `<${student.email}>`,
+        to: parent.email,
+        subject: `Your ward ${student.firstName} has applied for leave`,
+        html: leaveHtml
+      }).then(() => console.log("📧 Mail sent to parent:", parent.email))
+        .catch((err) => console.error("❌ Failed to send mail to parent:", err)) : Promise.resolve()
+    ]);
 
     return res.json({
       message: "Leave application submitted successfully.",
@@ -614,8 +652,6 @@ const applyForLeave = async (req, res) => {
     return res.status(500).json({ message: "Server error while applying for leave." });
   }
 };
-
-
 
 const getLeaveHistory = async (req, res) => {
   const studentId = req.studentId;
