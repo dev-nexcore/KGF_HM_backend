@@ -14,29 +14,41 @@ const app = express()
 // Connect to database first
 connectDB()
 
-// CORS configuration - THIS IS THE KEY FIX
+
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001', 
-    'https://kgf-hm-admin.nexcorealliance.com',
-    'https://kgf-hm-parent.nexcorealliance.com',
-    'https://kgf-hm-student.nexcorealliance.com',
-    'https://kgf-hm-warden.nexcorealliance.com' // Add your actual frontend domain
-  ],
-  credentials: true, // Allow cookies and credentials
+  origin: (origin, callback) => {
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://kgf-hm-admin.nexcorealliance.com',
+      'https://kgf-hm-parent.nexcorealliance.com',
+      'https://kgf-hm-student.nexcorealliance.com',
+      'https://kgf-hm-warden.nexcorealliance.com'
+    ];
+
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from ${origin}`;
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ]
-}
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+  maxAge: 86400 // 24 hours
+};
 
 // Apply CORS before other middleware
-app.use(cors(corsOptions))
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
+
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }))
