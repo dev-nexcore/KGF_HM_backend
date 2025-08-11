@@ -1,8 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
 
 import connectDB from "./config/db.config.js";
 import adminRoutes from "./routes/admin.routes.js";
@@ -10,7 +8,11 @@ import parentRoutes from "./routes/parent.routes.js";
 import wardenRoutes from "./routes/warden.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 
+import path from "path";
+import { fileURLToPath } from "url";
+
 dotenv.config();
+
 const app = express();
 
 // ----- Basic middleware -----
@@ -20,34 +22,21 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // ----- DB connection -----
 connectDB();
 
-// ----- CORS (NO CREDENTIALS; using Authorization header) -----
-const allowedOrigins = [
-  // PROD apps
-  "https://kgf-hm-admin.nexcorealliance.com",
-  "https://kgf-hm-parent.nexcorealliance.com",
-  "https://kgf-hm-student.nexcorealliance.com",
-  "https://kgf-hm-warden.nexcorealliance.com",
-  // DEV
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-];
-
-const corsOptions = {
-  origin(origin, cb) {
-    // allow server-to-server / curl (no Origin) and exact allowlist
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error("Not allowed by CORS"));
-  },
-  credentials: false, // <-- IMPORTANT: we're NOT using cookies cross-site
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-admin-id"],
-};
-
-app.use(cors(corsOptions));
-// Explicitly handle preflight
-app.options("*", cors(corsOptions));
+// ----- CORS -----
+if (process.env.NODE_ENV === "production") {
+  const corsOptions = {
+    origin: [
+      "https://kgf-hm-admin.nexcorealliance.com",
+      "https://kgf-hm-parent.nexcorealliance.com",
+      "https://kgf-hm-student.nexcorealliance.com",
+      "https://kgf-hm-warden.nexcorealliance.com",
+    ],
+    credentials: true,
+  };
+  app.use(cors(corsOptions));
+} else {
+  app.use(cors());
+}
 
 // ----- Health check -----
 app.get("/", (req, res) => {
@@ -79,7 +68,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ----- 404 handler (no path) -----
+// ----- 404 handler (EASIEST FIX: no path here) -----
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });
 });
@@ -90,5 +79,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log("🔒 CORS: no credentials; Authorization header allowed");
+  console.log(
+    `🔒 CORS: ${process.env.NODE_ENV === "production" ? "Specific origins" : "All origins allowed"}`
+  );
 });
