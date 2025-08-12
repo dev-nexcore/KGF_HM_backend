@@ -17,6 +17,8 @@ import { nanoid } from 'nanoid';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 
+const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || 'http://localhost:3000';
+
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
 
@@ -51,21 +53,34 @@ const addInventoryItem = async (req, res) => {
       barcodeId,
       category,
       location,
+      roomNo,
+      floor,
       status,
       description,
       purchaseDate,
       purchaseCost
     } = req.body;
 
+    // Check if barcode ID already exists
+    const existingItem = await Inventory.findOne({ barcodeId });
+    if (existingItem) {
+      return res.status(400).json({
+        success: false,
+        message: 'Barcode ID already exists. Please use a unique barcode ID.'
+      });
+    }
+
     const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
+    const publicSlug = nanoid(10); // Generate unique slug for public access
 
-    const publicSlug = nanoid(10); // short, non-guessable slug
-
+    // Create new inventory item
     const newItem = new Inventory({
       itemName,
       barcodeId,
       category,
       location,
+      roomNo,
+      floor,
       status,
       description,
       purchaseDate,
@@ -76,36 +91,96 @@ const addInventoryItem = async (req, res) => {
 
     await newItem.save();
 
-    const qrData = `${FRONTEND_BASE_URL}/p/${publicSlug}`;
+    // Generate QR code data (URL that will show item details)
+    const qrData = `${FRONTEND_BASE_URL}/inventory/item/${publicSlug}`;
 
+    // Ensure QR codes directory exists
     const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
-    if (!fs.existsSync(qrCodesDir)) fs.mkdirSync(qrCodesDir, { recursive: true });
+    if (!fs.existsSync(qrCodesDir)) {
+      fs.mkdirSync(qrCodesDir, { recursive: true });
+    }
 
+    // Generate QR code file
     const qrCodePath = path.join(qrCodesDir, `${newItem._id}.png`);
-    await QRCode.toFile(qrCodePath, qrData);
+    await QRCode.toFile(qrCodePath, qrData, {
+      width: 300,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
 
+    // Update item with QR code URL
     newItem.qrCodeUrl = `/public/qrcodes/${newItem._id}.png`;
     await newItem.save();
 
     return res.status(201).json({
+      success: true,
       message: 'Inventory item added successfully',
       item: newItem,
       qrCodeUrl: newItem.qrCodeUrl,
-      publicUrl: `${FRONTEND_BASE_URL}/p/${publicSlug}`
+      publicUrl: qrData
     });
 
   } catch (err) {
     console.error('Add Inventory Error:', err);
-    return res.status(500).json({ message: 'Failed to add inventory item.' });
+    return res.status(500).json({ 
+      success: false,
+      message: 'Failed to add inventory item.' 
+    });
   }
 };
 const getInventoryItems = async (req, res) => {
   try {
-    const items = await Inventory.find().sort({ createdAt: -1 });
-    return res.json({ items });
+    const { 
+      page = 1, 
+      limit = 50, 
+      category, 
+      status, 
+      search 
+    } = req.query;
+
+    // Build filter object
+    const filter = {};
+    if (category && category !== 'All Categories') filter.category = category;
+    if (status && status !== 'All Status') filter.status = status;
+    if (search) {
+      filter.$or = [
+        { itemName: { $regex: search, $options: 'i' } },
+        { barcodeId: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Calculate pagination
+    const skip = (page - 1) * limit;
+
+    // Get items with pagination
+    const items = await Inventory.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalItems = await Inventory.countDocuments(filter);
+
+    return res.json({ 
+      success: true,
+      items,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalItems / limit),
+        totalItems,
+        hasNextPage: page * limit < totalItems,
+        hasPrevPage: page > 1
+      }
+    });
   } catch (err) {
     console.error("Error fetching inventory:", err);
-    return res.status(500).json({ message: "Failed to fetch inventory items." });
+    return res.status(500).json({ 
+      success: false,
+      message: "Failed to fetch inventory items." 
+    });
   }
 };
 
@@ -134,6 +209,144 @@ const getInventoryItemById = async (req, res) => {
   }
 };
 
+const getInventoryItemBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const inventoryItem = await Inventory.findOne({ publicSlug: slug });
+    
+    if (!inventoryItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inventory item not found'
+      });
+    }
+
+    // Return public-safe information
+    const publicItemData = {
+      itemName: inventoryItem.itemName,
+      barcodeId: inventoryItem.barcodeId,
+      category: inventoryItem.category,
+      location: inventoryItem.location,
+      roomNo: inventoryItem.roomNo,
+      floor: inventoryItem.floor,
+      status: inventoryItem.status,
+      description: inventoryItem.description,
+      purchaseDate: inventoryItem.purchaseDate,
+      qrCodeUrl: inventoryItem.qrCodeUrl,
+      // Don't expose sensitive data like purchase cost unless authorized
+      lastUpdated: inventoryItem.updatedAt
+    };
+
+    res.status(200).json({
+      success: true,
+      item: publicItemData
+    });
+  } catch (error) {
+    console.error('Error fetching inventory item by slug:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching inventory item'
+    });
+  }
+};
+
+const generateQRCode = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inventoryItem = await Inventory.findById(id);
+    
+    if (!inventoryItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inventory item not found'
+      });
+    }
+
+    // Generate public slug if it doesn't exist
+    if (!inventoryItem.publicSlug) {
+      inventoryItem.publicSlug = nanoid(10);
+      await inventoryItem.save();
+    }
+
+    const qrData = `${FRONTEND_BASE_URL}/inventory/item/${inventoryItem.publicSlug}`;
+
+    // Ensure QR codes directory exists
+    const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
+    if (!fs.existsSync(qrCodesDir)) {
+      fs.mkdirSync(qrCodesDir, { recursive: true });
+    }
+
+    // Generate QR code file
+    const qrCodePath = path.join(qrCodesDir, `${inventoryItem._id}.png`);
+    await QRCode.toFile(qrCodePath, qrData, {
+      width: 300,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+
+    // Update item with QR code URL if not already set
+    if (!inventoryItem.qrCodeUrl) {
+      inventoryItem.qrCodeUrl = `/public/qrcodes/${inventoryItem._id}.png`;
+      await inventoryItem.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'QR code generated successfully',
+      qrCodeUrl: inventoryItem.qrCodeUrl,
+      publicUrl: qrData
+    });
+
+  } catch (error) {
+    console.error('Error generating QR code:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate QR code'
+    });
+  }
+};
+
+// Download QR code
+const downloadQRCode = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const inventoryItem = await Inventory.findById(id);
+    
+    if (!inventoryItem || !inventoryItem.qrCodeUrl) {
+      return res.status(404).json({
+        success: false,
+        message: 'QR code not found for this item'
+      });
+    }
+
+    const qrCodePath = path.join(process.cwd(), 'public', 'qrcodes', `${id}.png`);
+    
+    if (!fs.existsSync(qrCodePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'QR code file not found'
+      });
+    }
+
+    // Set headers for file download
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Content-Disposition', `attachment; filename="${inventoryItem.itemName}-QR.png"`);
+    
+    // Send file
+    res.sendFile(qrCodePath);
+
+  } catch (error) {
+    console.error('Error downloading QR code:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to download QR code'
+    });
+  }
+};
+
 const getAvailableBeds = async (req, res) => {
   try {
     const availableBeds = await Inventory.find({
@@ -155,22 +368,65 @@ const getAvailableBeds = async (req, res) => {
   }
 };
 
+// Update inventory item
 const updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const updatedItem = await Inventory.findByIdAndUpdate(id, req.body, { new: true });
-    if (!updatedItem) return res.status(404).json({ message: "Item not found" });
-    res.json({ message: "Inventory item updated", item: updatedItem });
+    const updateData = req.body;
+
+    // Check if barcode ID is being updated and if it already exists
+    if (updateData.barcodeId) {
+      const existingItem = await Inventory.findOne({ 
+        barcodeId: updateData.barcodeId,
+        _id: { $ne: id }
+      });
+      
+      if (existingItem) {
+        return res.status(400).json({
+          success: false,
+          message: 'Barcode ID already exists. Please use a unique barcode ID.'
+        });
+      }
+    }
+
+    const updatedItem = await Inventory.findByIdAndUpdate(
+      id, 
+      updateData, 
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedItem) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Item not found" 
+      });
+    }
+
+    res.json({ 
+      success: true,
+      message: "Inventory item updated successfully", 
+      item: updatedItem 
+    });
   } catch (err) {
     console.error("Error updating inventory:", err);
-    res.status(500).json({ message: "Failed to update inventory item" });
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to update inventory item" 
+    });
   }
 };
 
+// Update inventory receipt
 const updateInventoryReceipt = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!req.file) return res.status(400).json({ message: "No receipt uploaded" });
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false,
+        message: "No receipt uploaded" 
+      });
+    }
 
     const updatedItem = await Inventory.findByIdAndUpdate(
       id,
@@ -178,11 +434,69 @@ const updateInventoryReceipt = async (req, res) => {
       { new: true }
     );
 
-    if (!updatedItem) return res.status(404).json({ message: "Item not found" });
-    res.json({ message: "Receipt uploaded successfully", item: updatedItem });
+    if (!updatedItem) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Item not found" 
+      });
+    }
+
+    res.json({ 
+      success: true,
+      message: "Receipt uploaded successfully", 
+      item: updatedItem 
+    });
   } catch (err) {
     console.error("Error uploading receipt:", err);
-    res.status(500).json({ message: "Failed to upload receipt" });
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to upload receipt" 
+    });
+  }
+};
+
+// Delete inventory item
+const deleteInventoryItem = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const inventoryItem = await Inventory.findById(id);
+    if (!inventoryItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inventory item not found'
+      });
+    }
+
+    // Delete QR code file if it exists
+    if (inventoryItem.qrCodeUrl) {
+      const qrCodePath = path.join(process.cwd(), 'public', 'qrcodes', `${id}.png`);
+      if (fs.existsSync(qrCodePath)) {
+        fs.unlinkSync(qrCodePath);
+      }
+    }
+
+    // Delete receipt file if it exists
+    if (inventoryItem.receiptUrl) {
+      const receiptPath = path.join(process.cwd(), inventoryItem.receiptUrl);
+      if (fs.existsSync(receiptPath)) {
+        fs.unlinkSync(receiptPath);
+      }
+    }
+
+    await Inventory.findByIdAndDelete(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Inventory item deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('Error deleting inventory item:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete inventory item'
+    });
   }
 };
 
@@ -665,8 +979,12 @@ const updateNoticeReadStatus = async (req, res) => {
 export {
   addInventoryItem,
   getInventoryItems,
+  getInventoryItemBySlug,
+   generateQRCode,
+  downloadQRCode,
   updateInventoryItem,
   getInventoryItemById,
+  deleteInventoryItem,
   getAvailableBeds,
   updateInventoryReceipt,
   issueNotice,

@@ -18,6 +18,13 @@ const app = express();
 // ----- Basic middleware -----
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use('/public', express.static(path.join(process.cwd(), 'public')));
+
+// ----- Serve static folders for QR codes and receipts -----
+app.use('/qrcodes', express.static(path.join(process.cwd(), 'public/qrcodes')));
+app.use('/public/qrcodes', express.static(path.join(process.cwd(), 'public/qrcodes')));
+app.use('/receipts', express.static(path.join(process.cwd(), 'public/receipts')));
+app.use('/public/receipts', express.static(path.join(process.cwd(), 'public/receipts')));
 
 // ----- DB connection -----
 connectDB();

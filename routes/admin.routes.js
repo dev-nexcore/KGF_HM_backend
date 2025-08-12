@@ -86,6 +86,10 @@ import {
   addInventoryItem,
   updateInventoryItem,
   getInventoryItemById,
+  getInventoryItemBySlug,
+  generateQRCode,
+  downloadQRCode,
+  deleteInventoryItem,
   getAvailableBeds,
   updateInventoryReceipt,
   getInventoryItems
@@ -186,10 +190,14 @@ router.get('/audit-logs/export/csv', exportAuditLogs);
 // ====================== CONTENT MANAGEMENT ROUTES ======================
 router.get('/inventory', getInventoryItems)
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
+router.get('/public/:slug', getInventoryItemBySlug);
+router.delete('/:id', deleteInventoryItem);
 router.get('/inventory/available-beds', getAvailableBeds) 
 router.get('/inventory/:id', getInventoryItemById)
 router.put("/inventory/:id", updateInventoryItem);
 router.put("/inventory/:id/receipt", upload.single("receipt"), updateInventoryReceipt);
+router.post('/:id/qr-code', generateQRCode);
+router.get('/:id/qr-code/download', downloadQRCode);
 
 router.post('/issue-notice', issueNotice);
 router.get('/notices', getAllNotices);
