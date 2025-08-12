@@ -1,6 +1,7 @@
 // models/inventory.model.js
 import mongoose from 'mongoose';
 
+
 const inventorySchema = new mongoose.Schema({
   itemName: { type: String, required: true },
   barcodeId: { type: String, required: true, unique: true },
@@ -17,7 +18,8 @@ const inventorySchema = new mongoose.Schema({
   purchaseDate: { type: Date },
   purchaseCost: { type: Number },
   receiptUrl: { type: String }, // File upload path or Cloudinary link
-  qrCodeUrl: { type: String, default: null }  // <— add this
+  qrCodeUrl: { type: String, default: null },
+  publicSlug: { type: String, unique: true, index: true } // <-- ensure this is always present and indexed
 }, { timestamps: true });
 
 export const Inventory = mongoose.model('Inventory', inventorySchema);
