@@ -116,8 +116,11 @@ const addInventoryItem = async (req, res) => {
     await newItem.save();
 
     // Ensure publicSlug is present in the item object
-    const itemWithSlug = newItem.toObject();
-    itemWithSlug.publicSlug = newItem.publicSlug;
+    // Ensure publicSlug is present in the item object (for both lean and hydrated docs)
+    let itemWithSlug = newItem.toObject ? newItem.toObject() : { ...newItem };
+    if (!itemWithSlug.publicSlug && newItem.publicSlug) {
+      itemWithSlug.publicSlug = newItem.publicSlug;
+    }
     return res.status(201).json({
       success: true,
       message: 'Inventory item added successfully',
