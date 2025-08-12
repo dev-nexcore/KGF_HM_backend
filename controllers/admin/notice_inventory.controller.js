@@ -120,6 +120,7 @@ const addInventoryItem = async (req, res) => {
       message: 'Inventory item added successfully',
       item: newItem,
       qrCodeUrl: newItem.qrCodeUrl,
+      publicSlug: newItem.publicSlug, // <-- ensure this is returned
       publicUrl: qrData
     });
 
