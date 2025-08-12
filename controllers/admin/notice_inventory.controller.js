@@ -221,7 +221,7 @@ const getInventoryItemBySlug = async (req, res) => {
       });
     }
 
-    // Return public-safe information
+    // Return public-safe information, including publicSlug
     const publicItemData = {
       itemName: inventoryItem.itemName,
       barcodeId: inventoryItem.barcodeId,
@@ -233,6 +233,7 @@ const getInventoryItemBySlug = async (req, res) => {
       description: inventoryItem.description,
       purchaseDate: inventoryItem.purchaseDate,
       qrCodeUrl: inventoryItem.qrCodeUrl,
+      publicSlug: inventoryItem.publicSlug, // <-- ensure this is returned
       // Don't expose sensitive data like purchase cost unless authorized
       lastUpdated: inventoryItem.updatedAt
     };
