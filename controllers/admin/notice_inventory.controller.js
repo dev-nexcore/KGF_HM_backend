@@ -115,12 +115,15 @@ const addInventoryItem = async (req, res) => {
     newItem.qrCodeUrl = `/public/qrcodes/${newItem._id}.png`;
     await newItem.save();
 
+    // Ensure publicSlug is present in the item object
+    const itemWithSlug = newItem.toObject();
+    itemWithSlug.publicSlug = newItem.publicSlug;
     return res.status(201).json({
       success: true,
       message: 'Inventory item added successfully',
-      item: newItem,
+      item: itemWithSlug,
       qrCodeUrl: newItem.qrCodeUrl,
-      publicSlug: newItem.publicSlug, // <-- ensure this is returned
+      publicSlug: newItem.publicSlug,
       publicUrl: qrData
     });
 
