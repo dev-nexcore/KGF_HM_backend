@@ -204,7 +204,7 @@ const checkInStudent = async (req, res) => {
     const { lat, lng } = location;
     const hostelLat = 19.072618, hostelLng = 72.880419;
     const distance = getDistanceKm(lat, lng, hostelLat, hostelLng);
-    if (distance > 0.3) {
+    if (distance > 10) {
       return res.status(403).json({ message: 'You are not near the hostel.' });
     }
 
