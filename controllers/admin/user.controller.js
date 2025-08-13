@@ -3,6 +3,7 @@ import nodemailer from 'nodemailer';
 import { Student } from '../../models/student.model.js';
 import { Parent } from '../../models/parent.model.js';
 import { Warden } from '../../models/warden.model.js';
+import { Inventory } from '../../models/inventory.model.js';
 
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
@@ -23,7 +24,6 @@ const registerStudent = async (req, res) => {
   const {
     firstName,
     lastName,
-    studentId,
     contactNumber,
     roomBedNumber,
     email,
@@ -33,11 +33,37 @@ const registerStudent = async (req, res) => {
     emergencyContactNumber
   } = req.body;
 
-  // Generate a password: lowercase name (no spaces) + studentId
-  const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
-  const password = `${cleanName}${studentId}`;
-
   try {
+    // Generate unique student ID
+    const generateStudentId = async () => {
+      const count = await Student.countDocuments();
+      const paddedNumber = String(count + 1).padStart(3, '0');
+      const studentId = `STU-${paddedNumber}`;
+      
+      // Check if this ID already exists (in case of concurrent requests)
+      const existingStudent = await Student.findOne({ studentId });
+      if (existingStudent) {
+        // If exists, find the next available number
+        const allStudents = await Student.find({}, { studentId: 1 }).sort({ studentId: -1 });
+        let maxNumber = 0;
+        allStudents.forEach(student => {
+          const match = student.studentId.match(/STU-(\d+)/);
+          if (match) {
+            const number = parseInt(match[1]);
+            if (number > maxNumber) maxNumber = number;
+          }
+        });
+        return `STU-${String(maxNumber + 1).padStart(3, '0')}`;
+      }
+      return studentId;
+    };
+
+    const studentId = await generateStudentId();
+
+    // Generate a password: lowercase name (no spaces) + studentId
+    const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
+    const password = `${cleanName}${studentId}`;
+
     // Create student record
     const newStudent = new Student({
       firstName,
@@ -55,6 +81,14 @@ const registerStudent = async (req, res) => {
 
     await newStudent.save();
 
+      if (roomBedNumber && roomBedNumber !== "Not Assigned") {
+      await Inventory.findByIdAndUpdate(
+        roomBedNumber,
+        { status: "In Use" },
+        { new: true }
+      );
+    }
+
     // Send email with student credentials
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
@@ -64,8 +98,8 @@ const registerStudent = async (req, res) => {
 
 Your student account has been created.
 
-• Student ID: ${studentId}
-• Password: ${password}
+- Student ID: ${studentId}
+- Password: ${password}
 
 Please log in at https://www.KGF-HM.com and change your password after first login.
 
@@ -73,7 +107,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
     });
 
     await createAuditLog({
-      adminId: req.admin?._id, // Assuming you have admin info in req from auth middleware
+      adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: AuditActionTypes.STUDENT_REGISTERED,
       description: `Registered new student: ${firstName} ${lastName} (ID: ${studentId})`,
@@ -89,7 +123,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { firstName,lastName, studentId, email, password }
+      student: { firstName, lastName, studentId, email, password }
     });
   } catch (err) {
     console.error('Error registering student:', err);
@@ -266,6 +300,30 @@ const getAllStudents = async (req, res) => {
   }
 };
 
+const getStudentsWithoutParents = async (req, res) => {
+  try {
+    // Get all student IDs that already have parents
+    const studentsWithParents = await Parent.find({}, { studentId: 1 });
+    const studentIdsWithParents = studentsWithParents.map(parent => parent.studentId);
+
+    // Get all students who don't have parents yet
+    const studentsWithoutParents = await Student.find({
+      studentId: { $nin: studentIdsWithParents }
+    }).select('studentId firstName lastName');
+
+    res.status(200).json({
+      success: true,
+      students: studentsWithoutParents
+    });
+  } catch (error) {
+    console.error('Error fetching students without parents:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching students without parents'
+    });
+  }
+};
+
 // PUT update student
 const updateStudent = async (req, res) => {
   const { studentId } = req.params;
@@ -273,96 +331,107 @@ const updateStudent = async (req, res) => {
     firstName,
     lastName,
     contactNumber,
-    roomBedNumber,
     email,
+    roomBedNumber,
+    emergencyContactNumber,
     admissionDate,
-    feeStatus,
     emergencyContactName,
-    emergencyContactNumber
+    feeStatus,
   } = req.body;
 
   try {
-    // Check if student exists
-    const existingStudent = await Student.findOne({ studentId });
-    if (!existingStudent) {
-      return res.status(404).json({ 
-        success: false,
-        message: 'Student not found.' 
-      });
+    // Get the current student data to check previous bed assignment
+    const currentStudent = await Student.findOne({ studentId });
+    if (!currentStudent) {
+      return res.status(404).json({ message: 'Student not found.' });
     }
 
-    // Prepare update data (only include fields that are provided)
-    const updateData = {};
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
-    if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
-    if (roomBedNumber !== undefined) updateData.roomBedNumber = roomBedNumber;
-    if (email !== undefined) updateData.email = email;
-    if (admissionDate !== undefined) updateData.admissionDate = admissionDate;
-    if (feeStatus !== undefined) updateData.feeStatus = feeStatus;
-    if (emergencyContactName !== undefined) updateData.emergencyContactName = emergencyContactName;
-    if (emergencyContactNumber !== undefined) updateData.emergencyContactNumber = emergencyContactNumber;
+    const previousBedId = currentStudent.roomBedNumber;
 
-    // Update student
+    // Update student record
     const updatedStudent = await Student.findOneAndUpdate(
       { studentId },
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-password');
+      {
+        firstName,
+        lastName,
+        contactNumber,
+        email,
+        roomBedNumber,
+        emergencyContactNumber,
+        admissionDate,
+        emergencyContactName,
+        feeStatus,
+      },
+      { new: true }
+    );
 
-    // Create audit log
+    // Handle bed status changes
+    const newBedId = roomBedNumber;
+
+    // Case 1: Student had a bed before and is being assigned to a different bed
+    if (previousBedId && previousBedId !== "Not Assigned" && previousBedId !== newBedId) {
+      // Mark previous bed as Available
+      await Inventory.findByIdAndUpdate(
+        previousBedId,
+        { status: "Available" },
+        { new: true }
+      );
+    }
+
+    // Case 2: Student is being assigned to a new bed (different from previous or first time assignment)
+    if (newBedId && newBedId !== "Not Assigned" && newBedId !== previousBedId) {
+      // Check if the new bed is actually available
+      const bedToAssign = await Inventory.findById(newBedId);
+      if (!bedToAssign) {
+        return res.status(404).json({ message: 'Selected bed not found.' });
+      }
+      
+      if (bedToAssign.status === "In Use") {
+        return res.status(400).json({ message: 'Selected bed is already in use.' });
+      }
+
+      // Mark new bed as In Use
+      await Inventory.findByIdAndUpdate(
+        newBedId,
+        { status: "In Use" },
+        { new: true }
+      );
+    }
+
+    // Case 3: Student bed is being removed (set to "Not Assigned")
+    if (previousBedId && previousBedId !== "Not Assigned" && (!newBedId || newBedId === "Not Assigned")) {
+      // Mark previous bed as Available
+      await Inventory.findByIdAndUpdate(
+        previousBedId,
+        { status: "Available" },
+        { new: true }
+      );
+    }
+
+    // Create audit log for the update
     await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: AuditActionTypes.STUDENT_UPDATED,
-      description: `Updated student: ${firstName || existingStudent.firstName} ${lastName || existingStudent.lastName} (ID: ${studentId})`,
+      description: `Updated student: ${firstName} ${lastName} (ID: ${studentId})`,
       targetType: 'Student',
       targetId: studentId,
-      targetName: `${firstName || existingStudent.firstName} ${lastName || existingStudent.lastName}`,
+      targetName: `${firstName} ${lastName}`,
       additionalData: {
-        updatedFields: Object.keys(updateData),
-        oldData: {
-          firstName: existingStudent.firstName,
-          lastName: existingStudent.lastName,
-          contactNumber: existingStudent.contactNumber,
-          email: existingStudent.email,
-          roomBedNumber: existingStudent.roomBedNumber,
-          feeStatus: existingStudent.feeStatus
-        },
-        newData: updateData
+        previousBed: previousBedId,
+        newBed: newBedId,
+        email,
+        feeStatus
       }
     });
 
     return res.json({
-      success: true,
       message: 'Student updated successfully.',
       student: updatedStudent
     });
   } catch (err) {
     console.error('Error updating student:', err);
-    
-    // Handle validation errors
-    if (err.name === 'ValidationError') {
-      const validationErrors = Object.values(err.errors).map(e => e.message);
-      return res.status(400).json({ 
-        success: false,
-        message: 'Validation error.',
-        errors: validationErrors
-      });
-    }
-    
-    // Handle duplicate email error
-    if (err.code === 11000 && err.keyPattern?.email) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Email already exists.' 
-      });
-    }
-
-    return res.status(500).json({ 
-      success: false,
-      message: 'Error updating student.' 
-    });
+    return res.status(500).json({ message: 'Error updating student.' });
   }
 };
 
@@ -458,6 +527,7 @@ export{
     registerParent,
     registerWarden,
      getAllStudents,
+     getStudentsWithoutParents,
   getStudentById,
   updateStudent,
   deleteStudent,

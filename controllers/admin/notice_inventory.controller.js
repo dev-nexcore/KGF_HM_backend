@@ -375,6 +375,41 @@ const getAvailableBeds = async (req, res) => {
     });
   }
 };
+const getAvailableRooms = async (req, res) => {
+  try {
+    // Get unique available rooms
+    const availableRooms = await Inventory.aggregate([
+      {
+        $match: {
+          category: 'Furniture',
+          itemName: 'Bed',
+          status: 'Available'
+        }
+      },
+      {
+        $group: {
+          _id: "$roomNo",
+          floor: { $first: "$floor" },
+          location: { $first: "$location" }
+        }
+      },
+      {
+        $sort: { _id: 1 }
+      }
+    ]);
+   
+    res.status(200).json({
+      success: true,
+      availableRooms: availableRooms
+    });
+  } catch (error) {
+    console.error('Error fetching available rooms:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching available rooms'
+    });
+  }
+};
 
 // Update inventory item
 const updateInventoryItem = async (req, res) => {
@@ -994,6 +1029,7 @@ export {
   getInventoryItemById,
   deleteInventoryItem,
   getAvailableBeds,
+  getAvailableRooms,
   updateInventoryReceipt,
   issueNotice,
   getAllNotices,

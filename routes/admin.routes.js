@@ -18,6 +18,7 @@ import {
   registerParent,
   registerWarden,
    getAllStudents,
+   getStudentsWithoutParents,
   getStudentById,
   updateStudent,
   deleteStudent,
@@ -91,6 +92,7 @@ import {
   downloadQRCode,
   deleteInventoryItem,
   getAvailableBeds,
+  getAvailableRooms,
   updateInventoryReceipt,
   getInventoryItems
 } from "../controllers/admin/notice_inventory.controller.js";
@@ -121,6 +123,7 @@ router.post('/register-parent', registerParent);
 router.post('/register-warden', registerWarden);
 router.post('/register-student', registerStudent);
 router.get('/students', getAllStudents);
+router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
 router.put('/update-student/:studentId', updateStudent);
 router.delete('/delete-student/:studentId', deleteStudent);
@@ -193,6 +196,7 @@ router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
 router.get('/public/:slug', getInventoryItemBySlug);
 router.delete('/:id', deleteInventoryItem);
 router.get('/inventory/available-beds', getAvailableBeds) 
+router.get('/inventory/available-rooms', getAvailableRooms);
 router.get('/inventory/:id', getInventoryItemById)
 router.put("/inventory/:id", updateInventoryItem);
 router.put("/inventory/:id/receipt", upload.single("receipt"), updateInventoryReceipt);

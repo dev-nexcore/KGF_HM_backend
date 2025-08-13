@@ -202,10 +202,11 @@ const checkInStudent = async (req, res) => {
     }
 
     const { lat, lng } = location;
-    const hostelLat = 19.072618, hostelLng = 72.880419;
+    const hostelLat = 19.0725387, hostelLng = 72.8803599;
     const distance = getDistanceKm(lat, lng, hostelLat, hostelLng);
-    if (distance > 10) {
-      return res.status(403).json({ message: 'You are not near the hostel.' });
+    console.log(distance);
+    if (distance > 0.3) {
+      return res.status(403).json({ message: 'You are no near the hostel.' });
     }
 
     const student = await Student.findOne({ studentId });
