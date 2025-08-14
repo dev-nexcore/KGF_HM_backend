@@ -94,7 +94,10 @@ import {
   getAvailableBeds,
   getAvailableRooms,
   updateInventoryReceipt,
-  getInventoryItems
+  getInventoryItems,
+  getAvailableRoomsFloors,
+  getItemByQRSlug,
+  generateStockReport
 } from "../controllers/admin/notice_inventory.controller.js";
 
 import{
@@ -121,7 +124,6 @@ router.post('/reset-password', resetPassword);
 router.post('/register-student', registerStudent);
 router.post('/register-parent', registerParent);
 router.post('/register-warden', registerWarden);
-router.post('/register-student', registerStudent);
 router.get('/students', getAllStudents);
 router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
@@ -154,7 +156,7 @@ router.get('/complaints/:complaintId/attachment/:attachmentId', getComplaintAtta
 router.put('/complaints/:complaintId/status', updateComplaintStatus);
 router.put('/complaints/bulk-status', bulkUpdateComplaintStatus);
 
-
+// ====================== INSPECTION ROUTES ======================
 router.post('/inspections', createInspection);
 router.get('/inspections', getAllInspections);
 router.get('/inspections/:inspectionId', getInspectionById);
@@ -191,18 +193,27 @@ router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
 
 // ====================== CONTENT MANAGEMENT ROUTES ======================
-router.get('/inventory', getInventoryItems)
+// *** INVENTORY ROUTES - SPECIFIC ROUTES FIRST ***
+// General inventory routes
+router.get('/inventory', getInventoryItems);
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
-router.get('/public/:slug', getInventoryItemBySlug);
-router.delete('/:id', deleteInventoryItem);
-router.get('/inventory/available-beds', getAvailableBeds) 
-router.get('/inventory/available-rooms', getAvailableRooms);
-router.get('/inventory/:id', getInventoryItemById)
-router.put("/inventory/:id", updateInventoryItem);
-router.put("/inventory/:id/receipt", upload.single("receipt"), updateInventoryReceipt);
-router.post('/:id/qr-code', generateQRCode);
-router.get('/:id/qr-code/download', downloadQRCode);
 
+// Specific inventory routes (these must come BEFORE /inventory/:id)
+router.get('/inventory/stock-report', generateStockReport);
+router.get('/inventory/available-beds', getAvailableBeds);
+router.get('/inventory/available-rooms', getAvailableRooms);
+router.get('/inventory/available-rooms-floors', getAvailableRoomsFloors);
+router.get('/inventory/qr/:slug', getItemByQRSlug);
+
+// Parameterized inventory routes (these must come AFTER specific routes)
+router.get('/inventory/:id', getInventoryItemById);
+router.put('/inventory/:id', updateInventoryItem);
+router.put('/inventory/:id/receipt', upload.single('receipt'), updateInventoryReceipt);
+router.post('/inventory/:id/qr-code', generateQRCode);
+router.get('/inventory/:id/qr-code/download', downloadQRCode);
+router.delete('/inventory/:id', deleteInventoryItem);
+
+// *** NOTICE ROUTES ***
 router.post('/issue-notice', issueNotice);
 router.get('/notices', getAllNotices);
 router.get('/notices/:noticeId', getNoticeById);
@@ -211,14 +222,7 @@ router.delete('/notices/:noticeId', deleteNotice);
 router.patch('/notices/:noticeId/read-status', updateNoticeReadStatus);
 
 // ====================== PUBLIC ROUTES ======================
-// GET /api/inventory/public/:slug
-router.get('/public/:slug', async (req, res) => {
-  const { slug } = req.params;
-  const item = await Inventory.findOne({ publicSlug: slug })
-    .select('itemName barcodeId category location status description purchaseDate purchaseCost qrCodeUrl publicSlug');
-
-  if (!item) return res.status(404).json({ message: 'Not found' });
-  res.json(item);
-});
+// Public inventory routes
+router.get('/public/:slug', getInventoryItemBySlug);
 
 export default router;

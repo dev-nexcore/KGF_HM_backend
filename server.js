@@ -75,6 +75,8 @@ app.use((err, req, res, next) => {
   });
 });
 
+app.use('/qrcodes', express.static(path.join(process.cwd(), 'public/qrcodes')));
+
 // ----- 404 handler (EASIEST FIX: no path here) -----
 app.use((req, res) => {
   res.status(404).json({ error: "Route not found" });

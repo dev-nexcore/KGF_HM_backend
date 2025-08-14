@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import QRCode from 'qrcode';
+import ExcelJS from 'exceljs';
 
 import nodemailer from 'nodemailer';
 
@@ -112,7 +113,7 @@ const addInventoryItem = async (req, res) => {
     });
 
     // Update item with QR code URL
-    newItem.qrCodeUrl = `/public/qrcodes/${newItem._id}.png`;
+newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
     await newItem.save();
 
     // Ensure publicSlug is present in the item object
@@ -297,7 +298,7 @@ const generateQRCode = async (req, res) => {
 
     // Update item with QR code URL if not already set
     if (!inventoryItem.qrCodeUrl) {
-      inventoryItem.qrCodeUrl = `/public/qrcodes/${inventoryItem._id}.png`;
+    inventoryItem.qrCodeUrl = `/qrcodes/${inventoryItem._id}.png`;
       await inventoryItem.save();
     }
 
@@ -313,6 +314,188 @@ const generateQRCode = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to generate QR code'
+    });
+  }
+};
+
+// Add this function for QR scanning
+const getItemByQRSlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const inventoryItem = await Inventory.findOne({ publicSlug: slug });
+    
+    if (!inventoryItem) {
+      return res.status(404).json({
+        success: false,
+        message: 'Inventory item not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      item: inventoryItem
+    });
+  } catch (error) {
+    console.error('Error fetching inventory item by QR slug:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching inventory item'
+    });
+  }
+};
+
+// Add this function for generating stock report
+const generateStockReport = async (req, res) => {
+  try {
+    // Import Excel library at the top of your file
+    // import ExcelJS from 'exceljs';
+    
+    // Get all inventory items
+    const items = await Inventory.find({}).sort({ category: 1, itemName: 1 });
+    
+    // Create workbook and worksheet
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Monthly Stock Report');
+    
+    // Add title and date
+  const now = new Date();
+    const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    
+    worksheet.addRow([`Monthly Stock Report - ${monthYear}`]);
+    worksheet.addRow([`Generated on: ${now.toLocaleDateString('en-IN')}`]);
+    worksheet.addRow([]); // Empty row
+    
+    // Add headers
+    const headers = [
+      'Item Name',
+      'Barcode ID', 
+      'Category',
+      'Location',
+      'Room No',
+      'Floor',
+      'Status',
+      'Purchase Date',
+      'Purchase Cost (₹)',
+      'Description'
+    ];
+    
+    const headerRow = worksheet.addRow(headers);
+    
+    // Style headers
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFF' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: '366092' }
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    });
+    
+    // Add data rows
+    items.forEach(item => {
+      const row = worksheet.addRow([
+        item.itemName,
+        item.barcodeId,
+        item.category,
+        item.location,
+        item.roomNo,
+        item.floor,
+        item.status,
+        item.purchaseDate ? new Date(item.purchaseDate).toLocaleDateString('en-IN') : '',
+        item.purchaseCost || '',
+        item.description || ''
+      ]);
+      
+      // Add borders to data rows
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+    });
+    
+    // Auto-fit columns
+    worksheet.columns.forEach(column => {
+      column.width = 15;
+    });
+
+worksheet.getColumn(10).width = 30; // if description is the 2nd column
+
+
+    
+    // Add summary at the end
+    worksheet.addRow([]);
+    worksheet.addRow(['Summary']);
+    worksheet.addRow([`Total Items: ${items.length}`]);
+    worksheet.addRow([`Available Items: ${items.filter(item => item.status === 'Available').length}`]);
+    worksheet.addRow([`In Use Items: ${items.filter(item => item.status === 'In Use').length}`]);
+    worksheet.addRow([`In Maintenance Items: ${items.filter(item => item.status === 'In maintenance').length}`]);
+    worksheet.addRow([`Damaged Items: ${items.filter(item => item.status === 'Damaged').length}`]);
+    
+    // Set response headers
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="Monthly_Stock_Report_${monthYear.replace(' ', '_')}.xlsx"`
+    );
+    
+    // Write to response
+    await workbook.xlsx.write(res);
+    res.end();
+    
+  } catch (error) {
+    console.error('Error generating stock report:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate stock report'
+    });
+  }
+};
+
+// Add this function for available rooms and floors for inventory
+const getAvailableRoomsFloors = async (req, res) => {
+  try {
+    // Get all unique room numbers and floors that don't have beds assigned
+    const occupiedRooms = await Inventory.find({
+      category: 'Furniture',
+      itemName: 'Bed',
+      status: 'In Use'
+    }).distinct('roomNo');
+    
+    // Get all possible rooms (you might want to define this based on your building structure)
+    const allRooms = [];
+    for (let i = 101; i <= 110; i++) allRooms.push(i.toString()); // Floor 1
+    for (let i = 201; i <= 210; i++) allRooms.push(i.toString()); // Floor 2  
+    for (let i = 301; i <= 310; i++) allRooms.push(i.toString()); // Floor 3
+    // Add more floors as needed
+    
+    const availableRooms = allRooms.filter(room => !occupiedRooms.includes(room));
+    
+    // Available floors (assuming 3 floors)
+    const availableFloors = ['1', '2', '3'];
+    
+    res.status(200).json({
+      success: true,
+      rooms: availableRooms,
+      floors: availableFloors
+    });
+  } catch (error) {
+    console.error('Error fetching available rooms and floors:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while fetching available rooms and floors'
     });
   }
 };
@@ -1037,5 +1220,8 @@ export {
   updateNotice,
   deleteNotice,
   updateNoticeReadStatus,
-  upload
+  upload,
+    getItemByQRSlug,
+  generateStockReport,
+  getAvailableRoomsFloors
 }
