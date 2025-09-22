@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import Student from '../models/student.model.js';
+import { Student } from '../models/student.model.js';
 import Attendance from '../models/attendance.model.js';
 import { sendNotification } from '../utils/sendNotification.js';
 
@@ -39,7 +39,7 @@ export const handleAttendanceWebhook = async (req, res) => {
 
     // Find student by employee code
     const student = await Student.findOne({ 
-      rollNumber: attendanceData.EmployeeCode 
+      studentId: attendanceData.EmployeeCode 
     });
 
     if (!student) {

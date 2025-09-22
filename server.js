@@ -31,7 +31,6 @@ app.use('/public/receipts', express.static(path.join(process.cwd(), 'public/rece
 connectDB();
 
 // ----- CORS -----
-if (process.env.NODE_ENV === "production") {
   const corsOptions = {
     origin: [
       "https://kgf-hm-admin.nexcorealliance.com",
@@ -42,9 +41,7 @@ if (process.env.NODE_ENV === "production") {
     credentials: true,
   };
   app.use(cors(corsOptions));
-} else {
-  app.use(cors());
-}
+
 
 // ----- Health check -----
 app.get("/", (req, res) => {

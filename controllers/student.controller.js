@@ -1259,7 +1259,7 @@ const markNotificationsAsSeen = async (req, res) => {
 
 
 
-export const getStudentAttendance = async (req, res) => {
+const getStudentAttendance = async (req, res) => {
   try {
     const { studentId } = req.params;
     const { startDate, endDate, page = 1, limit = 10 } = req.query;
