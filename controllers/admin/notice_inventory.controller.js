@@ -47,6 +47,27 @@ const upload = multer({ storage });
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Helper function to convert DD-MM-YYYY to valid Date object
+const convertDateFormat = (dateString) => {
+  if (!dateString) return null;
+  
+  // Check if it's already in ISO format or a valid date
+  const isoDate = new Date(dateString);
+  if (!isNaN(isoDate.getTime()) && !dateString.includes('-') || dateString.match(/^\d{4}-/)) {
+    return isoDate;
+  }
+  
+  // Handle DD-MM-YYYY format
+  if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
+    const [day, month, year] = dateString.split('-');
+    // Create date in YYYY-MM-DD format (month is 0-indexed in Date constructor)
+    return new Date(year, month - 1, day);
+  }
+  
+  // Handle other formats or return null for invalid dates
+  return null;
+};
+
 const addInventoryItem = async (req, res) => {
   try {
     const {
@@ -467,11 +488,11 @@ worksheet.getColumn(10).width = 30; // if description is the 2nd column
 // Add this function for available rooms and floors for inventory
 const getAvailableRoomsFloors = async (req, res) => {
   try {
-    // Get all unique room numbers and floors that don't have beds assigned
+    // Get all unique room numbers that already have beds assigned (regardless of status)
     const occupiedRooms = await Inventory.find({
       category: 'Furniture',
-      itemName: 'Bed',
-      status: 'In Use'
+      itemName: { $regex: /^bed$/i }, // Case-insensitive match for "bed"
+      roomNo: { $exists: true, $ne: null, $ne: '' }
     }).distinct('roomNo');
     
     // Get all possible rooms (you might want to define this based on your building structure)
@@ -481,6 +502,7 @@ const getAvailableRoomsFloors = async (req, res) => {
     for (let i = 301; i <= 310; i++) allRooms.push(i.toString()); // Floor 3
     // Add more floors as needed
     
+    // Filter out rooms that already have beds assigned
     const availableRooms = allRooms.filter(room => !occupiedRooms.includes(room));
     
     // Available floors (assuming 3 floors)

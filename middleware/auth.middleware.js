@@ -1,7 +1,18 @@
 
 import jwt from 'jsonwebtoken';
 import { Parent } from '../models/parent.model.js';
-import { Student } from '../models/student.model.js'
+import { Student } from '../models/student.model.js';
+
+export const ipWhitelist = (req, res, next) => {
+    const allowedIPs = process.env.ALLOWED_WEBHOOK_IPS?.split(',') || [];
+    const clientIP = req.ip || req.connection.remoteAddress;
+    
+    if (!allowedIPs.includes(clientIP)) {
+        console.warn(`Unauthorized webhook access attempt from IP: ${clientIP}`);
+        return res.status(403).json({ success: false, message: 'Unauthorized IP' });
+    }
+    next();
+};
 
 const verifyAdminToken = (req, res, next) => {
     const authHeader = req.headers.authorization;

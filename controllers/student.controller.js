@@ -8,6 +8,7 @@ import { Student } from "../models/student.model.js";
 import { Parent } from "../models/parent.model.js";
 import { Otp } from "../models/otp.model.js";
 import { Complaint } from "../models/complaint.model.js";
+import Attendance from "../models/attendance.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Refund } from "../models/refund.model.js";
 import { Fee } from "../models/fee.model.js";
@@ -1258,6 +1259,51 @@ const markNotificationsAsSeen = async (req, res) => {
 
 
 
+export const getStudentAttendance = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { startDate, endDate, page = 1, limit = 10 } = req.query;
+
+    const query = { studentId };
+
+    if (startDate && endDate) {
+      query.timestamp = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [attendance, total] = await Promise.all([
+      Attendance
+        .find(query)
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(parseInt(limit)),
+      Attendance.countDocuments(query)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        attendance,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(total / limit),
+          totalRecords: total
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching attendance:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching attendance records'
+    });
+  }
+};
 
 export {
   login,
@@ -1284,5 +1330,6 @@ export {
   deleteMyProfileImage,
   uploadMyProfileImage,
   getNotifications,
-  markNotificationsAsSeen
+  markNotificationsAsSeen,
+  getStudentAttendance
 }
