@@ -11,6 +11,10 @@ import { Notice } from "../models/notice.model.js";
 import path from 'path';
 import fs from 'fs';
 
+import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js"; 
+
+
+
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST,
@@ -53,6 +57,7 @@ const generateRefreshToken = async (parent) => {
 
   return refreshToken;
 };
+// helper import
 
 // NEW: Send OTP for login
 const sendLoginOTP = async (req, res) => {
@@ -75,19 +80,14 @@ const sendLoginOTP = async (req, res) => {
     // Set OTP expiry (5 minutes from now)
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Save OTP using the existing Otp model or create a new record
+    // Save OTP record
     await Otp.findOneAndUpdate(
       { email: parent.email },
-      { 
-        code: otp, 
-        expires: otpExpiry, 
-        verified: false,
-        purpose: 'login' // Add purpose to distinguish from password reset
-      },
+      { code: otp, expires: otpExpiry, verified: false, purpose: 'login' },
       { upsert: true }
     );
 
-    // Send OTP via email
+    // 📧 Send OTP via Email
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: parent.email,
@@ -103,9 +103,17 @@ If you didn't request this OTP, please ignore this email.
 – Hostel Admin`
     });
 
+    // 📱 Send OTP via WhatsApp
+    if (parent.contactNumber) {
+      await sendWhatsAppMessage(
+        parent.contactNumber, 
+        `Hello ${parent.firstName},\n\nYour OTP for parent login is: *${otp}* \n\nValid for 5 minutes.\n\n– Hostel Admin`
+      );
+    }
+
     return res.json({
-      message: 'OTP sent successfully to your registered email address',
-      email: parent.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email for security
+      message: 'OTP sent successfully via Email & WhatsApp',
+      email: parent.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'),
       expiresIn: '5 minutes'
     });
 
@@ -114,6 +122,70 @@ If you didn't request this OTP, please ignore this email.
     return res.status(500).json({ message: "Error sending OTP" });
   }
 };
+
+
+
+
+// NEW: Send OTP for login
+// const sendLoginOTP = async (req, res) => {
+//   const { studentId } = req.body;
+
+//   if (!studentId) {
+//     return res.status(400).json({ message: "Student ID is required" });
+//   }
+
+//   try {
+//     // Find parent by studentId
+//     const parent = await Parent.findOne({ studentId });
+//     if (!parent) {
+//       return res.status(404).json({ message: "No parent account found for this Student ID" });
+//     }
+
+//     // Generate 6-digit OTP
+//     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+//     // Set OTP expiry (5 minutes from now)
+//     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+//     // Save OTP using the existing Otp model or create a new record
+//     await Otp.findOneAndUpdate(
+//       { email: parent.email },
+//       { 
+//         code: otp, 
+//         expires: otpExpiry, 
+//         verified: false,
+//         purpose: 'login' // Add purpose to distinguish from password reset
+//       },
+//       { upsert: true }
+//     );
+
+//     // Send OTP via email
+//     await transporter.sendMail({
+//       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+//       to: parent.email,
+//       subject: 'Your Parent Login OTP',
+//       text: `Hello ${parent.firstName},
+
+// Your OTP for parent panel login is: ${otp}
+
+// This OTP is valid for 5 minutes only.
+
+// If you didn't request this OTP, please ignore this email.
+
+// – Hostel Admin`
+//     });
+
+//     return res.json({
+//       message: 'OTP sent successfully to your registered email address',
+//       email: parent.email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Mask email for security
+//       expiresIn: '5 minutes'
+//     });
+
+//   } catch (err) {
+//     console.error("Error sending login OTP:", err);
+//     return res.status(500).json({ message: "Error sending OTP" });
+//   }
+// };
 
 // UPDATED: Login controller with OTP verification (replaces old password-based login)
 const login = async (req, res) => {
@@ -1113,3 +1185,5 @@ export {
   notices,
   markNoticeAsRead
 };
+
+
