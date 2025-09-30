@@ -31,6 +31,10 @@ const studentSchema = new mongoose.Schema({
       checkOutLocation: { lat: Number, lng: Number }
     }
   ],
+    refreshToken: {
+    type: String,
+    select: false // Also hide refresh token by default
+  },
 });
 
 studentSchema.pre("save", async function (next) {

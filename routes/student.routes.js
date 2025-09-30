@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  sendLoginOTP,
   login,
   forgotPassword,
   verifyOtp,
@@ -32,6 +33,8 @@ import { uploadStudent, uploadComplaint } from '../middleware/upload.js';
 const router = express.Router();
 
 // Public routes (no authentication required)
+router.post('/send-otp', sendLoginOTP);
+
 router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
