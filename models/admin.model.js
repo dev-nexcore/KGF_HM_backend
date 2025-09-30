@@ -15,14 +15,17 @@ const adminSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true
-  
-},
-refreshTokens: {
-  type: String,
-  required: false,
-}
+  },
+  contactNumber: {  // NEW FIELD
+    type: String,
+    required: true,
+    unique: true
+  },
+  refreshToken: {  // FIXED: was 'refreshTokens'
+    type: String,
+    required: false,
+  }
 });
-
 
 // Password hash middleware
 adminSchema.pre("save", async function (next) {

@@ -5,6 +5,7 @@ import { Inventory } from '../models/inventory.model.js';
 // Import from individual controller files
 import {
   login,
+  sendLoginOTP,
   register,
   forgotPassword,
   verifyOtp,
@@ -111,9 +112,10 @@ import{
 
 const router = Router();
 
-// ====================== AUTH ROUTES ======================
-router.post('/register', verifyAdminToken, register);
-router.post('/login', login);
+// In admin.route.js - AUTH ROUTES section
+router.post('/send-login-otp', sendLoginOTP);  // NEW ROUTE
+router.post('/register',register);
+router.post('/login', login);  // Now uses OTP instead of password
 router.post('/generate-refresh-token', generateRefreshToken);
 router.post('/refresh-token', refreshAccessToken);
 router.post('/forgot-password', forgotPassword);

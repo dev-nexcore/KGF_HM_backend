@@ -4,6 +4,7 @@ import { Otp } from '../../models/otp.model.js'; // ← ADD: Missing import
 import nodemailer from 'nodemailer';
 import jwt from 'jsonwebtoken';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js'; // ← FIX: Update path
+import { sendWhatsAppMessage } from '../../utils/sendWhatsApp.js';
 import bcrypt from 'bcrypt';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -39,15 +40,25 @@ const generateRefreshToken = (admin) => {
 };
 
 const register = async (req, res) => {
-  const { adminId, email, password } = req.body;
+  const { adminId, email, password, contactNumber } = req.body;  // ADD contactNumber
 
   try {
-    const existingAdmin = await Admin.findOne({ $or: [{ adminId }, { email }] });
-    if (existingAdmin) {
-      return res.status(409).json({ message: "Admin already exists with same ID or email." });
+    // Validate phone number format
+    if (!contactNumber || contactNumber.length < 10) {
+      return res.status(400).json({ message: "Valid contact number is required" });
     }
 
-    const newAdmin = new Admin({ adminId, email, password });
+    const existingAdmin = await Admin.findOne({ 
+      $or: [{ adminId }, { email }, { contactNumber }]  // Check phone too
+    });
+    
+    if (existingAdmin) {
+      return res.status(409).json({ 
+        message: "Admin already exists with same ID, email, or contact number." 
+      });
+    }
+
+    const newAdmin = new Admin({ adminId, email, password, contactNumber });
     await newAdmin.save();
 
     // Create audit log for registration
@@ -65,21 +76,104 @@ const register = async (req, res) => {
     return res.status(500).json({ message: "Server error during registration." });
   }
 };
+const sendLoginOTP = async (req, res) => {
+  const { adminId } = req.body;
 
-const login = async (req, res) => {
-  const { adminId, password } = req.body;
+  if (!adminId) {
+    return res.status(400).json({ message: "Admin ID is required" });
+  }
 
   try {
+    // Find admin by adminId
     const admin = await Admin.findOne({ adminId });
     if (!admin) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(404).json({ message: "Admin account not found" });
     }
 
-    const isMatch = await admin.comparePassword(password,admin.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set OTP expiry (5 minutes from now)
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+    // Save OTP record
+    await Otp.findOneAndUpdate(
+      { email: admin.email },
+      { 
+        code: otp, 
+        expires: otpExpiry, 
+        verified: false, 
+        purpose: 'admin_login' 
+      },
+      { upsert: true }
+    );
+
+    // Send OTP via WhatsApp
+    if (admin.contactNumber) {
+      await sendWhatsAppMessage(
+        admin.contactNumber, 
+        `Hello Admin,\n\nYour OTP for admin panel login is: *${otp}*\n\nValid for 5 minutes.\n\n– Hostel Management System`
+      );
+    } else {
+      return res.status(400).json({ message: "Admin contact number not found" });
     }
 
+    // Optional: Also send via email as backup
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: admin.email,
+      subject: 'Admin Login OTP',
+      text: `Hello Admin,\n\nYour OTP for admin panel login is: ${otp}\n\nThis OTP is valid for 5 minutes only.\n\n– Hostel Admin`
+    });
+
+    return res.json({
+      message: 'OTP sent successfully to your WhatsApp',
+      contactNumber: admin.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3'), // Mask number
+      expiresIn: '5 minutes'
+    });
+
+  } catch (err) {
+    console.error("Error sending admin login OTP:", err);
+    return res.status(500).json({ message: "Error sending OTP" });
+  }
+};
+
+// UPDATED: Login with OTP verification
+const login = async (req, res) => {
+  const { adminId, otp } = req.body;
+
+  if (!adminId || !otp) {
+    return res.status(400).json({ message: "Admin ID and OTP are required" });
+  }
+
+  try {
+    // Find admin by adminId
+    const admin = await Admin.findOne({ adminId });
+    if (!admin) {
+      return res.status(401).json({ message: "Invalid Admin ID" });
+    }
+
+    // Find OTP record
+    const otpRecord = await Otp.findOne({ 
+      email: admin.email, 
+      code: otp, 
+      purpose: 'admin_login'
+    });
+
+    if (!otpRecord) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    // Check if OTP is expired
+    if (new Date() > otpRecord.expires) {
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+    }
+
+    // OTP is valid, delete it
+    await Otp.deleteOne({ _id: otpRecord._id });
+
+    // Generate tokens
     const token = generateToken(admin);
     const refreshToken = generateRefreshToken(admin);
 
@@ -102,8 +196,8 @@ const login = async (req, res) => {
       } 
     });
   } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ message: "Server error during login." });
+    console.error("Admin login error:", err);
+    return res.status(500).json({ message: "Server error during login" });
   }
 };
 
@@ -215,6 +309,7 @@ const resetPassword = async (req, res) => {
 
 export{
     register,
+    sendLoginOTP,
     login,
     generateRefreshToken,
     refreshAccessToken,
