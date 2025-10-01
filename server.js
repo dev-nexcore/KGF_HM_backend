@@ -38,7 +38,8 @@ connectDB();
       "https://kgf-hm-student.nexcorealliance.com",
       "https://kgf-hm-warden.nexcorealliance.com",
       "http://localhost:3000",
-      "https://kokanglobal.org"
+      "https://kokanglobal.org",
+      "https://www.kokanglobal.org"
     ],
     credentials: true,
   };
