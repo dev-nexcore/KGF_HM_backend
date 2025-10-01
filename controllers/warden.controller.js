@@ -15,6 +15,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import mongoose from "mongoose";
+import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js";
 
 
 import { sendBulkNotifications, sendNotification } from '../utils/sendNotification.js';
@@ -36,17 +37,104 @@ const transporter = nodemailer.createTransport({
 
 // <------------    Login Page For Warden  -------------->
 
-const login = async (req, res) => {
-  const { wardenId, password } = req.body;
+const sendLoginOTP = async (req, res) => {
+  const { wardenId } = req.body;
+
+  if (!wardenId) {
+    return res.status(400).json({ message: "Warden ID is required" });
+  }
 
   try {
+    // Find warden by wardenId
     const warden = await Warden.findOne({ wardenId });
-    if (!warden) return res.status(401).json({ message: "Invalid Warden ID" });
+    if (!warden) {
+      return res.status(404).json({ message: "Warden account not found" });
+    }
 
-    const isMatch = await warden.comparePassword(password);
-    if (!isMatch) return res.status(401).json({ message: "Invalid password" });
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Set OTP expiry (5 minutes from now)
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    //  Generate JWT Token
+    // Save OTP record
+    await Otp.findOneAndUpdate(
+      { email: warden.email },
+      { 
+        code: otp, 
+        expires: otpExpiry, 
+        verified: false, 
+        purpose: 'warden_login' 
+      },
+      { upsert: true }
+    );
+
+    // Send OTP via WhatsApp
+    if (warden.contactNumber) {
+      await sendWhatsAppMessage(
+        warden.contactNumber, 
+        `Hello ${warden.firstName},\n\nYour OTP for warden panel login is: *${otp}*\n\nValid for 5 minutes.\n\n– Hostel Management System`
+      );
+    } else {
+      return res.status(400).json({ message: "Warden contact number not found" });
+    }
+
+    // Optional: Also send via email as backup
+    await transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: warden.email,
+      subject: 'Warden Login OTP',
+      text: `Hello ${warden.firstName} ${warden.lastName},\n\nYour OTP for warden panel login is: ${otp}\n\nThis OTP is valid for 5 minutes only.\n\n– Hostel Admin`
+    });
+
+    return res.json({
+      message: 'OTP sent successfully to your WhatsApp',
+      contactNumber: warden.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3'), // Mask number
+      expiresIn: '5 minutes'
+    });
+
+  } catch (err) {
+    console.error("Error sending warden login OTP:", err);
+    return res.status(500).json({ message: "Error sending OTP" });
+  }
+};
+
+// UPDATED: Login with OTP verification (replaces password-based login)
+const login = async (req, res) => {
+  const { wardenId, otp } = req.body;
+
+  if (!wardenId || !otp) {
+    return res.status(400).json({ message: "Warden ID and OTP are required" });
+  }
+
+  try {
+    // Find warden by wardenId
+    const warden = await Warden.findOne({ wardenId });
+    if (!warden) {
+      return res.status(401).json({ message: "Invalid Warden ID" });
+    }
+
+    // Find OTP record
+    const otpRecord = await Otp.findOne({ 
+      email: warden.email, 
+      code: otp, 
+      purpose: 'warden_login'
+    });
+
+    if (!otpRecord) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    // Check if OTP is expired
+    if (new Date() > otpRecord.expires) {
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+    }
+
+    // OTP is valid, delete it
+    await Otp.deleteOne({ _id: otpRecord._id });
+
+    // Generate JWT Token
     const token = jwt.sign(
       {
         id: warden._id,
@@ -54,7 +142,7 @@ const login = async (req, res) => {
         role: "warden",
       },
       process.env.JWT_SECRET,
-      { expiresIn: "1d" } // token valid for 1 day
+      { expiresIn: "1d" }
     );
 
     res.status(200).json({
@@ -65,13 +153,13 @@ const login = async (req, res) => {
         wardenId: warden.wardenId,
         name: `${warden.firstName} ${warden.lastName}`,
         email: warden.email,
-        phone: warden.phone,
+        phone: warden.contactNumber,
         profilePhoto: warden.profilePhoto || null,
       },
     });
   } catch (err) {
     console.error("Warden login error:", err);
-    res.status(500).json({ message: "Server error during login." });
+    res.status(500).json({ message: "Server error during login" });
   }
 };
 
@@ -1253,6 +1341,7 @@ const updateEmergencyContact = async (req, res) => {
 
 
 export {
+  sendLoginOTP,
   login as loginWarden,
   forgotPassword as forgotPasswordWarden,
   verifyOtp as verifyOtpWarden,

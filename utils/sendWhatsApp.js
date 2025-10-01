@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const WHATSAPP_INSTANCE_ID = "68B962AACC4B0"; 
+const WHATSAPP_INSTANCE_ID = "68DD0A0A2AE56"; 
 const WHATSAPP_ACCESS_TOKEN = "68822d48a7005"; 
 
 
@@ -24,21 +24,24 @@ const formatNumber = (number) => {
 };
 
 
+// In your sendWhatsApp.js, add detailed logging
 export const sendWhatsAppMessage = async (number, message) => {
   try {
     const payload = {
-      number: formatNumber(number), // formatted number
+      number: formatNumber(number),
       type: "text",
       message,
       instance_id: WHATSAPP_INSTANCE_ID,
       access_token: WHATSAPP_ACCESS_TOKEN,
     };
 
+    console.log("📤 Sending payload:", JSON.stringify(payload, null, 2));
+
     const res = await axios.post("https://app.simplywhatsapp.com/api/send", payload, {
       headers: { "Content-Type": "application/json" },
     });
 
-    console.log("✅ WhatsApp message sent:", res.data);
+    console.log("✅ WhatsApp API response:", JSON.stringify(res.data, null, 2));
     return res.data;
   } catch (error) {
     console.error("❌ Error sending WhatsApp message:", error?.response?.data || error.message);

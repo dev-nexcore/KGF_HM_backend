@@ -31,6 +31,7 @@ import {
   getAllAvailableBed,
   deleteInspection,
   checkPunchStatus,
+  sendLoginOTP
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -38,6 +39,7 @@ import { verifyWardenToken } from "../middleware/auth.middleware.js";
 const router = express.Router();
 
 // login page
+router.post("/send-login-otp", sendLoginOTP);
 router.post("/login", loginWarden);
 router.post("/forgot-password", forgotPasswordWarden);
 router.post("/verify-otp", verifyOtpWarden);
