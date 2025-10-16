@@ -1853,8 +1853,24 @@ const checkOutStudent = async (req, res) => {
 
 
 const fileComplaint = async (req, res) => {
-  const { complaintType, subject, description, otherComplaintType } = req.body;
+  console.log("\n🚀 ========== COMPLAINT REQUEST STARTED ==========");
+
+  const {
+    complaintType,
+    subject,
+    description,
+    otherComplaintType,
+    floorNumber, // ✅ ADD THIS
+    maintenanceItems, // ✅ ADD THIS
+  } = req.body;
+
   const studentId = req.studentId;
+
+  console.log("📝 Received:", {
+    complaintType,
+    floorNumber,
+    maintenanceItems,
+  });
 
   try {
     const student = await Student.findOne({ studentId });
@@ -1862,107 +1878,161 @@ const fileComplaint = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Process uploaded files (if any)
+    // Process uploaded files
     const attachments = [];
     if (req.files && req.files.length > 0) {
-      req.files.forEach(file => {
+      req.files.forEach((file) => {
         attachments.push({
           filename: file.filename,
           originalName: file.originalname,
           mimeType: file.mimetype,
           size: file.size,
-          path: file.path
+          path: file.path,
         });
       });
     }
 
-    const newComplaint = new Complaint({
+    // ✅ BUILD COMPLAINT DATA
+    const complaintData = {
       studentId: student._id,
       complaintType,
       otherComplaintType: complaintType === "Others" ? otherComplaintType : "",
       subject,
       description,
-      attachments
-    });
+      attachments,
+    };
 
+    // ✅ ADD MAINTENANCE FIELDS
+    if (complaintType === "Maintenance issue") {
+      console.log("🔧 Adding maintenance fields");
+      complaintData.floorNumber = floorNumber;
+
+      if (maintenanceItems) {
+        try {
+          complaintData.maintenanceItems =
+            typeof maintenanceItems === "string"
+              ? JSON.parse(maintenanceItems)
+              : maintenanceItems;
+          console.log("✅ Parsed items:", complaintData.maintenanceItems);
+        } catch (e) {
+          console.error("Parse error:", e);
+          complaintData.maintenanceItems = [];
+        }
+      }
+    }
+
+    // ✅ SAVE WITH ALL FIELDS
+    const newComplaint = new Complaint(complaintData);
     await newComplaint.save();
 
-    // Determine display type for emails
-    const displayType = complaintType === "Others" && otherComplaintType
-      ? `Others (${otherComplaintType})`
-      : complaintType;
+    console.log(
+      "✅ SAVED! Floor:",
+      newComplaint.floorNumber,
+      "Items:",
+      newComplaint.maintenanceItems
+    );
+
+    // Build display type
+    const displayType =
+      complaintType === "Others" && otherComplaintType
+        ? `Others (${otherComplaintType})`
+        : complaintType;
+
+    // Build maintenance details for email
+    let maintenanceDetails = "";
+    if (complaintType === "Maintenance issue") {
+      maintenanceDetails = `\n\nMaintenance Details:
+- Floor Number: ${floorNumber || "Not specified"}
+- Items: ${complaintData.maintenanceItems?.join(", ") || "Not specified"}`;
+    }
 
     // Prepare email content
-    let emailText = `New Complaint Filed:
+    let emailText = `New Complaint Filed
 
 Student Details:
 - Name: ${student.studentName}
 - Student ID: ${student.studentId}
 - Email: ${student.email}
-- Room/Bed: ${student.roomBedNumber || 'Not specified'}
+- Room/Bed: ${student.roomBedNumber || "Not specified"}
 
 Complaint Details:
 - Type: ${displayType}
 - Subject: ${subject}
-- Description: ${description}
-- Filed Date: ${new Date().toLocaleDateString('en-IN')}
-
-${attachments.length > 0 ? `\nAttachments: ${attachments.length} file(s) attached` : ''}
+- Description: ${description}${maintenanceDetails}
+- Filed Date: ${new Date().toLocaleDateString("en-IN")}
+${
+  attachments.length > 0
+    ? `- Attachments: ${attachments.length} file(s) attached`
+    : ""
+}
 
 Please review and respond accordingly.
 
-Hostel Management System`;
+- Hostel Management System`;
 
-    // Send email notification to admin
+    // Send emails
     await transporter.sendMail({
       from: `"Hostel System" <${process.env.MAIL_USER}>`,
-      to: process.env.MAIL_USER, // Admin email
+      to: process.env.MAIL_USER,
       subject: `New Complaint: ${subject} - ${student.studentName}`,
-      text: emailText
+      text: emailText,
     });
 
-    // Send confirmation email to student
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: student.email,
       subject: `Complaint Filed Successfully - ${subject}`,
       text: `Hello ${student.studentName},
 
-Your complaint has been filed successfully and assigned ticket ID: #${String(newComplaint._id).slice(-4).toUpperCase()}
+Your complaint has been filed successfully and assigned ticket ID: #${String(
+        newComplaint._id
+      )
+        .slice(-4)
+        .toUpperCase()}
 
 Complaint Details:
 - Subject: ${subject}
-- Type: ${displayType}
+- Type: ${displayType}${maintenanceDetails}
 - Status: In Progress
-- Filed Date: ${new Date().toLocaleDateString('en-IN')}
-
-${attachments.length > 0 ? `Attachments: ${attachments.length} file(s) uploaded` : ''}
+- Filed Date: ${new Date().toLocaleDateString("en-IN")}
+${
+  attachments.length > 0
+    ? `- Attachments: ${attachments.length} file(s) uploaded`
+    : ""
+}
 
 We will review your complaint and get back to you soon.
 
 Thank you for bringing this to our attention.
 
-- Hostel Administration`
+- Hostel Administration`,
     });
 
     return res.json({
       message: "Complaint filed successfully",
       complaint: {
-        _id: newComplaint._id,
+        id: newComplaint._id,
         ticketId: `#${String(newComplaint._id).slice(-4).toUpperCase()}`,
         subject: newComplaint.subject,
         complaintType: newComplaint.complaintType,
         otherComplaintType: newComplaint.otherComplaintType,
+        floorNumber: newComplaint.floorNumber, // ✅ RETURN THIS
+        maintenanceItems: newComplaint.maintenanceItems, // ✅ RETURN THIS
         status: newComplaint.status,
         filedDate: newComplaint.filedDate,
-        attachments: newComplaint.attachments.length
-      }
+        attachments: newComplaint.attachments.length,
+      },
     });
   } catch (err) {
     console.error("File complaint error:", err);
-    return res.status(500).json({ message: "Server error while filing complaint." });
+    return res
+      .status(500)
+      .json({ message: "Server error while filing complaint." });
   }
 };
+
+
+
 
 // Get student complaints with attachments
 const getStudentComplaints = async (req, res) => {
