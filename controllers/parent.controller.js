@@ -7,7 +7,9 @@ import { Student } from "../models/student.model.js";
 import { Warden } from "../models/warden.model.js";
 import { Otp } from "../models/otp.model.js";
 import { Leave } from "../models/leave.model.js";
-import { Notice } from "../models/notice.model.js"; 
+import { Notice } from "../models/notice.model.js";
+import { Refund } from "../models/refund.model.js";
+
 import path from 'path';
 import fs from 'fs';
 
@@ -1129,6 +1131,70 @@ const notices = async (req, res) => {
   }
 };
 
+const requestRefund = async (req, res) => {
+  const { refundType, amount, reason, otherRefundType } = req.body;
+  const studentId = req.studentId;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const newRefund = new Refund({
+      studentId: student._id,
+      refundType,
+      otherRefundType: refundType === "Others" ? otherRefundType : "",
+      amount,
+      reason,
+      status: "pending",
+    });
+
+    await newRefund.save();
+
+    await transporter.sendMail({
+      from: `<${student.email}>`,
+      to: process.env.MAIL_USER,
+      subject: `Refund Request: ${refundType === "Others" ? `Other (${otherRefundType})` : refundType
+        } from ${student.firstName}`,
+      text: `Refund Amount: ${amount}\nReason: ${reason}`,
+    });
+
+    return res.json({
+      message: "Refund request submitted successfully",
+      refund: newRefund,
+    });
+  } catch (err) {
+    console.error("Refund request error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while requesting refund." });
+  }
+};
+
+
+const getRefundHistory = async (req, res) => {
+  const studentId = req.studentId;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    const refunds = await Refund.find({ studentId: student._id })
+      .select("refundType amount reason status requestedAt")
+      .sort({ requestedAt: -1 });
+
+    return res.json({ refunds });
+  } catch (err) {
+    console.error("Fetch refund history error:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error while fetching refund history." });
+  }
+};
+
 const markNoticeAsRead = async (req, res) => {
   const { noticeId } = req.params;
   const studentId = req.studentId; // From authentication middleware
@@ -1183,6 +1249,8 @@ export {
   updateLeaveStatus,
   fees,
   notices,
+  getRefundHistory,
+  requestRefund,
   markNoticeAsRead
 };
 
