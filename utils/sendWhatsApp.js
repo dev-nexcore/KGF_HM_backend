@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const WHATSAPP_INSTANCE_ID = "68DD0A0A2AE56"; 
+const WHATSAPP_INSTANCE_ID = "690C630E7D550"; 
 const WHATSAPP_ACCESS_TOKEN = "68822d48a7005"; 
 
 
