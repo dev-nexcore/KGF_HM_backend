@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyAdminToken } from '../middleware/auth.middleware.js';
 import { Inventory } from '../models/inventory.model.js';
+import { uploadStudentDocuments, uploadParentDocuments } from '../middleware/upload.js';
 
 // Import from individual controller files
 import {
@@ -98,7 +99,9 @@ import {
   getInventoryItems,
   getAvailableRoomsFloors,
   getItemByQRSlug,
-  generateStockReport
+  generateStockReport,
+  bulkUploadInventory,
+  bulkGenerateQRCodes
 } from "../controllers/admin/notice_inventory.controller.js";
 
 import{
@@ -123,8 +126,24 @@ router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
 
 // ====================== USER MANAGEMENT ROUTES ======================
-router.post('/register-student', registerStudent);
-router.post('/register-parent', registerParent);
+router.post(
+  '/register-student',
+  verifyAdminToken,
+  uploadStudentDocuments.fields([
+    { name: 'aadharCard', maxCount: 1 },
+    { name: 'panCard', maxCount: 1 }
+  ]),
+  registerStudent
+);
+router.post(
+  '/register-parent',
+  verifyAdminToken,
+  uploadParentDocuments.fields([
+    { name: 'aadharCard', maxCount: 1 },
+    { name: 'panCard', maxCount: 1 }
+  ]),
+  registerParent
+);
 router.post('/register-warden', registerWarden);
 router.get('/students', getAllStudents);
 router.get('/students-without-parents', getStudentsWithoutParents);
@@ -195,10 +214,13 @@ router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
 
 // ====================== CONTENT MANAGEMENT ROUTES ======================
-// *** INVENTORY ROUTES - SPECIFIC ROUTES FIRST ***
 // General inventory routes
 router.get('/inventory', getInventoryItems);
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
+
+// ADD THESE TWO NEW ROUTES HERE (before specific routes)
+router.post('/inventory/bulk-upload', upload.single('file'), bulkUploadInventory);
+router.post('/inventory/bulk-qr-generate', bulkGenerateQRCodes);
 
 // Specific inventory routes (these must come BEFORE /inventory/:id)
 router.get('/inventory/stock-report', generateStockReport);
@@ -207,7 +229,8 @@ router.get('/inventory/available-rooms', getAvailableRooms);
 router.get('/inventory/available-rooms-floors', getAvailableRoomsFloors);
 router.get('/inventory/qr/:slug', getItemByQRSlug);
 
-// Parameterized inventory routes (these must come AFTER specific routes)
+
+// Parameterized inventory routes
 router.get('/inventory/:id', getInventoryItemById);
 router.put('/inventory/:id', updateInventoryItem);
 router.put('/inventory/:id/receipt', upload.single('receipt'), updateInventoryReceipt);

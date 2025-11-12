@@ -2,12 +2,10 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 
 const studentSchema = new mongoose.Schema({
-  // studentName: { type: String, required: true },
   firstName: { type: String, required: true },
   lastName: { type: String, required: true },
   studentId: { type: String, required: true, unique: true },
   contactNumber: { type: String, required: true },
-  // roomBedNumber: { type: String, required: true },
   roomBedNumber: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Inventory',
@@ -21,6 +19,21 @@ const studentSchema = new mongoose.Schema({
   relation: { type: String },
   emergencyContactNumber: { type: String },
   password: { type: String, required: true },
+  
+  // ADD THESE DOCUMENT FIELDS
+  documents: {
+    aadharCard: {
+      filename: { type: String },
+      path: { type: String },
+      uploadedAt: { type: Date }
+    },
+    panCard: {
+      filename: { type: String },
+      path: { type: String },
+      uploadedAt: { type: Date }
+    }
+  },
+  
   attendanceLog: [
     {
       checkInDate: { type: Date, required: true },
@@ -31,9 +44,9 @@ const studentSchema = new mongoose.Schema({
       checkOutLocation: { lat: Number, lng: Number }
     }
   ],
-    refreshToken: {
+  refreshToken: {
     type: String,
-    select: false // Also hide refresh token by default
+    select: false
   },
 });
 

@@ -10,7 +10,9 @@ const ensureUploadsDir = () => {
     'uploads/wardens/', 
     'uploads/students/', 
     'uploads/parents/',
-    'uploads/complaints/'  // New directory for complaint attachments
+    'uploads/complaints/',
+    'uploads/student-documents/',  // Add this
+    'uploads/parent-documents/'     // Add this
   ];
   dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
@@ -19,7 +21,6 @@ const ensureUploadsDir = () => {
   });
 };
 
-// Call this when the module loads
 ensureUploadsDir();
 
 // Warden storage engine
@@ -39,6 +40,17 @@ const studentStorage = multer.diskStorage({
   },
 });
 
+const studentDocumentStorage = multer.diskStorage({
+  destination: "uploads/student-documents/",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.body.email || 'temp'}-${file.fieldname}-${uniqueSuffix}${ext}`);
+  }
+});
+
+
+
 // Parent storage engine
 const parentStorage = multer.diskStorage({
   destination: "uploads/parents/",
@@ -48,6 +60,25 @@ const parentStorage = multer.diskStorage({
     cb(null, `parent_${studentId}_${Date.now()}${path.extname(file.originalname)}`);
   },
 });
+
+const parentDocumentStorage = multer.diskStorage({
+  destination: "uploads/parent-documents/",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.body.email || 'temp'}-${file.fieldname}-${uniqueSuffix}${ext}`);
+  }
+});
+
+const documentFileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  
+  if (allowedTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only JPEG, PNG, and WebP images are allowed.'));
+  }
+};
 
 // Complaint storage engine
 const complaintStorage = multer.diskStorage({
@@ -60,6 +91,8 @@ const complaintStorage = multer.diskStorage({
     cb(null, `complaint_${timestamp}_${randomStr}${path.extname(file.originalname)}`);
   },
 });
+
+
 
 // File filter for images
 const imageFilter = (req, file, cb) => {
@@ -92,6 +125,22 @@ export const uploadWarden = multer({
   fileFilter: imageFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
+  }
+});
+
+export const uploadStudentDocuments = multer({
+  storage: studentDocumentStorage,
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+export const uploadParentDocuments = multer({
+  storage: parentDocumentStorage,
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
   }
 });
 

@@ -1409,6 +1409,8 @@ const generateRefreshToken = async student => {
  const sendLoginOTP = async (req, res) => {
   const { studentId } = req.body;
 
+  console.log("otp requested");
+
   if (!studentId) return res.status(400).json({ message: "Student ID is required" });
 
   try {
@@ -1449,6 +1451,7 @@ If you didn't request this OTP, please ignore this email.
 
     return res.json({
       message: "OTP sent successfully via Email & WhatsApp",
+     
       email: student.email.replace(/(.{2})(.*)(@.*)/, "$1***$3"),
       expiresIn: "5 minutes",
     });
@@ -1456,7 +1459,10 @@ If you didn't request this OTP, please ignore this email.
     console.error("Error sending login OTP:", err);
     return res.status(500).json({ message: "Error sending OTP" });
   }
+  
 };
+
+
 
  const login = async (req, res) => {
   const { studentId, otp } = req.body;
@@ -1853,7 +1859,7 @@ const checkOutStudent = async (req, res) => {
 
 
 const fileComplaint = async (req, res) => {
-  console.log("\n🚀 ========== COMPLAINT REQUEST STARTED ==========");
+ 
 
   const {
     complaintType,

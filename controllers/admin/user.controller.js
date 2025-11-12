@@ -4,6 +4,7 @@ import { Student } from '../../models/student.model.js';
 import { Parent } from '../../models/parent.model.js';
 import { Warden } from '../../models/warden.model.js';
 import { Inventory } from '../../models/inventory.model.js';
+import fs from 'fs';
 
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
@@ -40,10 +41,8 @@ const registerStudent = async (req, res) => {
       const paddedNumber = String(count + 1).padStart(3, '0');
       const studentId = `STU-${paddedNumber}`;
       
-      // Check if this ID already exists (in case of concurrent requests)
       const existingStudent = await Student.findOne({ studentId });
       if (existingStudent) {
-        // If exists, find the next available number
         const allStudents = await Student.find({}, { studentId: 1 }).sort({ studentId: -1 });
         let maxNumber = 0;
         allStudents.forEach(student => {
@@ -60,9 +59,37 @@ const registerStudent = async (req, res) => {
 
     const studentId = await generateStudentId();
 
-    // Generate a password: lowercase name (no spaces) + studentId
+    // Generate password
     const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
     const password = `${cleanName}${studentId}`;
+
+    // Handle document uploads
+    const documents = {
+      aadharCard: {},
+      panCard: {}
+    };
+
+    if (req.files) {
+      // Check if aadharCard was uploaded
+      if (req.files['aadharCard'] && req.files['aadharCard'][0]) {
+        const aadharFile = req.files['aadharCard'][0];
+        documents.aadharCard = {
+          filename: aadharFile.filename,
+          path: aadharFile.path,
+          uploadedAt: new Date()
+        };
+      }
+
+      // Check if panCard was uploaded
+      if (req.files['panCard'] && req.files['panCard'][0]) {
+        const panFile = req.files['panCard'][0];
+        documents.panCard = {
+          filename: panFile.filename,
+          path: panFile.path,
+          uploadedAt: new Date()
+        };
+      }
+    }
 
     // Create student record
     const newStudent = new Student({
@@ -76,12 +103,13 @@ const registerStudent = async (req, res) => {
       feeStatus,
       emergencyContactName,
       emergencyContactNumber,
-      password
+      password,
+      documents // Add documents to student record
     });
 
     await newStudent.save();
 
-      if (roomBedNumber && roomBedNumber !== "Not Assigned") {
+    if (roomBedNumber && roomBedNumber !== "Not Assigned") {
       await Inventory.findByIdAndUpdate(
         roomBedNumber,
         { status: "In Use" },
@@ -89,7 +117,7 @@ const registerStudent = async (req, res) => {
       );
     }
 
-    // Send email with student credentials
+    // Send email with credentials
     await transporter.sendMail({
       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
       to: email,
@@ -117,23 +145,47 @@ Please log in at https://www.KGF-HM.com and change your password after first log
       additionalData: {
         email,
         roomBedNumber,
-        admissionDate
+        admissionDate,
+        documentsUploaded: {
+          aadharCard: !!documents.aadharCard.filename,
+          panCard: !!documents.panCard.filename
+        }
       }
     });
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { firstName, lastName, studentId, email, password }
+      student: { 
+        firstName, 
+        lastName, 
+        studentId, 
+        email, 
+        password,
+        documentsUploaded: {
+          aadharCard: !!documents.aadharCard.filename,
+          panCard: !!documents.panCard.filename
+        }
+      }
     });
   } catch (err) {
     console.error('Error registering student:', err);
+    
+    // Clean up uploaded files if registration fails
+    if (req.files) {
+      Object.values(req.files).flat().forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    
     return res.status(500).json({ message: 'Error registering student.' });
   }
 };
 
 
 const registerParent = async (req, res) => {
-  const { firstName, lastName, email, contactNumber, studentId } = req.body;
+  const { firstName, lastName, email,relation, contactNumber, studentId } = req.body;
 
   try {
     // Check if the parent already exists
@@ -148,14 +200,43 @@ const registerParent = async (req, res) => {
       return res.status(404).json({ message: "Student not found with the provided studentId." });
     }
 
+    // Handle document uploads
+    const documents = {
+      aadharCard: {},
+      panCard: {}
+    };
+
+    if (req.files) {
+      // Check if aadharCard was uploaded
+      if (req.files['aadharCard'] && req.files['aadharCard'][0]) {
+        const aadharFile = req.files['aadharCard'][0];
+        documents.aadharCard = {
+          filename: aadharFile.filename,
+          path: aadharFile.path,
+          uploadedAt: new Date()
+        };
+      }
+
+      // Check if panCard was uploaded
+      if (req.files['panCard'] && req.files['panCard'][0]) {
+        const panFile = req.files['panCard'][0];
+        documents.panCard = {
+          filename: panFile.filename,
+          path: panFile.path,
+          uploadedAt: new Date()
+        };
+      }
+    }
+
     // Create new parent record (NO PASSWORD NEEDED for OTP login)
     const newParent = new Parent({
       firstName,
       lastName,
       email,
+      relation,
       contactNumber,
-      studentId
-      // Remove password field completely
+      studentId,
+      documents // Add documents to parent record
     });
 
     await newParent.save();
@@ -170,8 +251,8 @@ const registerParent = async (req, res) => {
 Your parent account has been created successfully!
 
 Login Details:
-• Student ID: ${studentId}
-• Login Method: OTP (One-Time Password)
+- Student ID: ${studentId}
+- Login Method: OTP (One-Time Password)
 
 How to Login:
 1. Visit https://www.KGF-HM.com
@@ -187,18 +268,52 @@ If you have any questions, please contact the hostel administration.
 – Hostel Admin`
     });
 
+    // Create audit log
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.PARENT_REGISTERED,
+      description: `Registered new parent: ${firstName} ${lastName} for student ${studentId}`,
+      targetType: 'Parent',
+      targetId: email,
+      targetName: `${firstName} ${lastName}`,
+      additionalData: {
+        studentId,
+        email,
+        contactNumber,
+        documentsUploaded: {
+          aadharCard: !!documents.aadharCard.filename,
+          panCard: !!documents.panCard.filename
+        }
+      }
+    });
+
     return res.json({
       message: 'Parent registered successfully. Login instructions sent via email.',
       parent: { 
         firstName, 
         lastName, 
         email, 
-        studentId 
-        // Remove parentPassword from response
+        relation,
+        studentId,
+        documentsUploaded: {
+          aadharCard: !!documents.aadharCard.filename,
+          panCard: !!documents.panCard.filename
+        }
       }
     });
   } catch (err) {
     console.error("Error registering parent:", err);
+    
+    // Clean up uploaded files if registration fails
+    if (req.files) {
+      Object.values(req.files).flat().forEach(file => {
+        if (fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      });
+    }
+    
     return res.status(500).json({ message: "Error registering parent." });
   }
 };

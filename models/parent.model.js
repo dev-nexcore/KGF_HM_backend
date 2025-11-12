@@ -14,6 +14,22 @@ const parentSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
+   relation: {
+    type: String,
+    required: true
+  },
+documents: {
+  aadharCard: {
+    filename: { type: String },
+    path: { type: String },
+    uploadedAt: { type: Date }
+  },
+  panCard: {
+    filename: { type: String },
+    path: { type: String },
+    uploadedAt: { type: Date }
+  }
+},
   profileImage: {
   type: String,
   default: null,

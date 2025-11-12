@@ -35,12 +35,29 @@ const transporter = nodemailer.createTransport({
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/receipts/');
+    // Check if it's a receipt or bulk upload file
+    if (file.fieldname === 'receipt') {
+      cb(null, 'uploads/receipts/');
+    } else if (file.fieldname === 'file') {
+      cb(null, 'uploads/bulk/');
+    } else {
+      cb(null, 'uploads/');
+    }
   },
   filename: (req, file, cb) => {
-    cb(null, `receipt-${Date.now()}${path.extname(file.originalname)}`);
+    if (file.fieldname === 'receipt') {
+      cb(null, `receipt-${Date.now()}${path.extname(file.originalname)}`);
+    } else if (file.fieldname === 'file') {
+      cb(null, `bulk-${Date.now()}${path.extname(file.originalname)}`);
+    } else {
+      cb(null, `${Date.now()}${path.extname(file.originalname)}`);
+    }
   }
 });
+
+const memoryStorage = multer.memoryStorage();
+const uploadMemory = multer({ storage: memoryStorage });
+
 const upload = multer({ storage });
 
 // If you use ES modules and need __dirname:
@@ -481,6 +498,197 @@ worksheet.getColumn(10).width = 30; // if description is the 2nd column
     res.status(500).json({
       success: false,
       message: 'Failed to generate stock report'
+    });
+  }
+};
+
+// Add after the generateStockReport function
+
+// Bulk upload inventory items from CSV/Excel
+const bulkUploadInventory = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const fileBuffer = req.file.buffer;
+    
+    // Read the uploaded file
+    if (req.file.mimetype === 'text/csv') {
+      await workbook.csv.read(fileBuffer);
+    } else {
+      await workbook.xlsx.load(fileBuffer);
+    }
+
+    const worksheet = workbook.worksheets[0];
+    const items = [];
+    const errors = [];
+
+    // Skip header row (row 1)
+    for (let i = 2; i <= worksheet.rowCount; i++) {
+      const row = worksheet.getRow(i);
+      
+      // Skip empty rows
+      if (!row.getCell(1).value) continue;
+
+      try {
+        const itemName = row.getCell(1).value?.toString().trim();
+        const category = row.getCell(2).value?.toString().trim();
+        const location = row.getCell(3).value?.toString().trim();
+        const status = row.getCell(4).value?.toString().trim();
+        const roomNo = row.getCell(5).value?.toString().trim();
+        const floor = row.getCell(6).value?.toString().trim();
+        const description = row.getCell(7).value?.toString().trim() || '';
+        const purchaseDate = row.getCell(8).value ? convertDateFormat(row.getCell(8).value.toString().trim()) : null;
+        const purchaseCost = row.getCell(9).value ? parseFloat(row.getCell(9).value) : null;
+
+        // Validate required fields
+        if (!itemName || !category || !location || !status || !roomNo || !floor) {
+          errors.push({ row: i, error: 'Missing required fields' });
+          continue;
+        }
+
+        // Generate unique barcode ID
+        const timestamp = Date.now();
+        const random = Math.floor(Math.random() * 1000);
+        const itemPrefix = itemName.toUpperCase().replace(/\s+/g, '').substring(0, 3);
+        const barcodeId = `${itemPrefix}${timestamp}${random}`;
+
+        // Check if barcode already exists
+        const existingItem = await Inventory.findOne({ barcodeId });
+        if (existingItem) {
+          errors.push({ row: i, error: 'Duplicate barcode ID' });
+          continue;
+        }
+
+        const publicSlug = nanoid(10);
+
+        const newItem = {
+          itemName,
+          barcodeId,
+          category,
+          location,
+          roomNo,
+          floor,
+          status,
+          description,
+          purchaseDate,
+          purchaseCost,
+          publicSlug
+        };
+
+        items.push(newItem);
+      } catch (error) {
+        errors.push({ row: i, error: error.message });
+      }
+    }
+
+    // Insert all valid items
+    let addedItems = [];
+    if (items.length > 0) {
+      addedItems = await Inventory.insertMany(items);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: `Successfully added ${addedItems.length} items`,
+      addedCount: addedItems.length,
+      items: addedItems,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    console.error('Bulk upload error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to upload items',
+      error: error.message
+    });
+  }
+};
+
+// Bulk generate QR codes for multiple items
+const bulkGenerateQRCodes = async (req, res) => {
+  try {
+    const { itemIds } = req.body;
+
+    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item IDs array is required'
+      });
+    }
+
+    const items = await Inventory.find({ _id: { $in: itemIds } });
+    
+    if (items.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No items found'
+      });
+    }
+
+    // Ensure QR codes directory exists
+    const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
+    if (!fs.existsSync(qrCodesDir)) {
+      fs.mkdirSync(qrCodesDir, { recursive: true });
+    }
+
+    const updatedItems = [];
+    const errors = [];
+
+    for (const item of items) {
+      try {
+        // Generate public slug if it doesn't exist
+        if (!item.publicSlug) {
+          item.publicSlug = nanoid(10);
+        }
+
+        const qrData = `${FRONTEND_BASE_URL}/inventory/item/${item.publicSlug}`;
+
+        // Generate QR code file
+        const qrCodePath = path.join(qrCodesDir, `${item._id}.png`);
+        await QRCode.toFile(qrCodePath, qrData, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+
+        // Update item with QR code URL
+        item.qrCodeUrl = `/qrcodes/${item._id}.png`;
+        await item.save();
+
+        updatedItems.push(item);
+      } catch (error) {
+        errors.push({ 
+          itemId: item._id.toString(), 
+          itemName: item.itemName,
+          error: error.message 
+        });
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Generated ${updatedItems.length} QR codes successfully`,
+      count: updatedItems.length,
+      items: updatedItems,
+      errors: errors.length > 0 ? errors : undefined
+    });
+
+  } catch (error) {
+    console.error('Bulk QR generation error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to generate QR codes',
+      error: error.message
     });
   }
 };
@@ -1245,5 +1453,7 @@ export {
   upload,
     getItemByQRSlug,
   generateStockReport,
+  bulkGenerateQRCodes,
+  bulkUploadInventory,
   getAvailableRoomsFloors
 }
