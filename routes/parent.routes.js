@@ -1,7 +1,9 @@
 import express from 'express';
 import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile,getStudentProfile, uploadProfileImage, updateProfile, removeProfileImage } from '../controllers/parent.controller.js';
-import { authenticateParent } from '../middleware/auth.middleware.js';
+import { authenticateParent,verifyStudentOrParentToken } from '../middleware/auth.middleware.js';
 import {uploadParent} from '../middleware/upload.js';
+import { requestRefund, getRefundHistory } from '../controllers/parent.controller.js';
+
 
 const router = express.Router();
 
@@ -23,4 +25,8 @@ router.get('/fees',authenticateParent, fees);
 router.get('/notices',authenticateParent, notices);
 router.patch('/notices/:noticeId/read',authenticateParent, markNoticeAsRead);
 router.post('/refresh-token', refreshAccessToken);
+//refund routes
+
+router.post("/refund", verifyStudentOrParentToken, requestRefund);
+router.get("/refunds", verifyStudentOrParentToken, getRefundHistory);
 export default router;
