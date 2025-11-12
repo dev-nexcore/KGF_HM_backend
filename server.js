@@ -39,7 +39,11 @@ connectDB();
       "https://kgf-hm-warden.nexcorealliance.com",
       "http://localhost:3000",
       "https://kokanglobal.org",
-      "https://www.kokanglobal.org"
+      "https://www.kokanglobal.org",
+      "https://admin.kokanglobal.org",
+      "https://www.admin.kokanglobal.org"
+
+      
     ],
     credentials: true,
   };
