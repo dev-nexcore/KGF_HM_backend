@@ -124,12 +124,20 @@ const registerStudent = async (req, res) => {
       subject: 'Your Student Panel Credentials',
       text: `Hello ${firstName} ${lastName},
 
-Your student account has been created.
+Your student account has been created successfully!
 
+Login Details:
 - Student ID: ${studentId}
-- Password: ${password}
+- Login Method: OTP (One-Time Password)
 
-Please log in at https://www.KGF-HM.com and change your password after first login.
+How to Login:
+1. Visit https://kokanglobal.org/student
+2. Enter your student ID: ${studentId}
+3. Click "Send OTP" button
+4. Check your Email or Whatsapp for the 6-digit OTP code
+5. Enter the OTP to access your parent panel
+
+The OTP will be valid for 5 minutes each time you request it.
 
 – Hostel Admin`
     });
@@ -255,7 +263,7 @@ Login Details:
 - Login Method: OTP (One-Time Password)
 
 How to Login:
-1. Visit https://www.KGF-HM.com
+1. Visit https://kokanglobal.org/parent
 2. Enter your child's Student ID: ${studentId}
 3. Click "Send OTP" button
 4. Check your email for the 6-digit OTP code
