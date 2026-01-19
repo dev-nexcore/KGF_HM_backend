@@ -3,6 +3,8 @@ import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
 // POST - Create new inspection
 const createInspection = async (req, res) => {
+  
+
   const {
     title,
     target,
@@ -27,7 +29,7 @@ const createInspection = async (req, res) => {
       area,
       datetime: new Date(datetime),
       instructions: instructions || '',
-      createdBy: req.admin._id,
+      createdBy: req.admin.adminId,
       status: 'pending'
     });
 
@@ -317,6 +319,8 @@ const deleteInspection = async (req, res) => {
 const updateInspectionStatus = async (req, res) => {
   const { inspectionId } = req.params;
   const { status } = req.body;
+
+  console.log("Updating inspection status:", { inspectionId, status, admin: req.admin });
 
   try {
     if (!['pending', 'completed'].includes(status)) {
