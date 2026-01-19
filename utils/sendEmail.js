@@ -1,3 +1,5 @@
+//KGF_HM_backend\utils\sendEmail.js
+
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({

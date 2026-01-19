@@ -6,6 +6,9 @@ import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 import { sendWhatsAppMessage } from '../../utils/sendWhatsApp.js';
 import bcrypt from 'bcrypt';
 
+import sendEmail from '../../utils/sendEmail.js';
+
+
 const generateToken = (admin) => {
   return jwt.sign(
     { adminId: admin.adminId, email: admin.email }, 
@@ -65,6 +68,65 @@ const register = async (req, res) => {
   }
 };
 
+// const sendLoginOTP = async (req, res) => {
+//   const { adminId } = req.body;
+
+//   if (!adminId) {
+//     return res.status(400).json({ message: "Admin ID is required" });
+//   }
+
+//   try {
+//     // Find admin by adminId
+//     const admin = await Admin.findOne({ adminId });
+//     if (!admin) {
+//       return res.status(404).json({ message: "Admin account not found" });
+//     }
+
+//     // Generate 6-digit OTP
+//     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+//     // Set OTP expiry (5 minutes from now)
+//     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
+
+//     // Save OTP record
+//     await Otp.findOneAndUpdate(
+//       { email: admin.email },
+//       { 
+//         code: otp, 
+//         expires: otpExpiry, 
+//         verified: false, 
+//         purpose: 'admin_login' 
+//       },
+//       { upsert: true }
+//     );
+
+//     // Send OTP via WhatsApp only
+//     if (admin.contactNumber) {
+//       try {
+//         await sendWhatsAppMessage(
+//           admin.contactNumber, 
+//           `Hello Admin,\n\nYour OTP for admin panel login is: *${otp}*\n\nValid for 5 minutes.\n\n– Hostel Management System`
+//         );
+//       } catch (whatsappError) {
+//         console.error("WhatsApp sending error:", whatsappError);
+//         return res.status(500).json({ message: "Failed to send OTP via WhatsApp" });
+//       }
+//     } else {
+//       return res.status(400).json({ message: "Admin contact number not found" });
+//     }
+
+//     return res.json({
+//       message: 'OTP sent successfully to your WhatsApp',
+//       contactNumber: admin.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3'), // Mask number
+//       expiresIn: '5 minutes'
+//     });
+
+//   } catch (err) {
+//     console.error("Error sending admin login OTP:", err);
+//     return res.status(500).json({ message: "Error sending OTP" });
+//   }
+// };
+
 const sendLoginOTP = async (req, res) => {
   const { adminId } = req.body;
 
@@ -73,49 +135,57 @@ const sendLoginOTP = async (req, res) => {
   }
 
   try {
-    // Find admin by adminId
     const admin = await Admin.findOne({ adminId });
     if (!admin) {
       return res.status(404).json({ message: "Admin account not found" });
     }
 
-    // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // Set OTP expiry (5 minutes from now)
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Save OTP record
+    // Save OTP
     await Otp.findOneAndUpdate(
-      { email: admin.email },
-      { 
-        code: otp, 
-        expires: otpExpiry, 
-        verified: false, 
-        purpose: 'admin_login' 
-      },
+      { email: admin.email, purpose: 'admin_login' },
+      { code: otp, expires: otpExpiry },
       { upsert: true }
     );
 
-    // Send OTP via WhatsApp only
+    /* ---------- SEND EMAIL OTP ---------- */
+    try {
+      await sendEmail({
+        to: admin.email,
+        subject: 'Admin Login OTP',
+        text: `Hello Admin,
+
+Your OTP for admin panel login is: ${otp}
+
+This OTP is valid for 5 minutes.
+
+– Hostel Management System`
+      });
+    } catch (mailError) {
+      console.error("Email sending error:", mailError);
+      return res.status(500).json({ message: "Failed to send OTP via Email" });
+    }
+
+    /* ---------- SEND WHATSAPP OTP ---------- */
     if (admin.contactNumber) {
       try {
         await sendWhatsAppMessage(
-          admin.contactNumber, 
+          admin.contactNumber,
           `Hello Admin,\n\nYour OTP for admin panel login is: *${otp}*\n\nValid for 5 minutes.\n\n– Hostel Management System`
         );
       } catch (whatsappError) {
         console.error("WhatsApp sending error:", whatsappError);
         return res.status(500).json({ message: "Failed to send OTP via WhatsApp" });
       }
-    } else {
-      return res.status(400).json({ message: "Admin contact number not found" });
     }
 
     return res.json({
-      message: 'OTP sent successfully to your WhatsApp',
-      contactNumber: admin.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3'), // Mask number
-      expiresIn: '5 minutes'
+      message: "OTP sent successfully via Email and WhatsApp",
+      email: admin.email,
+      contactNumber: admin.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3'),
+      expiresIn: "5 minutes"
     });
 
   } catch (err) {
@@ -123,6 +193,8 @@ const sendLoginOTP = async (req, res) => {
     return res.status(500).json({ message: "Error sending OTP" });
   }
 };
+
+
 
 const login = async (req, res) => {
   const { adminId, otp } = req.body;
