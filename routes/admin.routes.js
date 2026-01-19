@@ -235,7 +235,7 @@ router.get('/inventory/:id', getInventoryItemById);
 router.put('/inventory/:id', updateInventoryItem);
 router.put('/inventory/:id/receipt', upload.single('receipt'), updateInventoryReceipt);
 router.post('/inventory/:id/qr-code', generateQRCode);
-router.get('/inventory/:id/qr-code/download', downloadQRCode);
+router.get('/inventory/:id/qr-code/download', downloadQRCode); 
 router.delete('/inventory/:id', deleteInventoryItem);
 
 // *** NOTICE ROUTES ***
