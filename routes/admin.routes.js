@@ -178,12 +178,12 @@ router.put('/complaints/:complaintId/status', updateComplaintStatus);
 router.put('/complaints/bulk-status', bulkUpdateComplaintStatus);
 
 // ====================== INSPECTION ROUTES ======================
-router.post('/inspections', createInspection);
+router.post('/inspections',verifyAdminToken, createInspection);
 router.get('/inspections', getAllInspections);
 router.get('/inspections/:inspectionId', getInspectionById);
 router.put('/inspections/:inspectionId', updateInspection);
 router.delete('/inspections/:inspectionId', deleteInspection);
-router.patch('/inspections/:inspectionId/status', updateInspectionStatus);
+router.patch('/inspections/:inspectionId/status',verifyAdminToken, updateInspectionStatus);
 
 // ====================== FINANCIAL MANAGEMENT ROUTES ======================
 // Student Invoices

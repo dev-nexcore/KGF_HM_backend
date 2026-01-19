@@ -67,20 +67,20 @@ const __dirname = path.dirname(__filename);
 // Helper function to convert DD-MM-YYYY to valid Date object
 const convertDateFormat = (dateString) => {
   if (!dateString) return null;
-  
+
   // Check if it's already in ISO format or a valid date
   const isoDate = new Date(dateString);
   if (!isNaN(isoDate.getTime()) && !dateString.includes('-') || dateString.match(/^\d{4}-/)) {
     return isoDate;
   }
-  
+
   // Handle DD-MM-YYYY format
   if (dateString.match(/^\d{2}-\d{2}-\d{4}$/)) {
     const [day, month, year] = dateString.split('-');
     // Create date in YYYY-MM-DD format (month is 0-indexed in Date constructor)
     return new Date(year, month - 1, day);
   }
-  
+
   // Handle other formats or return null for invalid dates
   return null;
 };
@@ -122,7 +122,9 @@ const addInventoryItem = async (req, res) => {
       floor,
       status,
       description,
-      purchaseDate,
+      purchaseDate: purchaseDate
+  ? new Date(purchaseDate.split('-').reverse().join('-'))
+  : null,
       purchaseCost,
       receiptUrl,
       publicSlug
@@ -151,7 +153,7 @@ const addInventoryItem = async (req, res) => {
     });
 
     // Update item with QR code URL
-newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
+    newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
     await newItem.save();
 
     // Ensure publicSlug is present in the item object
@@ -171,20 +173,20 @@ newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
 
   } catch (err) {
     console.error('Add Inventory Error:', err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: 'Failed to add inventory item.' 
+      message: 'Failed to add inventory item.'
     });
   }
 };
 const getInventoryItems = async (req, res) => {
   try {
-    const { 
-      page = 1, 
-      limit = 50, 
-      category, 
-      status, 
-      search 
+    const {
+      page = 1,
+      limit = 50,
+      category,
+      status,
+      search
     } = req.query;
 
     // Build filter object
@@ -210,7 +212,7 @@ const getInventoryItems = async (req, res) => {
 
     const totalItems = await Inventory.countDocuments(filter);
 
-    return res.json({ 
+    return res.json({
       success: true,
       items,
       pagination: {
@@ -223,9 +225,9 @@ const getInventoryItems = async (req, res) => {
     });
   } catch (err) {
     console.error("Error fetching inventory:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: "Failed to fetch inventory items." 
+      message: "Failed to fetch inventory items."
     });
   }
 };
@@ -234,7 +236,7 @@ const getInventoryItemById = async (req, res) => {
   try {
     const { id } = req.params;
     const inventoryItem = await Inventory.findById(id);
-    
+
     if (!inventoryItem) {
       return res.status(404).json({
         success: false,
@@ -259,7 +261,7 @@ const getInventoryItemBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
     const inventoryItem = await Inventory.findOne({ publicSlug: slug });
-    
+
     if (!inventoryItem) {
       return res.status(404).json({
         success: false,
@@ -301,7 +303,7 @@ const generateQRCode = async (req, res) => {
   try {
     const { id } = req.params;
     const inventoryItem = await Inventory.findById(id);
-    
+
     if (!inventoryItem) {
       return res.status(404).json({
         success: false,
@@ -336,7 +338,7 @@ const generateQRCode = async (req, res) => {
 
     // Update item with QR code URL if not already set
     if (!inventoryItem.qrCodeUrl) {
-    inventoryItem.qrCodeUrl = `/qrcodes/${inventoryItem._id}.png`;
+      inventoryItem.qrCodeUrl = `/qrcodes/${inventoryItem._id}.png`;
       await inventoryItem.save();
     }
 
@@ -361,7 +363,7 @@ const getItemByQRSlug = async (req, res) => {
   try {
     const { slug } = req.params;
     const inventoryItem = await Inventory.findOne({ publicSlug: slug });
-    
+
     if (!inventoryItem) {
       return res.status(404).json({
         success: false,
@@ -387,26 +389,26 @@ const generateStockReport = async (req, res) => {
   try {
     // Import Excel library at the top of your file
     // import ExcelJS from 'exceljs';
-    
+
     // Get all inventory items
     const items = await Inventory.find({}).sort({ category: 1, itemName: 1 });
-    
+
     // Create workbook and worksheet
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Monthly Stock Report');
-    
+
     // Add title and date
-  const now = new Date();
+    const now = new Date();
     const monthYear = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    
+
     worksheet.addRow([`Monthly Stock Report - ${monthYear}`]);
     worksheet.addRow([`Generated on: ${now.toLocaleDateString('en-IN')}`]);
     worksheet.addRow([]); // Empty row
-    
+
     // Add headers
     const headers = [
       'Item Name',
-      'Barcode ID', 
+      'Barcode ID',
       'Category',
       'Location',
       'Room No',
@@ -416,9 +418,9 @@ const generateStockReport = async (req, res) => {
       'Purchase Cost (₹)',
       'Description'
     ];
-    
+
     const headerRow = worksheet.addRow(headers);
-    
+
     // Style headers
     headerRow.eachCell((cell) => {
       cell.font = { bold: true, color: { argb: 'FFFFFF' } };
@@ -434,7 +436,7 @@ const generateStockReport = async (req, res) => {
         right: { style: 'thin' }
       };
     });
-    
+
     // Add data rows
     items.forEach(item => {
       const row = worksheet.addRow([
@@ -449,7 +451,7 @@ const generateStockReport = async (req, res) => {
         item.purchaseCost || '',
         item.description || ''
       ]);
-      
+
       // Add borders to data rows
       row.eachCell((cell) => {
         cell.border = {
@@ -460,16 +462,16 @@ const generateStockReport = async (req, res) => {
         };
       });
     });
-    
+
     // Auto-fit columns
     worksheet.columns.forEach(column => {
       column.width = 15;
     });
 
-worksheet.getColumn(10).width = 30; // if description is the 2nd column
+    worksheet.getColumn(10).width = 30; // if description is the 2nd column
 
 
-    
+
     // Add summary at the end
     worksheet.addRow([]);
     worksheet.addRow(['Summary']);
@@ -478,7 +480,7 @@ worksheet.getColumn(10).width = 30; // if description is the 2nd column
     worksheet.addRow([`In Use Items: ${items.filter(item => item.status === 'In Use').length}`]);
     worksheet.addRow([`In Maintenance Items: ${items.filter(item => item.status === 'In maintenance').length}`]);
     worksheet.addRow([`Damaged Items: ${items.filter(item => item.status === 'Damaged').length}`]);
-    
+
     // Set response headers
     res.setHeader(
       'Content-Type',
@@ -488,11 +490,11 @@ worksheet.getColumn(10).width = 30; // if description is the 2nd column
       'Content-Disposition',
       `attachment; filename="Monthly_Stock_Report_${monthYear.replace(' ', '_')}.xlsx"`
     );
-    
+
     // Write to response
     await workbook.xlsx.write(res);
     res.end();
-    
+
   } catch (error) {
     console.error('Error generating stock report:', error);
     res.status(500).json({
@@ -516,7 +518,7 @@ const bulkUploadInventory = async (req, res) => {
 
     const workbook = new ExcelJS.Workbook();
     const fileBuffer = req.file.buffer;
-    
+
     // Read the uploaded file
     if (req.file.mimetype === 'text/csv') {
       await workbook.csv.read(fileBuffer);
@@ -531,7 +533,7 @@ const bulkUploadInventory = async (req, res) => {
     // Skip header row (row 1)
     for (let i = 2; i <= worksheet.rowCount; i++) {
       const row = worksheet.getRow(i);
-      
+
       // Skip empty rows
       if (!row.getCell(1).value) continue;
 
@@ -624,7 +626,7 @@ const bulkGenerateQRCodes = async (req, res) => {
     }
 
     const items = await Inventory.find({ _id: { $in: itemIds } });
-    
+
     if (items.length === 0) {
       return res.status(404).json({
         success: false,
@@ -667,10 +669,10 @@ const bulkGenerateQRCodes = async (req, res) => {
 
         updatedItems.push(item);
       } catch (error) {
-        errors.push({ 
-          itemId: item._id.toString(), 
+        errors.push({
+          itemId: item._id.toString(),
           itemName: item.itemName,
-          error: error.message 
+          error: error.message
         });
       }
     }
@@ -702,20 +704,20 @@ const getAvailableRoomsFloors = async (req, res) => {
       itemName: { $regex: /^bed$/i }, // Case-insensitive match for "bed"
       roomNo: { $exists: true, $ne: null, $ne: '' }
     }).distinct('roomNo');
-    
+
     // Get all possible rooms (you might want to define this based on your building structure)
     const allRooms = [];
     for (let i = 101; i <= 110; i++) allRooms.push(i.toString()); // Floor 1
     for (let i = 201; i <= 210; i++) allRooms.push(i.toString()); // Floor 2  
     for (let i = 301; i <= 310; i++) allRooms.push(i.toString()); // Floor 3
     // Add more floors as needed
-    
+
     // Filter out rooms that already have beds assigned
     const availableRooms = allRooms.filter(room => !occupiedRooms.includes(room));
-    
+
     // Available floors (assuming 3 floors)
     const availableFloors = ['1', '2', '3'];
-    
+
     res.status(200).json({
       success: true,
       rooms: availableRooms,
@@ -735,7 +737,7 @@ const downloadQRCode = async (req, res) => {
   try {
     const { id } = req.params;
     const inventoryItem = await Inventory.findById(id);
-    
+
     if (!inventoryItem || !inventoryItem.qrCodeUrl) {
       return res.status(404).json({
         success: false,
@@ -744,7 +746,7 @@ const downloadQRCode = async (req, res) => {
     }
 
     const qrCodePath = path.join(process.cwd(), 'public', 'qrcodes', `${id}.png`);
-    
+
     if (!fs.existsSync(qrCodePath)) {
       return res.status(404).json({
         success: false,
@@ -755,7 +757,7 @@ const downloadQRCode = async (req, res) => {
     // Set headers for file download
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', `attachment; filename="${inventoryItem.itemName}-QR.png"`);
-    
+
     // Send file
     res.sendFile(qrCodePath);
 
@@ -775,7 +777,7 @@ const getAvailableBeds = async (req, res) => {
       itemName: 'Bed',
       status: 'Available'
     }).select('_id barcodeId roomNo floor location');
-    
+
     res.status(200).json({
       success: true,
       availableBeds: availableBeds
@@ -810,7 +812,7 @@ const getAvailableRooms = async (req, res) => {
         $sort: { _id: 1 }
       }
     ]);
-   
+
     res.status(200).json({
       success: true,
       availableRooms: availableRooms
@@ -832,11 +834,11 @@ const updateInventoryItem = async (req, res) => {
 
     // Check if barcode ID is being updated and if it already exists
     if (updateData.barcodeId) {
-      const existingItem = await Inventory.findOne({ 
+      const existingItem = await Inventory.findOne({
         barcodeId: updateData.barcodeId,
         _id: { $ne: id }
       });
-      
+
       if (existingItem) {
         return res.status(400).json({
           success: false,
@@ -846,28 +848,28 @@ const updateInventoryItem = async (req, res) => {
     }
 
     const updatedItem = await Inventory.findByIdAndUpdate(
-      id, 
-      updateData, 
+      id,
+      updateData,
       { new: true, runValidators: true }
     );
-    
+
     if (!updatedItem) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Item not found" 
+        message: "Item not found"
       });
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      message: "Inventory item updated successfully", 
-      item: updatedItem 
+      message: "Inventory item updated successfully",
+      item: updatedItem
     });
   } catch (err) {
     console.error("Error updating inventory:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: "Failed to update inventory item" 
+      message: "Failed to update inventory item"
     });
   }
 };
@@ -876,11 +878,11 @@ const updateInventoryItem = async (req, res) => {
 const updateInventoryReceipt = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!req.file) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "No receipt uploaded" 
+        message: "No receipt uploaded"
       });
     }
 
@@ -891,22 +893,22 @@ const updateInventoryReceipt = async (req, res) => {
     );
 
     if (!updatedItem) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Item not found" 
+        message: "Item not found"
       });
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      message: "Receipt uploaded successfully", 
-      item: updatedItem 
+      message: "Receipt uploaded successfully",
+      item: updatedItem
     });
   } catch (err) {
     console.error("Error uploading receipt:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      message: "Failed to upload receipt" 
+      message: "Failed to upload receipt"
     });
   }
 };
@@ -915,7 +917,7 @@ const updateInventoryReceipt = async (req, res) => {
 const deleteInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const inventoryItem = await Inventory.findById(id);
     if (!inventoryItem) {
       return res.status(404).json({
@@ -1043,9 +1045,9 @@ Issued on: ${istDateTime}
     }
 
     if (recipients.length === 0) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "No recipients found to send notice." 
+        message: "No recipients found to send notice."
       });
     }
 
@@ -1094,9 +1096,9 @@ Issued on: ${istDateTime}
       }
     });
 
-    return res.status(201).json({ 
+    return res.status(201).json({
       success: true,
-      message: "Notice issued and emailed successfully", 
+      message: "Notice issued and emailed successfully",
       notice: {
         id: notice._id,
         title: notice.title,
@@ -1111,9 +1113,9 @@ Issued on: ${istDateTime}
     });
   } catch (err) {
     console.error("Issue notice error:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
-      message: "Failed to issue notice" 
+      message: "Failed to issue notice"
     });
   }
 };
@@ -1136,7 +1138,7 @@ const getAllNotices = async (req, res) => {
       // For now, we'll determine status based on createdAt (notices older than 30 days are archived)
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
+
       if (status === 'Active') {
         filter.createdAt = { $gte: thirtyDaysAgo };
       } else if (status === 'Archived') {
@@ -1166,7 +1168,7 @@ const getAllNotices = async (req, res) => {
     const transformedNotices = notices.map(notice => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
+
       return {
         id: notice._id.toString(),
         title: notice.title,
@@ -1436,7 +1438,7 @@ export {
   addInventoryItem,
   getInventoryItems,
   getInventoryItemBySlug,
-   generateQRCode,
+  generateQRCode,
   downloadQRCode,
   updateInventoryItem,
   getInventoryItemById,
@@ -1451,7 +1453,7 @@ export {
   deleteNotice,
   updateNoticeReadStatus,
   upload,
-    getItemByQRSlug,
+  getItemByQRSlug,
   generateStockReport,
   bulkGenerateQRCodes,
   bulkUploadInventory,

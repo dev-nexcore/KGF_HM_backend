@@ -28,7 +28,7 @@ const verifyAdminToken = (req, res, next) => {
         
         // Add the missing _id field
         req.admin = {
-            _id: decoded.adminId, // Map adminId to _id for audit logs
+            _id: decoded.admin_id, // Map adminId to _id for audit logs
             adminId: decoded.adminId,
             email: decoded.email
         };

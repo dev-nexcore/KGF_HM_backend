@@ -26,8 +26,7 @@ const inspectionSchema = new mongoose.Schema({
     trim: true
   },
   createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Admin",
+    type: String,
     required: true
   },
   status: {
