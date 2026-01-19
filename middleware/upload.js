@@ -171,3 +171,26 @@ export const uploadComplaint = multer({
 
 // Keep existing export for backward compatibility
 export const upload = uploadWarden;
+
+/* ================= HELPER ================= */
+const ensureDir = (dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+};
+/* ========================================== */
+
+/* ================= BULK UPLOAD ================= */
+const bulkStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(process.cwd(), "uploads", "bulk");
+    ensureDir(uploadPath); // ✅ THIS WAS MISSING
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `bulk-${Date.now()}${path.extname(file.originalname)}`);
+  },
+});
+
+export const uploadBulk = multer({ storage: bulkStorage });
+/* =============================================== */
