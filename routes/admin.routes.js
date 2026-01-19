@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { verifyAdminToken } from '../middleware/auth.middleware.js';
 import { Inventory } from '../models/inventory.model.js';
 import { uploadStudentDocuments, uploadParentDocuments } from '../middleware/upload.js';
+import { uploadBulk } from "../middleware/upload.js";
 
 // Import from individual controller files
 import {
@@ -150,6 +151,12 @@ router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
 router.put('/update-student/:studentId', updateStudent);
 router.delete('/delete-student/:studentId', deleteStudent);
+
+router.post(
+  "/inventory/bulk-upload",
+  uploadBulk.single("file"),
+  bulkUploadInventory
+);
 
 // ====================== DASHBOARD ROUTES ======================
 router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);

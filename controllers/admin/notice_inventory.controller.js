@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import QRCode from 'qrcode';
 import ExcelJS from 'exceljs';
-
 import nodemailer from 'nodemailer';
 
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
@@ -525,113 +524,210 @@ const generateStockReport = async (req, res) => {
 };
 
 // Add after the generateStockReport function
-
 // Bulk upload inventory items from CSV/Excel
-const bulkUploadInventory = async (req, res) => {
+
+// const bulkUploadInventory = async (req, res) => {
+//   try {
+//     if (!req.file) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'No file uploaded'
+//       });
+//     }
+
+//     const workbook = new ExcelJS.Workbook();
+//     const fileBuffer = req.file.buffer;
+
+//     // Read the uploaded file
+//     if (req.file.mimetype === 'text/csv') {
+//       await workbook.csv.read(fileBuffer);
+//     } else {
+//       await workbook.xlsx.load(fileBuffer);
+//     }
+
+//     const worksheet = workbook.worksheets[0];
+//     const items = [];
+//     const errors = [];
+
+//     // Skip header row (row 1)
+//     for (let i = 2; i <= worksheet.rowCount; i++) {
+//       const row = worksheet.getRow(i);
+
+//       // Skip empty rows
+//       if (!row.getCell(1).value) continue;
+
+//       try {
+//         const itemName = row.getCell(1).value?.toString().trim();
+//         const category = row.getCell(2).value?.toString().trim();
+//         const location = row.getCell(3).value?.toString().trim();
+//         const status = row.getCell(4).value?.toString().trim();
+//         const roomNo = row.getCell(5).value?.toString().trim();
+//         const floor = row.getCell(6).value?.toString().trim();
+//         const description = row.getCell(7).value?.toString().trim() || '';
+//         const purchaseDate = row.getCell(8).value ? convertDateFormat(row.getCell(8).value.toString().trim()) : null;
+//         const purchaseCost = row.getCell(9).value ? parseFloat(row.getCell(9).value) : null;
+
+//         // Validate required fields
+//         if (!itemName || !category || !location || !status || !roomNo || !floor) {
+//           errors.push({ row: i, error: 'Missing required fields' });
+//           continue;
+//         }
+
+//         // Generate unique barcode ID
+//         const timestamp = Date.now();
+//         const random = Math.floor(Math.random() * 1000);
+//         const itemPrefix = itemName.toUpperCase().replace(/\s+/g, '').substring(0, 3);
+//         const barcodeId = `${itemPrefix}${timestamp}${random}`;
+
+//         // Check if barcode already exists
+//         const existingItem = await Inventory.findOne({ barcodeId });
+//         if (existingItem) {
+//           errors.push({ row: i, error: 'Duplicate barcode ID' });
+//           continue;
+//         }
+
+//         const publicSlug = nanoid(10);
+
+//         const newItem = {
+//           itemName,
+//           barcodeId,
+//           category,
+//           location,
+//           roomNo,
+//           floor,
+//           status,
+//           description,
+//           purchaseDate,
+//           purchaseCost,
+//           publicSlug
+//         };
+
+//         items.push(newItem);
+//       } catch (error) {
+//         errors.push({ row: i, error: error.message });
+//       }
+//     }
+
+//     // Insert all valid items
+//     let addedItems = [];
+//     if (items.length > 0) {
+//       addedItems = await Inventory.insertMany(items);
+//     }
+
+//     return res.status(201).json({
+//       success: true,
+//       message: `Successfully added ${addedItems.length} items`,
+//       addedCount: addedItems.length,
+//       items: addedItems,
+//       errors: errors.length > 0 ? errors : undefined
+//     });
+
+//   } catch (error) {
+//     console.error('Bulk upload error:', error);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Failed to upload items',
+//       error: error.message
+//     });
+//   }
+// };
+
+
+// Add after the generateStockReport function
+// Bulk upload inventory items from CSV/Excel
+export const bulkUploadInventory = async (req, res) => {
   try {
-    if (!req.file) {
+    if (!req.file || !req.file.path) {
       return res.status(400).json({
         success: false,
-        message: 'No file uploaded'
+        message: "No file uploaded"
       });
     }
 
-    const workbook = new ExcelJS.Workbook();
-    const fileBuffer = req.file.buffer;
+    const filePath = req.file.path;
 
-    // Read the uploaded file
-    if (req.file.mimetype === 'text/csv') {
-      await workbook.csv.read(fileBuffer);
-    } else {
-      await workbook.xlsx.load(fileBuffer);
-    }
+    const workbook = new ExcelJS.Workbook();
+    await workbook.csv.read(fs.createReadStream(filePath));
 
     const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid CSV file"
+      });
+    }
+
     const items = [];
-    const errors = [];
 
-    // Skip header row (row 1)
-    for (let i = 2; i <= worksheet.rowCount; i++) {
-      const row = worksheet.getRow(i);
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return; // header
 
-      // Skip empty rows
-      if (!row.getCell(1).value) continue;
+      const itemName = row.values[1];
+      if (!itemName || String(itemName).trim() === "") return;
 
-      try {
-        const itemName = row.getCell(1).value?.toString().trim();
-        const category = row.getCell(2).value?.toString().trim();
-        const location = row.getCell(3).value?.toString().trim();
-        const status = row.getCell(4).value?.toString().trim();
-        const roomNo = row.getCell(5).value?.toString().trim();
-        const floor = row.getCell(6).value?.toString().trim();
-        const description = row.getCell(7).value?.toString().trim() || '';
-        const purchaseDate = row.getCell(8).value ? convertDateFormat(row.getCell(8).value.toString().trim()) : null;
-        const purchaseCost = row.getCell(9).value ? parseFloat(row.getCell(9).value) : null;
-
-        // Validate required fields
-        if (!itemName || !category || !location || !status || !roomNo || !floor) {
-          errors.push({ row: i, error: 'Missing required fields' });
-          continue;
+      // Parse DD-MM-YYYY safely
+      let purchaseDate = null;
+      const rawDate = row.values[8];
+      if (rawDate && typeof rawDate === "string") {
+        const [dd, mm, yyyy] = rawDate.split("-");
+        if (dd && mm && yyyy) {
+          purchaseDate = new Date(`${yyyy}-${mm}-${dd}`);
         }
-
-        // Generate unique barcode ID
-        const timestamp = Date.now();
-        const random = Math.floor(Math.random() * 1000);
-        const itemPrefix = itemName.toUpperCase().replace(/\s+/g, '').substring(0, 3);
-        const barcodeId = `${itemPrefix}${timestamp}${random}`;
-
-        // Check if barcode already exists
-        const existingItem = await Inventory.findOne({ barcodeId });
-        if (existingItem) {
-          errors.push({ row: i, error: 'Duplicate barcode ID' });
-          continue;
-        }
-
-        const publicSlug = nanoid(10);
-
-        const newItem = {
-          itemName,
-          barcodeId,
-          category,
-          location,
-          roomNo,
-          floor,
-          status,
-          description,
-          purchaseDate,
-          purchaseCost,
-          publicSlug
-        };
-
-        items.push(newItem);
-      } catch (error) {
-        errors.push({ row: i, error: error.message });
       }
+
+      const statusRaw = String(row.values[4] || "Available").trim();
+      const statusAllowed = ["Available", "In Use", "Damaged"];
+
+      items.push({
+        itemName: String(itemName).trim(),
+        category: String(row.values[2] || "").trim(),
+        location: String(row.values[3] || "").trim(),
+        status: statusAllowed.includes(statusRaw)
+          ? statusRaw
+          : "Available",
+        roomNo: String(row.values[5] || "").trim(),
+        floor: String(row.values[6] || "").trim(),
+        description: String(row.values[7] || "").trim(),
+        purchaseDate,
+        purchaseCost: Number(row.values[9] || 0),
+
+        // REQUIRED FIELDS
+        barcodeId: `BULK-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        publicSlug: nanoid(10),
+        qrCodeUrl: null
+      });
+    });
+
+    if (items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No valid rows found in CSV"
+      });
     }
 
-    // Insert all valid items
-    let addedItems = [];
-    if (items.length > 0) {
-      addedItems = await Inventory.insertMany(items);
-    }
+    const savedItems = await Inventory.insertMany(items, {
+      ordered: false
+    });
+
+    fs.unlinkSync(filePath);
 
     return res.status(201).json({
       success: true,
-      message: `Successfully added ${addedItems.length} items`,
-      addedCount: addedItems.length,
-      items: addedItems,
-      errors: errors.length > 0 ? errors : undefined
+      addedCount: savedItems.length,
+      items: savedItems
     });
 
   } catch (error) {
-    console.error('Bulk upload error:', error);
+    console.error("Bulk upload error:", error);
     return res.status(500).json({
       success: false,
-      message: 'Failed to upload items',
-      error: error.message
+      message: error.message
     });
   }
 };
+
+
+
 
 // Bulk generate QR codes for multiple items
 const bulkGenerateQRCodes = async (req, res) => {
@@ -1673,6 +1769,5 @@ export {
   getItemByQRSlug,
   generateStockReport,
   bulkGenerateQRCodes,
-  bulkUploadInventory,
   getAvailableRoomsFloors
 }
