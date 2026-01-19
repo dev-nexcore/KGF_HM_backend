@@ -1,4 +1,4 @@
-
+// models/notice.model.js
 import mongoose from 'mongoose';
 
 const noticeSchema = new mongoose.Schema({
