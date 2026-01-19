@@ -1248,9 +1248,7 @@ Issued on: ${istDateTime}
 
     if (recipients.length === 0) {
       return res.status(400).json({
-      return res.status(400).json({
         success: false,
-        message: "No recipients found to send notice."
         message: "No recipients found to send notice."
       });
     }
@@ -1304,7 +1302,6 @@ Issued on: ${istDateTime}
     return res.status(201).json({
       success: true,
       message: "Notice issued and emailed successfully",
-      message: "Notice issued and emailed successfully",
       notice: {
         id: notice._id,
         title: notice.title,
@@ -1321,9 +1318,7 @@ Issued on: ${istDateTime}
   } catch (err) {
     console.error("Issue notice error:", err);
     return res.status(500).json({
-    return res.status(500).json({
       success: false,
-      message: "Failed to issue notice"
       message: "Failed to issue notice"
     });
   }
