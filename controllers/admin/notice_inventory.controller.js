@@ -90,6 +90,11 @@ const convertDateFormat = (dateString) => {
 };
 
 const addInventoryItem = async (req, res) => {
+
+  console.log("hello world@")
+
+  const clean = (v) => (v === "" || v === null || v === "undefined" ? undefined : v);
+
   try {
     const {
       itemName,
@@ -117,6 +122,11 @@ const addInventoryItem = async (req, res) => {
     const publicSlug = nanoid(10); // Generate unique slug for public access
 
     // Create new inventory item
+    const parsedPurchaseDate =
+      purchaseDate && purchaseDate.trim() !== ""
+        ? new Date(purchaseDate.split("-").reverse().join("-"))
+        : undefined;
+
     const newItem = new Inventory({
       itemName,
       barcodeId,
@@ -125,14 +135,13 @@ const addInventoryItem = async (req, res) => {
       roomNo,
       floor,
       status,
-      description,
-      purchaseDate: purchaseDate
-  ? new Date(purchaseDate.split('-').reverse().join('-'))
-  : null,
-      purchaseCost,
+      description: clean(description),
+      purchaseDate: parsedPurchaseDate,
+      purchaseCost: clean(purchaseCost),
       receiptUrl,
       publicSlug
     });
+
 
     await newItem.save();
 
@@ -1155,7 +1164,7 @@ const issueNotice = async (req, res) => {
     // Case 1: ISO format (YYYY-MM-DD or full ISO)
     if (!isNaN(Date.parse(issueDate))) {
       parsedIssueDate = new Date(issueDate);
-    } 
+    }
     // Case 2: DD-MM-YYYY
     else if (typeof issueDate === "string" && issueDate.includes("-")) {
       const [dd, mm, yyyy] = issueDate.split("-");
@@ -1551,7 +1560,7 @@ const deleteNotice = async (req, res) => {
     // Delete notice
     await Notice.findByIdAndDelete(noticeId);
 
-    // Create audit log
+    // Create audit log 
     await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',

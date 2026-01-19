@@ -22,7 +22,6 @@ const inspectionSchema = new mongoose.Schema({
   },
   instructions: {
     type: String,
-    required: true,
     trim: true
   },
   createdBy: {
