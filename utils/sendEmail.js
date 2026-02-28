@@ -1,6 +1,8 @@
 //KGF_HM_backend\utils\sendEmail.js
 
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',

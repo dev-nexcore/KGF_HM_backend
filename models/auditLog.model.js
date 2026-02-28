@@ -16,6 +16,7 @@ const auditLogSchema = new mongoose.Schema({
     required: true,
     enum: [
       'Student Registered',
+      'Student updated',
       'Parent Registered', 
       'Warden Registered',
       'Leave Approved',

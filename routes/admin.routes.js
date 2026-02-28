@@ -149,7 +149,7 @@ router.post('/register-warden', registerWarden);
 router.get('/students', getAllStudents);
 router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
-router.put('/update-student/:studentId', updateStudent);
+router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
 router.delete('/delete-student/:studentId', deleteStudent);
 
 router.post(

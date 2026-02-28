@@ -43,6 +43,7 @@ const generateSessionId = () => {
 // Predefined audit log templates for common actions
 const AuditActionTypes = {
   STUDENT_REGISTERED: 'Student Registered',
+  STUDENT_UPDATED:'Student updated',
   PARENT_REGISTERED: 'Parent Registered',
   WARDEN_REGISTERED: 'Warden Registered',
   LEAVE_APPROVED: 'Leave Approved',

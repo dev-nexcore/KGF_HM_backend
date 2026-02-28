@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const WHATSAPP_INSTANCE_ID = "690C630E7D550"; 
-const WHATSAPP_ACCESS_TOKEN = "68822d48a7005"; 
+const WHATSAPP_INSTANCE_ID = "69A15D2106D57"; 
+const WHATSAPP_ACCESS_TOKEN = "69804d10b9183"; 
 
 
 
@@ -37,7 +37,7 @@ export const sendWhatsAppMessage = async (number, message) => {
 
     console.log("📤 Sending payload:", JSON.stringify(payload, null, 2));
 
-    const res = await axios.post("https://app.simplywhatsapp.com/api/send", payload, {
+    const res = await axios.post("https://app.simplifiedchat.com/api/send", payload, {
       headers: { "Content-Type": "application/json" },
     });
 

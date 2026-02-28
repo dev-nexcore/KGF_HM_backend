@@ -11,7 +11,7 @@ import sendEmail from '../../utils/sendEmail.js';
 
 const generateToken = (admin) => {
   return jwt.sign(
-    { adminId: admin.adminId, email: admin.email }, 
+    {  _id: admin._id,adminId: admin.adminId, email: admin.email }, 
     process.env.JWT_SECRET, 
     { expiresIn: process.env.JWT_EXPIRES_IN }
   );
@@ -19,7 +19,7 @@ const generateToken = (admin) => {
 
 const generateRefreshToken = (admin) => {
   const refreshToken = jwt.sign(
-    { adminId: admin.adminId, email: admin.email },
+    {  _id: admin._id,adminId: admin.adminId, email: admin.email },
     process.env.JWT_SECRET,
     { expiresIn: "30d" }
   );
@@ -248,6 +248,7 @@ const login = async (req, res) => {
       token,
       refreshToken,
       admin: { 
+        _id:admin._id,
         adminId: admin.adminId, 
         adminEmail: admin.email 
       } 

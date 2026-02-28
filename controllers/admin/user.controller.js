@@ -22,6 +22,9 @@ const transporter = nodemailer.createTransport({
 });
 
 const registerStudent = async (req, res) => {
+
+  console.log("req.admin =>", req.admin);
+console.log("req.user =>", req.user);
   const {
     firstName,
     lastName,
@@ -449,6 +452,7 @@ const getStudentsWithoutParents = async (req, res) => {
 
 // PUT update student
 const updateStudent = async (req, res) => {
+  
   const { studentId } = req.params;
   const {
     firstName,
