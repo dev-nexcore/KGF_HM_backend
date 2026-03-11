@@ -92,16 +92,40 @@ const convertDateFormat = (dateString) => {
   return null;
 };
 
+
+const generateBarcode = async (itemName) => {
+  const prefix = itemName
+    ? itemName.toUpperCase().replace(/\s+/g, "")
+    : "ITM";
+
+  const datePart = new Date()
+    .toISOString()
+    .slice(2, 10)
+    .replace(/-/g, "");
+
+  let barcode;
+  let exists = true;
+
+  while (exists) {
+    const uniquePart = nanoid(5).toUpperCase();
+    barcode = `${prefix}-${datePart}-${uniquePart}`;
+
+    const existing = await Inventory.findOne({ barcodeId: barcode });
+    exists = !!existing;
+  }
+
+  return barcode;
+};
+
+
 const addInventoryItem = async (req, res) => {
 
-  console.log("hello world@")
-
-  const clean = (v) => (v === "" || v === null || v === "undefined" ? undefined : v);
+  const clean = (v) =>
+    v === "" || v === null || v === "undefined" ? undefined : v;
 
   try {
     const {
       itemName,
-      barcodeId,
       category,
       location,
       roomNo,
@@ -112,19 +136,22 @@ const addInventoryItem = async (req, res) => {
       purchaseCost
     } = req.body;
 
-    // Check if barcode ID already exists
-    const existingItem = await Inventory.findOne({ barcodeId });
-    if (existingItem) {
+    if (!itemName) {
       return res.status(400).json({
         success: false,
-        message: 'Barcode ID already exists. Please use a unique barcode ID.'
+        message: "Item name is required"
       });
     }
 
-    const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
-    const publicSlug = nanoid(10); // Generate unique slug for public access
+    // ✅ Generate barcode from backend
+    const generatedBarcode = await generateBarcode(itemName);
 
-    // Create new inventory item
+    const receiptUrl = req.file
+      ? `/uploads/receipts/${req.file.filename}`
+      : null;
+
+    const publicSlug = nanoid(10);
+
     const parsedPurchaseDate =
       purchaseDate && purchaseDate.trim() !== ""
         ? new Date(purchaseDate.split("-").reverse().join("-"))
@@ -132,7 +159,7 @@ const addInventoryItem = async (req, res) => {
 
     const newItem = new Inventory({
       itemName,
-      barcodeId,
+      barcodeId: generatedBarcode,   // ✅ backend generated
       category,
       location,
       roomNo,
@@ -145,56 +172,152 @@ const addInventoryItem = async (req, res) => {
       publicSlug
     });
 
-
     await newItem.save();
 
-    // Generate QR code data (URL that will show item details)
+    // -------- QR Generation --------
+
     const qrData = `${FRONTEND_BASE_URL}/inventory/item/${publicSlug}`;
 
-    // Ensure QR codes directory exists
-    const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
+    const qrCodesDir = path.join(process.cwd(), "public", "qrcodes");
     if (!fs.existsSync(qrCodesDir)) {
       fs.mkdirSync(qrCodesDir, { recursive: true });
     }
 
-    // Generate QR code file
     const qrCodePath = path.join(qrCodesDir, `${newItem._id}.png`);
+
     await QRCode.toFile(qrCodePath, qrData, {
       width: 300,
       margin: 2,
       color: {
-        dark: '#000000',
-        light: '#FFFFFF'
+        dark: "#000000",
+        light: "#FFFFFF"
       }
     });
 
-    // Update item with QR code URL
     newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
     await newItem.save();
 
-    // Ensure publicSlug is present in the item object
-    // Ensure publicSlug is present in the item object (for both lean and hydrated docs)
-    let itemWithSlug = newItem.toObject ? newItem.toObject() : { ...newItem };
-    if (!itemWithSlug.publicSlug && newItem.publicSlug) {
-      itemWithSlug.publicSlug = newItem.publicSlug;
-    }
     return res.status(201).json({
       success: true,
-      message: 'Inventory item added successfully',
-      item: itemWithSlug,
+      message: "Inventory item added successfully",
+      item: newItem,
       qrCodeUrl: newItem.qrCodeUrl,
       publicSlug: newItem.publicSlug,
       publicUrl: qrData
     });
 
   } catch (err) {
-    console.error('Add Inventory Error:', err);
+    console.error("Add Inventory Error:", err);
     return res.status(500).json({
       success: false,
-      message: 'Failed to add inventory item.'
+      message: "Failed to add inventory item."
     });
   }
 };
+
+// const addInventoryItem = async (req, res) => {
+
+//   console.log("hello world@")
+
+//   const clean = (v) => (v === "" || v === null || v === "undefined" ? undefined : v);
+
+//   try {
+//     const {
+//       itemName,
+//       barcodeId,
+//       category,
+//       location,
+//       roomNo,
+//       floor,
+//       status,
+//       description,
+//       purchaseDate,
+//       purchaseCost
+//     } = req.body;
+
+//     // Check if barcode ID already exists
+//     const existingItem = await Inventory.findOne({ barcodeId });
+//     if (existingItem) {
+//       return res.status(400).json({
+//         success: false,
+//         message: 'Barcode ID already exists. Please use a unique barcode ID.'
+//       });
+//     }
+
+//     const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : null;
+//     const publicSlug = nanoid(10); // Generate unique slug for public access
+
+//     // Create new inventory item
+//     const parsedPurchaseDate =
+//       purchaseDate && purchaseDate.trim() !== ""
+//         ? new Date(purchaseDate.split("-").reverse().join("-"))
+//         : undefined;
+
+//     const newItem = new Inventory({
+//       itemName,
+//       barcodeId,
+//       category,
+//       location,
+//       roomNo,
+//       floor,
+//       status,
+//       description: clean(description),
+//       purchaseDate: parsedPurchaseDate,
+//       purchaseCost: clean(purchaseCost),
+//       receiptUrl,
+//       publicSlug
+//     });
+
+
+//     await newItem.save();
+
+//     // Generate QR code data (URL that will show item details)
+//     const qrData = `${FRONTEND_BASE_URL}/inventory/item/${publicSlug}`;
+
+//     // Ensure QR codes directory exists
+//     const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
+//     if (!fs.existsSync(qrCodesDir)) {
+//       fs.mkdirSync(qrCodesDir, { recursive: true });
+//     }
+
+//     // Generate QR code file
+//     const qrCodePath = path.join(qrCodesDir, `${newItem._id}.png`);
+//     await QRCode.toFile(qrCodePath, qrData, {
+//       width: 300,
+//       margin: 2,
+//       color: {
+//         dark: '#000000',
+//         light: '#FFFFFF'
+//       }
+//     });
+
+//     // Update item with QR code URL
+//     newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
+//     await newItem.save();
+
+//     // Ensure publicSlug is present in the item object
+//     // Ensure publicSlug is present in the item object (for both lean and hydrated docs)
+//     let itemWithSlug = newItem.toObject ? newItem.toObject() : { ...newItem };
+//     if (!itemWithSlug.publicSlug && newItem.publicSlug) {
+//       itemWithSlug.publicSlug = newItem.publicSlug;
+//     }
+//     return res.status(201).json({
+//       success: true,
+//       message: 'Inventory item added successfully',
+//       item: itemWithSlug,
+//       qrCodeUrl: newItem.qrCodeUrl,
+//       publicSlug: newItem.publicSlug,
+//       publicUrl: qrData
+//     });
+
+//   } catch (err) {
+//     console.error('Add Inventory Error:', err);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Failed to add inventory item.'
+//     });
+//   }
+// };
 
 
 
@@ -635,6 +758,9 @@ const generateStockReport = async (req, res) => {
 
 // Add after the generateStockReport function
 // Bulk upload inventory items from CSV/Excel
+
+
+
 export const bulkUploadInventory = async (req, res) => {
   try {
     if (!req.file || !req.file.path) {
@@ -659,13 +785,14 @@ export const bulkUploadInventory = async (req, res) => {
 
     const items = [];
 
-    worksheet.eachRow((row, rowNumber) => {
-      if (rowNumber === 1) return; // header
+    // ✅ IMPORTANT: use for loop instead of eachRow
+    for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
 
       const itemName = row.values[1];
-      if (!itemName || String(itemName).trim() === "") return;
+      if (!itemName || String(itemName).trim() === "") continue;
 
-      // Parse DD-MM-YYYY safely
+      // Parse date
       let purchaseDate = null;
       const rawDate = row.values[8];
       if (rawDate && typeof rawDate === "string") {
@@ -677,6 +804,9 @@ export const bulkUploadInventory = async (req, res) => {
 
       const statusRaw = String(row.values[4] || "Available").trim();
       const statusAllowed = ["Available", "In Use", "Damaged"];
+
+      // ✅ Generate safe unique barcode
+      const barcodeId = await generateBarcode(String(itemName).trim());
 
       items.push({
         itemName: String(itemName).trim(),
@@ -691,12 +821,11 @@ export const bulkUploadInventory = async (req, res) => {
         purchaseDate,
         purchaseCost: Number(row.values[9] || 0),
 
-        // REQUIRED FIELDS
-        barcodeId: `BULK-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        barcodeId,              // ✅ backend generated
         publicSlug: nanoid(10),
         qrCodeUrl: null
       });
-    });
+    }
 
     if (items.length === 0) {
       return res.status(400).json({
@@ -726,10 +855,102 @@ export const bulkUploadInventory = async (req, res) => {
   }
 };
 
+// export const bulkUploadInventory = async (req, res) => {
+//   try {
+//     if (!req.file || !req.file.path) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No file uploaded"
+//       });
+//     }
+
+//     const filePath = req.file.path;
+
+//     const workbook = new ExcelJS.Workbook();
+//     await workbook.csv.read(fs.createReadStream(filePath));
+
+//     const worksheet = workbook.worksheets[0];
+//     if (!worksheet) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid CSV file"
+//       });
+//     }
+
+//     const items = [];
+
+//     worksheet.eachRow((row, rowNumber) => {
+//       if (rowNumber === 1) return; // header
+
+//       const itemName = row.values[1];
+//       if (!itemName || String(itemName).trim() === "") return;
+
+//       // Parse DD-MM-YYYY safely
+//       let purchaseDate = null;
+//       const rawDate = row.values[8];
+//       if (rawDate && typeof rawDate === "string") {
+//         const [dd, mm, yyyy] = rawDate.split("-");
+//         if (dd && mm && yyyy) {
+//           purchaseDate = new Date(`${yyyy}-${mm}-${dd}`);
+//         }
+//       }
+
+//       const statusRaw = String(row.values[4] || "Available").trim();
+//       const statusAllowed = ["Available", "In Use", "Damaged"];
+
+//       items.push({
+//         itemName: String(itemName).trim(),
+//         category: String(row.values[2] || "").trim(),
+//         location: String(row.values[3] || "").trim(),
+//         status: statusAllowed.includes(statusRaw)
+//           ? statusRaw
+//           : "Available",
+//         roomNo: String(row.values[5] || "").trim(),
+//         floor: String(row.values[6] || "").trim(),
+//         description: String(row.values[7] || "").trim(),
+//         purchaseDate,
+//         purchaseCost: Number(row.values[9] || 0),
+
+//         // REQUIRED FIELDS
+//         barcodeId: `BULK-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+//         publicSlug: nanoid(10),
+//         qrCodeUrl: null
+//       });
+//     });
+
+//     if (items.length === 0) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "No valid rows found in CSV"
+//       });
+//     }
+
+//     const savedItems = await Inventory.insertMany(items, {
+//       ordered: false
+//     });
+
+//     fs.unlinkSync(filePath);
+
+//     return res.status(201).json({
+//       success: true,
+//       addedCount: savedItems.length,
+//       items: savedItems
+//     });
+
+//   } catch (error) {
+//     console.error("Bulk upload error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message
+//     });
+//   }
+// };
+
 
 
 
 // Bulk generate QR codes for multiple items
+
 const bulkGenerateQRCodes = async (req, res) => {
   try {
     const { itemIds } = req.body;
@@ -890,9 +1111,9 @@ const getAvailableBeds = async (req, res) => {
   try {
     const availableBeds = await Inventory.find({
       category: 'Furniture',
-      itemName: 'Bed',
+      itemName: { $regex: /^Bed/i },
       status: 'Available'
-    }).select('_id barcodeId roomNo floor location');
+    }).select('_id itemName barcodeId roomNo floor location');
 
     res.status(200).json({
       success: true,
@@ -913,7 +1134,7 @@ const getAvailableRooms = async (req, res) => {
       {
         $match: {
           category: 'Furniture',
-          itemName: 'Bed',
+          itemName: { $regex: /^Bed/i },
           status: 'Available'
         }
       },
