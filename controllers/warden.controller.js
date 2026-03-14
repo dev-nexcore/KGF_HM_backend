@@ -378,16 +378,16 @@ const getWardenDashboardStats = async (req, res) => {
     const totalStudents = await Student.countDocuments();
 
     // Total Beds
-    const totalBeds = await Inventory.countDocuments({ itemName: 'Bed' });
+    const totalBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i } });
 
     // In Use Beds
-    const inUseBeds = await Inventory.countDocuments({ itemName: 'Bed', status: 'In Use' });
+    const inUseBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i }, status: 'In Use' });
 
     // Available Beds
-    const availableBeds = await Inventory.countDocuments({ itemName: 'Bed', status: 'Available' });
+    const availableBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i }, status: 'Available' });
 
     // Damaged Beds
-    const damagedBeds = await Inventory.countDocuments({ itemName: 'Bed', status: 'Damaged' });
+    const damagedBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i }, status: 'Damaged' });
 
     // Upcoming Inspections (future + pending) — no limit
     const now = new Date();
@@ -427,7 +427,7 @@ const getBedStats = async (req, res) => {
   try {
     const stats = await Inventory.aggregate([
       {
-        $match: { itemName: 'Bed' }  // Only count items with itemName === 'Bed'
+        $match:  { itemName: { $regex: /^Bed/i } } // Only count items with itemName === 'Bed'
       },
       {
         $group: {
@@ -671,7 +671,7 @@ const updateStudentRoom = async (req, res) => {
 
 const getAllAvailableBed = async (req, res) => {
   try {
-    const beds = await Inventory.find({ status: 'Available', itemName: 'Bed' }).select('barcodeId roomNo');
+    const beds = await Inventory.find({ status: 'Available', itemName: { $regex: /^Bed/i } }).select('barcodeId roomNo');
     res.status(200).json({ success: true, beds });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch beds', error: error.message });
