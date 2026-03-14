@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Student } from '../../models/student.model.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
+import { Inventory } from '../../models/inventory.model.js';
 
 
 const getTotalRevenue = async (req, res) => {
@@ -139,7 +140,7 @@ const getTodaysCheckInOutStatus = async (req, res) => {
 const getBedOccupancyStatus = async (req, res) => {
   try {
     // Get all students with a room number
-    const totalBeds = 75
+    const totalBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i } });
 
     // Get the number of students who have checked in
    const occupiedBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });

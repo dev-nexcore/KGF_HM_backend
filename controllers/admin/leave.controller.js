@@ -273,7 +273,7 @@ const sendLeaveMessage = async (req, res) => {
   const { message, subject } = req.body;
 
   try {
-    const leave = await Leave.findById(leaveId).populate('studentId', 'studentName studentId email');
+    const leave = await Leave.findById(leaveId).populate('studentId', 'firstName lastName studentId email');
 
     if (!leave) {
       return res.status(404).json({ message: "Leave request not found." });
@@ -282,7 +282,7 @@ const sendLeaveMessage = async (req, res) => {
     const student = leave.studentId;
     const emailSubject = subject || `Regarding Your Leave Request - ${leave.leaveType}`;
 
-    const emailBody = `Hello ${student.studentName},
+    const emailBody = `Hello ${student.firstName} ${student.lastName },
 
 ${message}
 
