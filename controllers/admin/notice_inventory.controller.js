@@ -1584,20 +1584,29 @@ Issued on: ${istDateTime}
     }
 
     // ---------------- SEND EMAILS ----------------
-    for (const email of recipients) {
-      try {
-        const result = await transporter.sendMail({
-          from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-          to: email,
-          subject,
-          text: emailBody
-        });
-        console.log(`📤 Email sent to ${email} | MessageId: ${result.messageId}`);
-      } catch (emailError) {
-        console.error(`Failed to send email to ${email}:`, emailError);
-      }
-    }
-
+    // for (const email of recipients) {
+    //   try {
+    //     const result = await transporter.sendMail({
+    //       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+    //       to: email,
+    //       subject,
+    //       text: emailBody
+    //     });
+    //     console.log(`📤 Email sent to ${email} | MessageId: ${result.messageId}`);
+    //   } catch (emailError) {
+    //     console.error(`Failed to send email to ${email}:`, emailError);
+    //   }
+    // }
+await Promise.all(
+  recipients.map(email =>
+    transporter.sendMail({
+      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      to: email,
+      subject,
+      text: emailBody
+    })
+  )
+);
     // ---------------- PUSH NOTIFICATIONS ----------------
     if (studentRecipients.length > 0) {
       try {

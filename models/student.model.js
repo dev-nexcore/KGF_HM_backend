@@ -1,3 +1,5 @@
+// KGF_HM_backend\models\student.model.js
+
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 

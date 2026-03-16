@@ -1,3 +1,6 @@
+//KGF_HM_backend\routes\student.routes.js
+
+
 import express from 'express';
 import {
   sendLoginOTP,
@@ -62,7 +65,7 @@ router.post("/refund", verifyStudentOrParentToken, requestRefund);
 router.get("/refunds", verifyStudentOrParentToken, getRefundHistory);
 
 // FIXED: Complaint routes with proper multer middleware
-router.post("/complaint", verifyStudentOrParentToken, uploadComplaint.array('attachments', 5), fileComplaint);
+router.post("/complaint", uploadComplaint.array('attachments', 5), fileComplaint);
 router.get("/complaints", verifyStudentOrParentToken, getComplaintHistory);
 
 // Student-only routes
