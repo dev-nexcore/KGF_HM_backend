@@ -13,7 +13,7 @@ import { Refund } from "../models/refund.model.js";
 import path from 'path';
 import fs from 'fs';
 
-import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js"; 
+import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js";
 
 
 
@@ -78,7 +78,7 @@ const sendLoginOTP = async (req, res) => {
 
     // Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
     // Set OTP expiry (5 minutes from now)
     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
@@ -108,7 +108,7 @@ If you didn't request this OTP, please ignore this email.
     // 📱 Send OTP via WhatsApp
     if (parent.contactNumber) {
       await sendWhatsAppMessage(
-        parent.contactNumber, 
+        parent.contactNumber,
         `Hello ${parent.firstName},\n\nYour OTP for parent login is: *${otp}* \n\nValid for 5 minutes.\n\n– Hostel Admin`
       );
     }
@@ -145,7 +145,7 @@ If you didn't request this OTP, please ignore this email.
 
 //     // Generate 6-digit OTP
 //     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
+
 //     // Set OTP expiry (5 minutes from now)
 //     const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
@@ -206,9 +206,9 @@ const login = async (req, res) => {
     }
 
     // Find OTP record for this parent's email
-    const otpRecord = await Otp.findOne({ 
-      email: parent.email, 
-      code: otp, 
+    const otpRecord = await Otp.findOne({
+      email: parent.email,
+      code: otp,
       purpose: 'login' // Make sure it's a login OTP, not password reset
     });
 
@@ -420,14 +420,14 @@ const getProfile = async (req, res) => {
 const getStudentProfile = async (req, res) => {
   try {
     const parentStudentId = req.studentId; // From the parent's JWT token
-    
+
     console.log('🔍 Fetching profile for student ID:', parentStudentId);
-    
+
     // Fetch student data with populated room information (matching your student controller)
     const student = await Student.findOne({ studentId: parentStudentId })
       .populate("roomBedNumber") // This is crucial for room details
       .select('firstName lastName studentId email contactNumber profileImage createdAt updatedAt roomBedNumber attendanceLog');
-    
+
     if (!student) {
       return res.status(404).json({ message: 'Student not found' });
     }
@@ -446,7 +446,7 @@ const getStudentProfile = async (req, res) => {
     let imageUrl = null;
     if (student.profileImage && typeof student.profileImage === "string" && student.profileImage.trim() !== "") {
       const imgPath = student.profileImage.replace(/\\/g, "/");
-      
+
       // Avoid double prefix - check if it already starts with http
       imageUrl = imgPath.startsWith("http")
         ? imgPath
@@ -511,7 +511,7 @@ const getStudentProfile = async (req, res) => {
     });
   }
 };
- 
+
 // Upload profile image
 const uploadProfileImage = async (req, res) => {
   const parentStudentId = req.studentId; // From authenticateParent middleware
@@ -553,7 +553,7 @@ const uploadProfileImage = async (req, res) => {
 
   } catch (err) {
     console.error("Upload profile image error:", err);
-    
+
     // Delete uploaded file if there was an error
     if (req.file) {
       const filePath = path.join(process.cwd(), 'uploads/parents', req.file.filename);
@@ -565,7 +565,7 @@ const uploadProfileImage = async (req, res) => {
         }
       }
     }
-    
+
     return res.status(500).json({ message: "Server error while uploading profile image." });
   }
 };
@@ -646,6 +646,34 @@ const removeProfileImage = async (req, res) => {
 
 
 // Dashboard controller for parent panel (unchanged)
+// ── Helper: Build readable room/bed label ────────────────────────────────────
+const getRoomBedDisplay = (bed) => {
+  if (!bed) return "Not Assigned";
+  if (bed.location) return bed.location;
+  if (bed.floor && bed.roomNo) return `Floor ${bed.floor}, Room ${bed.roomNo}`;
+  if (bed.roomNo) return `Room ${bed.roomNo}`;
+  return bed.itemName || "Bed Assigned";
+};
+
+// ── Helper: Build room/bed details object ────────────────────────────────────
+const getRoomBedDetails = (bed) => {
+  const display = getRoomBedDisplay(bed);
+
+  if (!bed) {
+    return { display, floor: "N/A", room: "N/A", bedType: "N/A", location: "N/A", barCodeId: "N/A" };
+  }
+
+  return {
+    display,
+    floor: bed.floor || "N/A",
+    room: bed.roomNo || "N/A",
+    bedType: bed.itemName || bed.description || "Bed",
+    location: bed.location || "N/A",
+    barCodeId: bed.barCodeId || "N/A",
+  };
+};
+
+// ── Controller ───────────────────────────────────────────────────────────────
 const dashboard = async (req, res) => {
   const { studentId } = req.query;
 
@@ -654,71 +682,39 @@ const dashboard = async (req, res) => {
   }
 
   try {
-    // Populate the roomBedNumber field to get actual room/bed details
-    const student = await Student.findOne({ studentId })
-      .populate({
-        path: 'roomBedNumber',
-        select: 'location floor roomNo itemName description barCodeId' // Select specific fields you need
-      })
-      .exec();
+    // Run both DB queries at the same time
+    const [student, warden] = await Promise.all([
+      Student.findOne({ studentId })
+        .populate({ path: "roomBedNumber", select: "location floor roomNo itemName description barCodeId" })
+        .lean(),
+
+      Warden.findOne({ wardenId: "W123" }).lean(), // TODO: make dynamic
+    ]);
+    console.log("student details:", student)
 
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Create detailed room and bed information
-    let roomBedDisplay = 'Not Assigned';
-    let roomBedDetails = {
-      display: 'Not Assigned',
-      floor: 'N/A',
-      room: 'N/A',
-      bedType: 'N/A',
-      location: 'N/A'
-    };
-
-    if (student.roomBedNumber) {
-      const bed = student.roomBedNumber;
-      
-      // Create a readable display format
-      if (bed.location) {
-        roomBedDisplay = bed.location; // e.g., "Floor 1, Room 101"
-      } else if (bed.floor && bed.roomNo) {
-        roomBedDisplay = `Floor ${bed.floor}, Room ${bed.roomNo}`;
-      } else if (bed.roomNo) {
-        roomBedDisplay = `Room ${bed.roomNo}`;
-      } else {
-        roomBedDisplay = bed.itemName || 'Bed Assigned';
-      }
-
-      roomBedDetails = {
-        display: roomBedDisplay,
-        floor: bed.floor || 'N/A',
-        room: bed.roomNo || 'N/A',
-        bedType: bed.itemName || bed.description || 'Bed',
-        location: bed.location || 'N/A',
-        barCodeId: bed.barCodeId || 'N/A'
-      };
-    }
-
-    // Fetch warden name directly using wardenId "W123"
-    const warden = await Warden.findOne({ wardenId: "W123" });
+    const roomBedDisplay = getRoomBedDisplay(student.roomBedNumber);
+    const roomBedDetails = getRoomBedDetails(student.roomBedNumber);
     const wardenName = warden ? `${warden.firstName} ${warden.lastName}` : "Not Assigned";
 
-    const dashboardData = {
+    return res.status(200).json({
       studentInfo: {
         studentId: student.studentId,
         firstName: student.firstName,
         lastName: student.lastName,
-        photo: student.photo || null,
+        photo: student.profileImage || null,
         contactNumber: student.contactNumber,
         email: student.email,
-        roomBedNumber: roomBedDisplay, // Now shows readable format instead of ObjectId
-        roomBedDetails: roomBedDetails, // Additional detailed info if needed
+        roomBedNumber: roomBedDisplay,
+        roomBedDetails: roomBedDetails,
         admissionDate: student.admissionDate,
-        emergencyContactName: student.emergencyContactName,
-        emergencyContactNumber: student.emergencyContactNumber,
         checkInDate: student.checkInDate,
         checkOutDate: student.checkOutDate,
+        emergencyContactName: student.emergencyContactName,
+        emergencyContactNumber: student.emergencyContactNumber,
       },
       attendanceSummary: {
         totalDays: student.attendanceSummary?.totalDays || 0,
@@ -727,20 +723,15 @@ const dashboard = async (req, res) => {
       },
       feesOverview: {
         status: student.feeStatus || "Not Available",
+        totalAmount: student.feeAmount || 0,
         amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
-        totalAmount: student.feeAmount || 0, // Add total amount for better fee display
       },
-      wardenInfo: {
-        wardenName: wardenName
-      },
-    };
+      wardenInfo: { wardenName },
+    });
 
-    return res.json(dashboardData);
   } catch (err) {
-    console.error("Dashboard fetch error:", err);
-    return res
-      .status(500)
-      .json({ message: "Server error while fetching dashboard data." });
+    console.error("Dashboard error:", err);
+    return res.status(500).json({ message: "Server error while fetching dashboard data." });
   }
 };
 
@@ -761,11 +752,11 @@ const attendance = async (req, res) => {
     // Assuming you have a term start date - adjust as needed
     const termStartDate = new Date('2024-08-01'); // Replace with your actual term start
     const today = new Date();
-    
+
     // Calculate total school days (excluding weekends)
     let totalSchoolDays = 0;
     let currentDate = new Date(termStartDate);
-    
+
     while (currentDate <= today) {
       const dayOfWeek = currentDate.getDay();
       // Exclude Saturdays (6) and Sundays (0) - adjust based on your school schedule
@@ -774,29 +765,29 @@ const attendance = async (req, res) => {
       }
       currentDate.setDate(currentDate.getDate() + 1);
     }
-    
+
     // Process attendance log
     const attendanceLog = student.attendanceLog || [];
     const presentDates = new Set();
-    
+
     attendanceLog.forEach(entry => {
       const entryDate = new Date(entry.checkInDate);
       presentDates.add(entryDate.toDateString());
     });
-    
+
     const presentDays = presentDates.size;
     const absentDays = Math.max(0, totalSchoolDays - presentDays);
     const attendancePercentage = totalSchoolDays > 0 ? Math.round((presentDays / totalSchoolDays) * 100) : 0;
-    
+
     // Check today's status
     const todayString = today.toDateString();
     const isPresentToday = presentDates.has(todayString);
-    
+
     // Find most recent absence
     let lastAbsenceDate = null;
     let checkDate = new Date(today);
     checkDate.setDate(checkDate.getDate() - 1); // Start from yesterday
-    
+
     while (checkDate >= termStartDate) {
       const dayOfWeek = checkDate.getDay();
       if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
@@ -912,8 +903,8 @@ const updateLeaveStatus = async (req, res) => {
 
     // Check if leave is still pending
     if (leave.status.toLowerCase() !== 'pending') {
-      return res.status(400).json({ 
-        message: `Leave request is already ${leave.status}. Cannot update.` 
+      return res.status(400).json({
+        message: `Leave request is already ${leave.status}. Cannot update.`
       });
     }
 
@@ -926,15 +917,15 @@ const updateLeaveStatus = async (req, res) => {
     // Format dates for email
     const formattedStartDate = new Date(leave.startDate).toLocaleDateString('en-GB', {
       day: '2-digit',
-      month: '2-digit', 
+      month: '2-digit',
       year: 'numeric',
       timeZone: 'Asia/Kolkata'
     });
-    
+
     const formattedEndDate = new Date(leave.endDate).toLocaleDateString('en-GB', {
       day: '2-digit',
       month: '2-digit',
-      year: 'numeric', 
+      year: 'numeric',
       timeZone: 'Asia/Kolkata'
     });
 
@@ -963,10 +954,10 @@ Leave Details:
 • Status: ${status.toUpperCase()}
 ${parentComment ? `• Parent Comment: ${parentComment}` : ''}
 
-${status === 'approved' ? 
-  'Your leave has been approved. Please follow hostel guidelines for your leave period.' : 
-  'Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
-}
+${status === 'approved' ?
+          'Your leave has been approved. Please follow hostel guidelines for your leave period.' :
+          'Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
+        }
 
 – Hostel Admin`,
       html: `
@@ -992,10 +983,10 @@ ${status === 'approved' ?
           
           <div style="background-color: ${status === 'approved' ? '#e8f5e8' : '#ffebee'}; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="margin: 0; color: ${status === 'approved' ? '#2e7d32' : '#c62828'};">
-              ${status === 'approved' ? 
-                '✅ Your leave has been approved. Please follow hostel guidelines for your leave period.' : 
-                '❌ Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
-              }
+              ${status === 'approved' ?
+          '✅ Your leave has been approved. Please follow hostel guidelines for your leave period.' :
+          '❌ Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
+        }
             </p>
           </div>
           
@@ -1124,9 +1115,9 @@ const notices = async (req, res) => {
 
   } catch (err) {
     console.error("Notices fetch error:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: "Server error while fetching notices data.",
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -1163,6 +1154,7 @@ const requestRefund = async (req, res) => {
     return res.json({
       message: "Refund request submitted successfully",
       refund: newRefund,
+      success: true
     });
   } catch (err) {
     console.error("Refund request error:", err);
@@ -1222,9 +1214,9 @@ const markNoticeAsRead = async (req, res) => {
 
   } catch (err) {
     console.error("Mark notice as read error:", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: "Server error while marking notice as read",
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -1232,10 +1224,10 @@ const markNoticeAsRead = async (req, res) => {
 export {
   sendLoginOTP,      // NEW: Added for OTP login
   login,             // UPDATED: Now uses OTP instead of password
-  generateToken, 
-  generateRefreshToken, 
+  generateToken,
+  generateRefreshToken,
   refreshAccessToken,
-  forgotPassword,    
+  forgotPassword,
   verifyOtp,
   resetPassword,
   getProfile,
