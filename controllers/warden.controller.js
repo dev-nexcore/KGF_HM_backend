@@ -100,41 +100,87 @@ const sendLoginOTP = async (req, res) => {
 };
 
 // UPDATED: Login with OTP verification (replaces password-based login)
-const login = async (req, res) => {
-  const { wardenId, otp } = req.body;
+// const login = async (req, res) => {
+//   const { wardenId, otp } = req.body;
 
-  if (!wardenId || !otp) {
-    return res.status(400).json({ message: "Warden ID and OTP are required" });
+//   if (!wardenId || !otp) {
+//     return res.status(400).json({ message: "Warden ID and OTP are required" });
+//   }
+
+//   try {
+//     // Find warden by wardenId
+//     const warden = await Warden.findOne({ wardenId });
+//     if (!warden) {
+//       return res.status(401).json({ message: "Invalid Warden ID" });
+//     }
+
+//     // Find OTP record
+//     const otpRecord = await Otp.findOne({ 
+//       email: warden.email, 
+//       code: otp, 
+//       purpose: 'warden_login'
+//     });
+
+//     if (!otpRecord) {
+//       return res.status(401).json({ message: "Invalid OTP" });
+//     }
+
+//     // Check if OTP is expired
+//     if (new Date() > otpRecord.expires) {
+//       await Otp.deleteOne({ _id: otpRecord._id });
+//       return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+//     }
+
+//     // OTP is valid, delete it
+//     await Otp.deleteOne({ _id: otpRecord._id });
+
+//     // Generate JWT Token
+//     const token = jwt.sign(
+//       {
+//         id: warden._id,
+//         wardenId: warden.wardenId,
+//         role: "warden",
+//       },
+//       process.env.JWT_SECRET,
+//       { expiresIn: "1d" }
+//     );
+
+//     res.status(200).json({
+//       message: "Login successful",
+//       token,
+//       warden: {
+//         id: warden._id,
+//         wardenId: warden.wardenId,
+//         name: `${warden.firstName} ${warden.lastName}`,
+//         email: warden.email,
+//         phone: warden.contactNumber,
+//         profilePhoto: warden.profilePhoto || null,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Warden login error:", err);
+//     res.status(500).json({ message: "Server error during login" });
+//   }
+// };
+
+
+const login = async (req, res) => {
+  const { wardenId } = req.body;
+
+  // Input validation
+  if (!wardenId) {
+    return res.status(400).json({ message: "Warden ID is required" });
   }
 
   try {
-    // Find warden by wardenId
+    // Find warden
     const warden = await Warden.findOne({ wardenId });
+
     if (!warden) {
       return res.status(401).json({ message: "Invalid Warden ID" });
     }
 
-    // Find OTP record
-    const otpRecord = await Otp.findOne({ 
-      email: warden.email, 
-      code: otp, 
-      purpose: 'warden_login'
-    });
-
-    if (!otpRecord) {
-      return res.status(401).json({ message: "Invalid OTP" });
-    }
-
-    // Check if OTP is expired
-    if (new Date() > otpRecord.expires) {
-      await Otp.deleteOne({ _id: otpRecord._id });
-      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
-    }
-
-    // OTP is valid, delete it
-    await Otp.deleteOne({ _id: otpRecord._id });
-
-    // Generate JWT Token
+    // 🚀 DIRECT LOGIN (NO OTP)
     const token = jwt.sign(
       {
         id: warden._id,
@@ -145,8 +191,8 @@ const login = async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    res.status(200).json({
-      message: "Login successful",
+    return res.status(200).json({
+      message: "Login successful (OTP disabled)",
       token,
       warden: {
         id: warden._id,
@@ -157,12 +203,12 @@ const login = async (req, res) => {
         profilePhoto: warden.profilePhoto || null,
       },
     });
+
   } catch (err) {
     console.error("Warden login error:", err);
-    res.status(500).json({ message: "Server error during login" });
+    return res.status(500).json({ message: "Server error during login" });
   }
 };
-
 
 //  Forgot Password
 

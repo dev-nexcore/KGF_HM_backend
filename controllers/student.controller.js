@@ -1464,29 +1464,68 @@ If you didn't request this OTP, please ignore this email.
 
 
 
- const login = async (req, res) => {
-  const { studentId, otp } = req.body;
+//  const login = async (req, res) => {
+//   const { studentId, otp } = req.body;
 
-  if (!studentId || !otp) return res.status(400).json({ message: "Student ID and OTP are required" });
+//   if (!studentId || !otp) return res.status(400).json({ message: "Student ID and OTP are required" });
+
+//   try {
+//     const student = await Student.findOne({ studentId });
+//     if (!student) return res.status(401).json({ message: "Invalid Student ID" });
+
+//     const otpRecord = await Otp.findOne({ email: student.email, code: otp, purpose: "login" });
+//     if (!otpRecord) return res.status(401).json({ message: "Invalid OTP" });
+//     if (new Date() > otpRecord.expires) {
+//       await Otp.deleteOne({ _id: otpRecord._id });
+//       return res.status(401).json({ message: "OTP expired. Request a new one." });
+//     }
+
+//     await Otp.deleteOne({ _id: otpRecord._id });
+
+//     const token = generateToken(student);
+//     const refreshToken = await generateRefreshToken(student);
+
+//     return res.json({
+//       message: "Login successful",
+//       token,
+//       refreshToken,
+//       student: {
+//         _id: student._id,
+//         studentId: student.studentId,
+//         email: student.email,
+//         firstName: student.firstName,
+//         lastName: student.lastName,
+//         contactNumber: student.contactNumber,
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Student login error:", err);
+//     return res.status(500).json({ message: "Server error during login" });
+//   }
+// };
+
+// -------------------- FORGOT PASSWORD --------------------
+ 
+const login = async (req, res) => {
+  const { studentId } = req.body;
+
+  if (!studentId) {
+    return res.status(400).json({ message: "Student ID is required" });
+  }
 
   try {
+    // Find student
     const student = await Student.findOne({ studentId });
-    if (!student) return res.status(401).json({ message: "Invalid Student ID" });
-
-    const otpRecord = await Otp.findOne({ email: student.email, code: otp, purpose: "login" });
-    if (!otpRecord) return res.status(401).json({ message: "Invalid OTP" });
-    if (new Date() > otpRecord.expires) {
-      await Otp.deleteOne({ _id: otpRecord._id });
-      return res.status(401).json({ message: "OTP expired. Request a new one." });
+    if (!student) {
+      return res.status(401).json({ message: "Invalid Student ID" });
     }
 
-    await Otp.deleteOne({ _id: otpRecord._id });
-
+    // 🚀 Direct login (OTP removed)
     const token = generateToken(student);
     const refreshToken = await generateRefreshToken(student);
 
     return res.json({
-      message: "Login successful",
+      message: "Login successful (OTP disabled)",
       token,
       refreshToken,
       student: {
@@ -1498,14 +1537,15 @@ If you didn't request this OTP, please ignore this email.
         contactNumber: student.contactNumber,
       },
     });
+
   } catch (err) {
     console.error("Student login error:", err);
     return res.status(500).json({ message: "Server error during login" });
   }
 };
 
-// -------------------- FORGOT PASSWORD --------------------
- const forgotPassword = async (req, res) => {
+
+const forgotPassword = async (req, res) => {
   const email = LOWER(req.body?.email);
   try {
     const student = await Student.findOne({ email });

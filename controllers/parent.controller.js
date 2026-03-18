@@ -190,49 +190,88 @@ If you didn't request this OTP, please ignore this email.
 // };
 
 // UPDATED: Login controller with OTP verification (replaces old password-based login)
+// const login = async (req, res) => {
+//   const { studentId, otp } = req.body;
+
+//   // Input validation
+//   if (!studentId || !otp) {
+//     return res.status(400).json({ message: "Student ID and OTP are required" });
+//   }
+
+//   try {
+//     // Find parent by studentId
+//     const parent = await Parent.findOne({ studentId });
+//     if (!parent) {
+//       return res.status(401).json({ message: "Invalid Student ID" });
+//     }
+
+//     // Find OTP record for this parent's email
+//     const otpRecord = await Otp.findOne({
+//       email: parent.email,
+//       code: otp,
+//       purpose: 'login' // Make sure it's a login OTP, not password reset
+//     });
+
+//     if (!otpRecord) {
+//       return res.status(401).json({ message: "Invalid OTP" });
+//     }
+
+//     // Check if OTP is expired
+//     if (new Date() > otpRecord.expires) {
+//       // Delete expired OTP
+//       await Otp.deleteOne({ _id: otpRecord._id });
+//       return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+//     }
+
+//     // OTP is valid, delete it after successful verification
+//     await Otp.deleteOne({ _id: otpRecord._id });
+
+//     // Generate tokens
+//     const token = generateToken(parent);
+//     const refreshToken = await generateRefreshToken(parent);
+
+//     // Return response
+//     return res.json({
+//       message: "Login successful",
+//       token,
+//       refreshToken,
+//       parent: {
+//         studentId: parent.studentId,
+//         email: parent.email,
+//         firstName: parent.firstName,
+//         lastName: parent.lastName,
+//         contactNumber: parent.contactNumber
+//       },
+//     });
+//   } catch (err) {
+//     console.error("Parent login error:", err);
+//     return res.status(500).json({ message: "Server error during login" });
+//   }
+// };
+
+
 const login = async (req, res) => {
-  const { studentId, otp } = req.body;
+  const { studentId } = req.body;
 
   // Input validation
-  if (!studentId || !otp) {
-    return res.status(400).json({ message: "Student ID and OTP are required" });
+  if (!studentId) {
+    return res.status(400).json({ message: "Student ID is required" });
   }
 
   try {
     // Find parent by studentId
     const parent = await Parent.findOne({ studentId });
+
     if (!parent) {
       return res.status(401).json({ message: "Invalid Student ID" });
     }
 
-    // Find OTP record for this parent's email
-    const otpRecord = await Otp.findOne({
-      email: parent.email,
-      code: otp,
-      purpose: 'login' // Make sure it's a login OTP, not password reset
-    });
-
-    if (!otpRecord) {
-      return res.status(401).json({ message: "Invalid OTP" });
-    }
-
-    // Check if OTP is expired
-    if (new Date() > otpRecord.expires) {
-      // Delete expired OTP
-      await Otp.deleteOne({ _id: otpRecord._id });
-      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
-    }
-
-    // OTP is valid, delete it after successful verification
-    await Otp.deleteOne({ _id: otpRecord._id });
-
-    // Generate tokens
+    // 🚀 Direct login (OTP removed)
     const token = generateToken(parent);
     const refreshToken = await generateRefreshToken(parent);
 
-    // Return response
     return res.json({
-      message: "Login successful",
+      message: "Login successful (OTP disabled)",
       token,
       refreshToken,
       parent: {
@@ -243,6 +282,7 @@ const login = async (req, res) => {
         contactNumber: parent.contactNumber
       },
     });
+
   } catch (err) {
     console.error("Parent login error:", err);
     return res.status(500).json({ message: "Server error during login" });

@@ -196,63 +196,108 @@ This OTP is valid for 5 minutes.
 
 
 
-const login = async (req, res) => {
-  const { adminId, otp } = req.body;
+// const login = async (req, res) => {
+//   const { adminId, otp } = req.body;
 
-  if (!adminId || !otp) {
-    return res.status(400).json({ message: "Admin ID and OTP are required" });
+//   if (!adminId || !otp) {
+//     return res.status(400).json({ message: "Admin ID and OTP are required" });
+//   }
+
+//   try {
+//     // Find admin by adminId
+//     const admin = await Admin.findOne({ adminId });
+//     if (!admin) {
+//       return res.status(401).json({ message: "Invalid Admin ID" });
+//     }
+
+//     // Find OTP record
+//     const otpRecord = await Otp.findOne({ 
+//       email: admin.email, 
+//       code: otp, 
+//       purpose: 'admin_login'
+//     });
+
+//     if (!otpRecord) {
+//       return res.status(401).json({ message: "Invalid OTP" });
+//     }
+
+//     // Check if OTP is expired
+//     if (new Date() > otpRecord.expires) {
+//       await Otp.deleteOne({ _id: otpRecord._id });
+//       return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+//     }
+
+//     // OTP is valid, delete it
+//     await Otp.deleteOne({ _id: otpRecord._id });
+
+//     // Generate tokens
+//     const token = generateToken(admin);
+//     const refreshToken = generateRefreshToken(admin);
+
+//     // Create audit log for login
+//     await createAuditLog({
+//       adminId: admin._id,
+//       adminName: admin.adminId,
+//       actionType: AuditActionTypes.ADMIN_LOGIN,
+//       description: `Admin ${admin.adminId} logged in successfully`,
+//       targetType: 'System'
+//     });
+
+//     return res.json({ 
+//       message: "Login successful",
+//       token,
+//       refreshToken,
+//       admin: { 
+//         _id:admin._id,
+//         adminId: admin.adminId, 
+//         adminEmail: admin.email 
+//       } 
+//     });
+//   } catch (err) {
+//     console.error("Admin login error:", err);
+//     return res.status(500).json({ message: "Server error during login" });
+//   }
+// };
+
+const login = async (req, res) => {
+  const { adminId } = req.body;
+
+  if (!adminId) {
+    return res.status(400).json({ message: "Admin ID is required" });
   }
 
   try {
     // Find admin by adminId
     const admin = await Admin.findOne({ adminId });
+
     if (!admin) {
       return res.status(401).json({ message: "Invalid Admin ID" });
     }
 
-    // Find OTP record
-    const otpRecord = await Otp.findOne({ 
-      email: admin.email, 
-      code: otp, 
-      purpose: 'admin_login'
-    });
-
-    if (!otpRecord) {
-      return res.status(401).json({ message: "Invalid OTP" });
-    }
-
-    // Check if OTP is expired
-    if (new Date() > otpRecord.expires) {
-      await Otp.deleteOne({ _id: otpRecord._id });
-      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
-    }
-
-    // OTP is valid, delete it
-    await Otp.deleteOne({ _id: otpRecord._id });
-
-    // Generate tokens
+    // 🚀 Direct login (OTP removed)
     const token = generateToken(admin);
     const refreshToken = generateRefreshToken(admin);
 
-    // Create audit log for login
+    // Audit log
     await createAuditLog({
       adminId: admin._id,
       adminName: admin.adminId,
       actionType: AuditActionTypes.ADMIN_LOGIN,
-      description: `Admin ${admin.adminId} logged in successfully`,
+      description: `Admin ${admin.adminId} logged in (OTP disabled)`,
       targetType: 'System'
     });
 
-    return res.json({ 
-      message: "Login successful",
+    return res.json({
+      message: "Login successful (OTP disabled)",
       token,
       refreshToken,
-      admin: { 
-        _id:admin._id,
-        adminId: admin.adminId, 
-        adminEmail: admin.email 
-      } 
+      admin: {
+        _id: admin._id,
+        adminId: admin.adminId,
+        adminEmail: admin.email
+      }
     });
+
   } catch (err) {
     console.error("Admin login error:", err);
     return res.status(500).json({ message: "Server error during login" });
