@@ -8,6 +8,7 @@ import parentRoutes from "./routes/parent.routes.js";
 import wardenRoutes from "./routes/warden.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
+import staffRoutes from "./routes/staff.routes.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -68,6 +69,10 @@ app.use("/api/parentauth", parentRoutes);
 app.use("/api/wardenauth", wardenRoutes);
 app.use("/api/studentauth", studentRoutes);
 app.use("/api/webhook", webhookRoutes);
+app.use(
+  "/api/staffauth",
+  staffRoutes
+);
 
 // ----- Static files (uploads) -----
 const __filename = fileURLToPath(import.meta.url);
