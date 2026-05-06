@@ -1914,7 +1914,7 @@ const fileComplaint = async (req, res) => {
 
   try {
     // Validate student existence
-    const student = await Student.findOne({ studentId });
+    const student = await Student.findOne({ studentId }).populate('roomBedNumber', 'roomNo itemName floor location');;
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -1981,10 +1981,10 @@ const fileComplaint = async (req, res) => {
     const emailText = `New Complaint Filed
 
 Student Details:
-- Name: ${student.studentName}
+- Name: ${student.firstName}
 - Student ID: ${student.studentId}
 - Email: ${student.email}
-- Room/Bed: ${student.roomBedNumber || "Not specified"}
+- Room/Bed: ${student.roomBedNumber.itemName || "Not specified"}
 
 Complaint Details:
 - Type: ${displayType}
@@ -2005,7 +2005,7 @@ Please review and respond accordingly.
     await transporter.sendMail({
       from: `"Hostel System" <${process.env.MAIL_USER}>`,
       to: process.env.MAIL_USER,
-      subject: `New Complaint: ${subject} - ${student.studentName}`,
+      subject: `New Complaint: ${subject} - ${student.firstName}`,
       text: emailText,
     });
 

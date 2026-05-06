@@ -129,7 +129,7 @@ router.post('/reset-password', resetPassword);
 // ====================== USER MANAGEMENT ROUTES ======================
 router.post(
   '/register-student',
-  verifyAdminToken,
+  // verifyAdminToken,
   uploadStudentDocuments.fields([
     { name: 'aadharCard', maxCount: 1 },
     { name: 'panCard', maxCount: 1 }
@@ -138,7 +138,7 @@ router.post(
 );
 router.post(
   '/register-parent',
-  verifyAdminToken,
+  // verifyAdminToken,
   uploadParentDocuments.fields([
     { name: 'aadharCard', maxCount: 1 },
     { name: 'panCard', maxCount: 1 }
