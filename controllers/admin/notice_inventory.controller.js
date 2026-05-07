@@ -399,6 +399,115 @@ const getInventoryItemById = async (req, res) => {
   }
 };
 
+
+// Warden apply karega
+
+export const applyReplacementRequest = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const {
+      oldItemReason,
+      replacementItemName,
+      replacementCategory
+    } = req.body;
+
+    const inventory = await Inventory.findById(id);
+
+    if (!inventory) {
+      return res.status(404).json({
+        success: false,
+        message: "Inventory item not found"
+      });
+    }
+
+    inventory.replacementRequest = {
+      requestedBy: null,
+      oldItemReason,
+      replacementItemName,
+      replacementCategory,
+      replacementStatus: "Pending"
+    };
+
+    await inventory.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Replacement request submitted successfully",
+      inventory
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+
+export const updateReplacementRequestStatus = async (req, res) => {
+
+  try {
+
+    const { id } = req.params;
+
+    const {
+      replacementStatus,
+      adminRemark
+    } = req.body;
+
+    const inventory = await Inventory.findById(id);
+
+    if (!inventory || !inventory.replacementRequest) {
+
+      return res.status(404).json({
+        success: false,
+        message: "Replacement request not found"
+      });
+    }
+
+    inventory.replacementRequest.replacementStatus =
+      replacementStatus;
+
+    inventory.replacementRequest.adminRemark =
+      adminRemark || "";
+
+    inventory.replacementRequest.approvedBy =
+      req.user.id;
+
+    inventory.replacementRequest.approvedAt =
+      new Date();
+
+    // ✅ if approved then mark old item damaged
+    if (replacementStatus === "Approved") {
+      inventory.status = "Damaged";
+    }
+
+    await inventory.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Replacement request ${replacementStatus}`,
+      inventory
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error"
+    });
+  }
+};
+
+
 const getInventoryItemBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
@@ -1999,5 +2108,6 @@ export {
   getItemByQRSlug,
   generateStockReport,
   bulkGenerateQRCodes,
-  getAvailableRoomsFloors
+  getAvailableRoomsFloors,
+
 }

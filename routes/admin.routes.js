@@ -3,6 +3,11 @@ import { verifyAdminToken } from '../middleware/auth.middleware.js';
 import { Inventory } from '../models/inventory.model.js';
 import { uploadStudentDocuments, uploadParentDocuments } from '../middleware/upload.js';
 import { uploadBulk } from "../middleware/upload.js";
+// Import mein add karo:
+import { getStudentDocument } from "../controllers/admin/user.controller.js";
+
+// Routes mein add karo (existing student routes ke saath):
+
 
 // Import from individual controller files
 import {
@@ -102,7 +107,10 @@ import {
   getItemByQRSlug,
   generateStockReport,
   bulkUploadInventory,
-  bulkGenerateQRCodes
+  bulkGenerateQRCodes,
+  updateReplacementRequestStatus,
+  applyReplacementRequest,
+
 } from "../controllers/admin/notice_inventory.controller.js";
 
 import{
@@ -130,19 +138,13 @@ router.post('/reset-password', resetPassword);
 router.post(
   '/register-student',
   // verifyAdminToken,
-  uploadStudentDocuments.fields([
-    { name: 'aadharCard', maxCount: 1 },
-    { name: 'panCard', maxCount: 1 }
-  ]),
+ uploadStudentDocuments,
   registerStudent
 );
 router.post(
   '/register-parent',
   // verifyAdminToken,
-  uploadParentDocuments.fields([
-    { name: 'aadharCard', maxCount: 1 },
-    { name: 'panCard', maxCount: 1 }
-  ]),
+  uploadParentDocuments,
   registerParent
 );
 router.post('/register-warden', registerWarden);
@@ -152,11 +154,27 @@ router.get('/student/:studentId', getStudentById);
 router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
 router.delete('/delete-student/:studentId', deleteStudent);
 
+router.get('/student-document/:studentId/:docType', getStudentDocument);
+
 router.post(
   "/inventory/bulk-upload",
   uploadBulk.single("file"),
   bulkUploadInventory
 );
+
+router.post(
+  "/inventory/:id/replacement-request",
+  applyReplacementRequest
+);
+
+router.put(
+  "/inventory/:id/replacement-request/status",
+  verifyAdminToken,
+  updateReplacementRequestStatus
+);
+
+
+
 
 // ====================== DASHBOARD ROUTES ======================
 router.get('/todays-checkin-checkout', getTodaysCheckInOutStatus);

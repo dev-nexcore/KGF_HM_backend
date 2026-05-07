@@ -23,18 +23,52 @@ const studentSchema = new mongoose.Schema({
   password: { type: String, required: true },
   
   // ADD THESE DOCUMENT FIELDS
+  // documents: {
+  //   aadharCard: {
+  //     filename: { type: String },
+  //     path: { type: String },
+  //     uploadedAt: { type: Date }
+  //   },
+  //   panCard: {
+  //     filename: { type: String },
+  //     path: { type: String },
+  //     uploadedAt: { type: Date }
+  //   }
+  // },
+
+
   documents: {
-    aadharCard: {
-      filename: { type: String },
-      path: { type: String },
-      uploadedAt: { type: Date }
-    },
-    panCard: {
-      filename: { type: String },
-      path: { type: String },
-      uploadedAt: { type: Date }
-    }
+
+  aadharCard: {
+    filename: { type: String },
+    path: { type: String },
+    uploadedAt: { type: Date }
   },
+
+  panCard: {
+    filename: { type: String },
+    path: { type: String },
+    uploadedAt: { type: Date }
+  },
+
+  studentIdCard: {
+    filename: { type: String },
+    path: { type: String },
+    uploadedAt: { type: Date }
+  },
+
+  feesReceipt: {
+    filename: { type: String },
+    path: { type: String },
+    uploadedAt: { type: Date }
+  }
+
+},
+
+hasCollegeId: {
+  type: Boolean,
+  default: true
+},
   
   attendanceLog: [
     {
