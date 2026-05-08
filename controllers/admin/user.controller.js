@@ -1585,6 +1585,62 @@ const getStudentsWithoutParents = async (req, res) => {
 };
 
 
+// const updateStudent = async (req, res) => {
+//   const { studentId } = req.params;
+//   const {
+//     firstName, lastName, contactNumber, email, roomBedNumber,
+//     emergencyContactNumber, admissionDate, emergencyContactName, feeStatus,
+//   } = req.body;
+
+//   try {
+//     const currentStudent = await Student.findOne({ studentId });
+//     if (!currentStudent) {
+//       return res.status(404).json({ message: 'Student not found.' });
+//     }
+
+//     const previousBedId = currentStudent.roomBedNumber;
+
+//     const updatedStudent = await Student.findOneAndUpdate(
+//       { studentId },
+//       { firstName, lastName, contactNumber, email, roomBedNumber, emergencyContactNumber, admissionDate, emergencyContactName, feeStatus },
+//       { new: true }
+//     );
+
+//     const newBedId = roomBedNumber;
+
+//     if (previousBedId && previousBedId !== "Not Assigned" && previousBedId !== newBedId) {
+//       await Inventory.findByIdAndUpdate(previousBedId, { status: "Available" }, { new: true });
+//     }
+
+//     if (newBedId && newBedId !== "Not Assigned" && newBedId !== previousBedId) {
+//       const bedToAssign = await Inventory.findById(newBedId);
+//       if (!bedToAssign) return res.status(404).json({ message: 'Selected bed not found.' });
+//       if (bedToAssign.status === "In Use") return res.status(400).json({ message: 'Selected bed is already in use.' });
+//       await Inventory.findByIdAndUpdate(newBedId, { status: "In Use" }, { new: true });
+//     }
+
+//     if (previousBedId && previousBedId !== "Not Assigned" && (!newBedId || newBedId === "Not Assigned")) {
+//       await Inventory.findByIdAndUpdate(previousBedId, { status: "Available" }, { new: true });
+//     }
+
+//     await createAuditLog({
+//       adminId: req.admin?._id,
+//       adminName: req.admin?.adminId || 'System',
+//       actionType: AuditActionTypes.STUDENT_UPDATED,
+//       description: `Updated student: ${firstName} ${lastName} (ID: ${studentId})`,
+//       targetType: 'Student',
+//       targetId: studentId,
+//       targetName: `${firstName} ${lastName}`,
+//       additionalData: { previousBed: previousBedId, newBed: newBedId, email, feeStatus }
+//     });
+
+//     return res.json({ message: 'Student updated successfully.', student: updatedStudent });
+//   } catch (err) {
+//     console.error('Error updating student:', err);
+//     return res.status(500).json({ message: 'Error updating student.' });
+//   }
+// };
+
 const updateStudent = async (req, res) => {
   const { studentId } = req.params;
   const {
@@ -1600,47 +1656,66 @@ const updateStudent = async (req, res) => {
 
     const previousBedId = currentStudent.roomBedNumber;
 
+    // ✅ Build update object with text fields
+    const updateData = {
+      firstName, lastName, contactNumber, email, roomBedNumber,
+      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus
+    };
+
+    // ✅ Add document updates only if new files uploaded
+    if (req.files) {
+      if (req.files["aadharCard"]?.[0]) {
+        updateData["documents.aadharCard"] = {
+          filename: req.files["aadharCard"][0].filename,
+          path: req.files["aadharCard"][0].path,
+          uploadedAt: new Date()
+        };
+      }
+      if (req.files["panCard"]?.[0]) {
+        updateData["documents.panCard"] = {
+          filename: req.files["panCard"][0].filename,
+          path: req.files["panCard"][0].path,
+          uploadedAt: new Date()
+        };
+      }
+      if (req.files["studentIdCard"]?.[0]) {
+        updateData["documents.studentIdCard"] = {
+          filename: req.files["studentIdCard"][0].filename,
+          path: req.files["studentIdCard"][0].path,
+          uploadedAt: new Date()
+        };
+      }
+      if (req.files["feesReceipt"]?.[0]) {
+        updateData["documents.feesReceipt"] = {
+          filename: req.files["feesReceipt"][0].filename,
+          path: req.files["feesReceipt"][0].path,
+          uploadedAt: new Date()
+        };
+      }
+    }
+
     const updatedStudent = await Student.findOneAndUpdate(
       { studentId },
-      { firstName, lastName, contactNumber, email, roomBedNumber, emergencyContactNumber, admissionDate, emergencyContactName, feeStatus },
+      updateData,
       { new: true }
     );
 
+    // bed inventory logic stays same
     const newBedId = roomBedNumber;
-
     if (previousBedId && previousBedId !== "Not Assigned" && previousBedId !== newBedId) {
-      await Inventory.findByIdAndUpdate(previousBedId, { status: "Available" }, { new: true });
+      await Inventory.findByIdAndUpdate(previousBedId, { status: "Available" });
     }
-
     if (newBedId && newBedId !== "Not Assigned" && newBedId !== previousBedId) {
-      const bedToAssign = await Inventory.findById(newBedId);
-      if (!bedToAssign) return res.status(404).json({ message: 'Selected bed not found.' });
-      if (bedToAssign.status === "In Use") return res.status(400).json({ message: 'Selected bed is already in use.' });
-      await Inventory.findByIdAndUpdate(newBedId, { status: "In Use" }, { new: true });
+      await Inventory.findByIdAndUpdate(newBedId, { status: "In Use" });
     }
-
-    if (previousBedId && previousBedId !== "Not Assigned" && (!newBedId || newBedId === "Not Assigned")) {
-      await Inventory.findByIdAndUpdate(previousBedId, { status: "Available" }, { new: true });
-    }
-
-    await createAuditLog({
-      adminId: req.admin?._id,
-      adminName: req.admin?.adminId || 'System',
-      actionType: AuditActionTypes.STUDENT_UPDATED,
-      description: `Updated student: ${firstName} ${lastName} (ID: ${studentId})`,
-      targetType: 'Student',
-      targetId: studentId,
-      targetName: `${firstName} ${lastName}`,
-      additionalData: { previousBed: previousBedId, newBed: newBedId, email, feeStatus }
-    });
 
     return res.json({ message: 'Student updated successfully.', student: updatedStudent });
+
   } catch (err) {
     console.error('Error updating student:', err);
     return res.status(500).json({ message: 'Error updating student.' });
   }
 };
-
 
 const deleteStudent = async (req, res) => {
   const { studentId } = req.params;

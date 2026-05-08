@@ -151,7 +151,8 @@ router.post('/register-warden', registerWarden);
 router.get('/students', getAllStudents);
 router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
-router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
+// router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
+router.put('/update-student/:studentId', verifyAdminToken, uploadStudentDocuments, updateStudent);
 router.delete('/delete-student/:studentId', deleteStudent);
 
 router.get('/student-document/:studentId/:docType', getStudentDocument);
