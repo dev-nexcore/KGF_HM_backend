@@ -1228,6 +1228,15 @@ const registerStudent = async (req, res) => {
 
   try {
 
+    // Check for duplicate email before proceeding
+    const existingStudentByEmail = await Student.findOne({ email });
+    if (existingStudentByEmail) {
+      return res.status(409).json({
+        success: false,
+        message: `A student with email "${email}" is already registered (ID: ${existingStudentByEmail.studentId}). Please use a different email.`
+      });
+    }
+
     const generateStudentId = async () => {
       const count = await Student.countDocuments();
       const paddedNumber = String(count + 1).padStart(3, "0");
@@ -1317,11 +1326,14 @@ const registerStudent = async (req, res) => {
       await Inventory.findByIdAndUpdate(roomBedNumber, { status: "In Use" }, { new: true });
     }
 
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject: "Your Student Panel Credentials",
-      text: `Hello ${firstName} ${lastName},
+    // Send email - wrapped in separate try-catch so registration doesn't fail if email fails
+    let emailSent = false;
+    try {
+      await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: email,
+        subject: "Your Student Panel Credentials",
+        text: `Hello ${firstName} ${lastName},
 
 Your student account has been created successfully!
 
@@ -1339,33 +1351,44 @@ How to Login:
 The OTP will be valid for 5 minutes each time you request it.
 
 – Hostel Admin`
-    });
+      });
+      emailSent = true;
+    } catch (emailErr) {
+      console.error("Email sending failed (student still registered):", emailErr.message);
+    }
 
-    await createAuditLog({
-      adminId: req.admin?._id,
-      adminName: req.admin?.adminId || "System",
-      actionType: AuditActionTypes.STUDENT_REGISTERED,
-      description: `Registered new student: ${firstName} ${lastName} (ID: ${studentId})`,
-      targetType: "Student",
-      targetId: studentId,
-      targetName: `${firstName} ${lastName}`,
-      additionalData: {
-        email,
-        roomBedNumber,
-        admissionDate,
-        hasCollegeId,
-        documentsUploaded: {
-          aadharCard: !!documents.aadharCard.filename,
-          panCard: !!documents.panCard.filename,
-          studentIdCard: !!documents.studentIdCard.filename,
-          feesReceipt: !!documents.feesReceipt.filename
+    // Audit log - also wrapped so it doesn't crash registration
+    try {
+      await createAuditLog({
+        adminId: req.admin?._id,
+        adminName: req.admin?.adminId || "System",
+        actionType: AuditActionTypes.STUDENT_REGISTERED,
+        description: `Registered new student: ${firstName} ${lastName} (ID: ${studentId})`,
+        targetType: "Student",
+        targetId: studentId,
+        targetName: `${firstName} ${lastName}`,
+        additionalData: {
+          email,
+          roomBedNumber,
+          admissionDate,
+          hasCollegeId,
+          documentsUploaded: {
+            aadharCard: !!documents.aadharCard.filename,
+            panCard: !!documents.panCard.filename,
+            studentIdCard: !!documents.studentIdCard.filename,
+            feesReceipt: !!documents.feesReceipt.filename
+          }
         }
-      }
-    });
+      });
+    } catch (auditErr) {
+      console.error("Audit log creation failed:", auditErr.message);
+    }
 
     return res.json({
       success: true,
-      message: "Student registered and credentials emailed.",
+      message: emailSent
+        ? "Student registered and credentials emailed."
+        : "Student registered successfully. Email could not be sent - please share credentials manually.",
       student: {
         firstName,
         lastName,
@@ -1373,6 +1396,7 @@ The OTP will be valid for 5 minutes each time you request it.
         email,
         password,
         hasCollegeId,
+        emailSent,
         // ✅ Return full document objects so frontend can display them immediately
         documents: {
           aadharCard: documents.aadharCard.filename ? documents.aadharCard : null,
