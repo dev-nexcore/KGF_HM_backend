@@ -1215,7 +1215,8 @@ const registerStudent = async (req, res) => {
     feeStatus,
     emergencyContactName,
     emergencyContactNumber,
-    hasCollegeId
+    hasCollegeId,
+    isWorking
   } = req.body;
 
   try {
@@ -1309,7 +1310,8 @@ const registerStudent = async (req, res) => {
       emergencyContactNumber,
       password,
       documents,
-      hasCollegeId
+      hasCollegeId,
+      isWorking
     });
 
     await newStudent.save();
@@ -1358,6 +1360,7 @@ The OTP will be valid for 5 minutes each time you request it.
           roomBedNumber,
           admissionDate,
           hasCollegeId,
+          isWorking,
           documentsUploaded: {
             aadharCard: !!documents.aadharCard.filename,
             panCard: !!documents.panCard.filename,
@@ -1382,6 +1385,7 @@ The OTP will be valid for 5 minutes each time you request it.
         email,
         password,
         hasCollegeId,
+        isWorking,
         emailSent,
         // ✅ Return full document objects so frontend can display them immediately
         documents: {
@@ -1499,7 +1503,7 @@ The OTP will be valid for 5 minutes each time you request it.
 
 
 const registerWarden = async (req, res) => {
-  const { firstName, lastName, email, wardenId, contactNumber } = req.body;
+  const { firstName, lastName, email, contactNumber, salary } = req.body;
 
   try {
     const existingWarden = await Warden.findOne({ email });
@@ -1507,10 +1511,20 @@ const registerWarden = async (req, res) => {
       return res.status(409).json({ message: "Warden already exists with the same email." });
     }
 
+    // Auto-generate Warden ID
+    const lastWarden = await Warden.findOne().sort({ createdAt: -1 });
+    let newWardenId = "W001";
+    if (lastWarden && lastWarden.wardenId) {
+      const match = lastWarden.wardenId.match(/^W(\d+)$/i);
+      if (match) {
+        newWardenId = `W${String(parseInt(match[1], 10) + 1).padStart(3, "0")}`;
+      }
+    }
+
     const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
     const wardenPassword = `${cleanName}${lastName}`;
 
-    const newWarden = new Warden({ firstName, lastName, email, wardenId, contactNumber, password: wardenPassword });
+    const newWarden = new Warden({ firstName, lastName, email, wardenId: newWardenId, contactNumber, salary, password: wardenPassword });
     await newWarden.save();
 
     // Send email using centralized utility
@@ -1522,7 +1536,7 @@ const registerWarden = async (req, res) => {
 Your warden account has been created.
 
 • Warden Name: ${firstName} ${lastName}
-• Warden ID: ${wardenId}
+• Warden ID: ${newWardenId}
 • Your Login Password: ${wardenPassword}
 
 Please log in at https://www.KGF-HM.com and change your password after first login.
@@ -1536,7 +1550,7 @@ Please log in at https://www.KGF-HM.com and change your password after first log
       message: emailSent
         ? 'Warden registered and login credentials emailed.'
         : 'Warden registered successfully. Email could not be sent - please share credentials manually.',
-      warden: { firstName, lastName, email, wardenId, wardenPassword, emailSent }
+      warden: { firstName, lastName, email, wardenId: newWardenId, wardenPassword, emailSent }
     });
   } catch (err) {
     console.error("Error registering warden:", err);
@@ -1562,6 +1576,7 @@ const getAllStudents = async (req, res) => {
       emergencyContactName: student.emergencyContactName,
       emergencyContactNumber: student.emergencyContactNumber,
       hasCollegeId: student.hasCollegeId,
+      isWorking: student.isWorking,
       documents: {
         aadharCard: student.documents?.aadharCard || null,
         panCard: student.documents?.panCard || null,
@@ -1663,7 +1678,7 @@ const updateStudent = async (req, res) => {
   const { studentId } = req.params;
   const {
     firstName, lastName, contactNumber, email, roomBedNumber,
-    emergencyContactNumber, admissionDate, emergencyContactName, feeStatus,
+    emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking
   } = req.body;
 
   try {
@@ -1677,7 +1692,7 @@ const updateStudent = async (req, res) => {
     // ✅ Build update object with text fields
     const updateData = {
       firstName, lastName, contactNumber, email, roomBedNumber,
-      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus
+      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking
     };
 
     // ✅ Add document updates only if new files uploaded

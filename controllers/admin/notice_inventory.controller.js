@@ -1787,15 +1787,7 @@ const getAllNotices = async (req, res) => {
     // Build filter
     const filter = {};
     if (status && status !== 'All') {
-      // For now, we'll determine status based on createdAt (notices older than 30 days are archived)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      if (status === 'Active') {
-        filter.createdAt = { $gte: thirtyDaysAgo };
-      } else if (status === 'Archived') {
-        filter.createdAt = { $lt: thirtyDaysAgo };
-      }
+      filter.status = status;
     }
     if (recipientType) filter.recipientType = recipientType;
 
@@ -1830,7 +1822,7 @@ const getAllNotices = async (req, res) => {
         individualRecipient: notice.individualRecipient || '',
         date: notice.issueDate.toLocaleDateString('en-GB'),
         issueDate: notice.issueDate,
-        status: notice.createdAt >= thirtyDaysAgo ? 'Active' : 'Archived',
+        status: notice.status || 'Active',
         readStatus: notice.readStatus || 'Unread',
         createdBy: notice.createdBy,
         createdAt: notice.createdAt,
@@ -1933,6 +1925,7 @@ const updateNotice = async (req, res) => {
     if (recipientType !== undefined) updateData.recipientType = recipientType;
     if (individualRecipient !== undefined) updateData.individualRecipient = individualRecipient;
     if (readStatus !== undefined) updateData.readStatus = readStatus;
+    if (req.body.status !== undefined) updateData.status = req.body.status;
 
     // Update notice
     const updatedNotice = await Notice.findByIdAndUpdate(

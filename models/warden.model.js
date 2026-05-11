@@ -28,6 +28,10 @@ const wardenSchema = new mongoose.Schema({
   contactNumber: {
     type: String,
   },
+  salary: {
+    type: Number,
+    default: 0,
+  },
   profilePhoto: {
     type: String, // File path or filename
   },

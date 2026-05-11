@@ -69,6 +69,10 @@ hasCollegeId: {
   type: Boolean,
   default: true
 },
+isWorking: {
+  type: Boolean,
+  default: false
+},
   
   attendanceLog: [
     {

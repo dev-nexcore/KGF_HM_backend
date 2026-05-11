@@ -17,6 +17,7 @@ export const registerStaff =
       designation,
       shiftStart,
       shiftEnd,
+      salary,
     } = req.body;
 
     try {
@@ -59,6 +60,7 @@ export const registerStaff =
           designation,
           shiftStart,
           shiftEnd,
+          salary,
           password:
             staffPassword,
         });

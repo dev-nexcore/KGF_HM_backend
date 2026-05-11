@@ -52,6 +52,11 @@ const staffSchema = new mongoose.Schema(
       required: true,
     },
 
+    salary: {
+      type: Number,
+      default: 0,
+    },
+
     profilePhoto: {
       type: String,
       default: null,

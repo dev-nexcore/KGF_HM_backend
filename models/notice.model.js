@@ -28,6 +28,11 @@ const noticeSchema = new mongoose.Schema({
     type: String,
     enum: ['Read', 'Unread'],
     default: 'Unread'
+  },
+  status: {
+    type: String,
+    enum: ['Active', 'Archived'],
+    default: 'Active'
   }
 },
 

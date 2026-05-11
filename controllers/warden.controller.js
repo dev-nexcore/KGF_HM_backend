@@ -1227,7 +1227,7 @@ const updateWardenProfile = async (req, res) => {
 
 const getAllWarden = async (req, res) => {
   try {
-    const wardens = await Warden.find({}, 'wardenId firstName lastName email contactNumber profilePhoto attendanceLog');
+    const wardens = await Warden.find({}, 'wardenId firstName lastName email contactNumber salary profilePhoto attendanceLog');
 
     res.status(200).json({
       success: true,
@@ -1238,6 +1238,7 @@ const getAllWarden = async (req, res) => {
         lastName: warden.lastName,
         email: warden.email,
         contactNumber: warden.contactNumber,
+        salary: warden.salary,
         profilePhoto: warden.profilePhoto ? `${process.env.BASE_URL}/uploads/${warden.profilePhoto}` : null,
         attendanceLog: warden.attendanceLog.map(log => ({
           date: log.date,
@@ -1260,11 +1261,11 @@ const getAllWarden = async (req, res) => {
 const updateWarden = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, email, contactNumber, wardenId } = req.body;
+    const { firstName, lastName, email, contactNumber, wardenId, salary } = req.body;
 
     const warden = await Warden.findByIdAndUpdate(
       id,
-      { firstName, lastName, email, contactNumber, wardenId },
+      { firstName, lastName, email, contactNumber, wardenId, salary },
       { new: true }
     );
 
