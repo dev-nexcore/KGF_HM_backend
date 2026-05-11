@@ -27,6 +27,8 @@ import {
   getWardenDashboardStats,
   updateEmergencyContact,
     getAllWarden, 
+    updateWarden,
+    deleteWarden,
     deleteLeaveRequest,
   getAllAvailableBed,
   deleteInspection,
@@ -93,6 +95,8 @@ router.delete('/leave/:leaveId', verifyWardenToken, deleteLeaveRequest);
 router.get("/profile/:id", getWardenProfile);
 router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
 router.get("/all", getAllWarden);
+router.put("/update/:id", updateWarden);
+router.delete("/delete/:id", deleteWarden);
 
 
 // Emergency Contacts.

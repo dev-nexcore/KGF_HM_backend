@@ -1195,18 +1195,10 @@ import { Inventory } from '../../models/inventory.model.js';
 import fs from 'fs';
 import path from 'path'; // ✅ ADD THIS — getStudentDocument ke liye zaroori hai
 
+import sendEmail from '../../utils/sendEmail.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
-// configure SMTP transporter
-const transporter = nodemailer.createTransport({
-  host:    process.env.MAIL_HOST,
-  port:   +process.env.MAIL_PORT,
-  secure: process.env.MAIL_SECURE === 'true',
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS
-  }
-});
+// Removed local transporter - using centralized sendEmail utility instead
 
 const registerStudent = async (req, res) => {
 
@@ -1326,14 +1318,11 @@ const registerStudent = async (req, res) => {
       await Inventory.findByIdAndUpdate(roomBedNumber, { status: "In Use" }, { new: true });
     }
 
-    // Send email - wrapped in separate try-catch so registration doesn't fail if email fails
-    let emailSent = false;
-    try {
-      await transporter.sendMail({
-        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-        to: email,
-        subject: "Your Student Panel Credentials",
-        text: `Hello ${firstName} ${lastName},
+    // Send email using centralized utility
+    const emailResult = await sendEmail({
+      to: email,
+      subject: "Your Student Panel Credentials",
+      text: `Hello ${firstName} ${lastName},
 
 Your student account has been created successfully!
 
@@ -1351,11 +1340,8 @@ How to Login:
 The OTP will be valid for 5 minutes each time you request it.
 
 – Hostel Admin`
-      });
-      emailSent = true;
-    } catch (emailErr) {
-      console.error("Email sending failed (student still registered):", emailErr.message);
-    }
+    });
+    const emailSent = emailResult.success;
 
     // Audit log - also wrapped so it doesn't crash registration
     try {
@@ -1449,8 +1435,8 @@ const registerParent = async (req, res) => {
     const newParent = new Parent({ firstName, lastName, email, relation, contactNumber, studentId, documents });
     await newParent.save();
 
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+    // Send email using centralized utility
+    const emailResult = await sendEmail({
       to: email,
       subject: 'Parent Account Created - Login Instructions',
       text: `Hello ${firstName} ${lastName},
@@ -1472,6 +1458,7 @@ The OTP will be valid for 5 minutes each time you request it.
 
 – Hostel Admin`
     });
+    const emailSent = emailResult.success;
 
     await createAuditLog({
       adminId: req.admin?._id,
@@ -1493,8 +1480,11 @@ The OTP will be valid for 5 minutes each time you request it.
     });
 
     return res.json({
-      message: 'Parent registered successfully. Login instructions sent via email.',
-      parent: { firstName, lastName, email, relation, studentId }
+      success: true,
+      message: emailSent 
+        ? 'Parent registered successfully. Login instructions sent via email.'
+        : 'Parent registered successfully. Email could not be sent - please share credentials manually.',
+      parent: { firstName, lastName, email, relation, studentId, emailSent }
     });
   } catch (err) {
     console.error("Error registering parent:", err);
@@ -1523,8 +1513,8 @@ const registerWarden = async (req, res) => {
     const newWarden = new Warden({ firstName, lastName, email, wardenId, contactNumber, password: wardenPassword });
     await newWarden.save();
 
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+    // Send email using centralized utility
+    const emailResult = await sendEmail({
       to: email,
       subject: 'Your Warden Panel Credentials',
       text: `Hello ${firstName} ${lastName},
@@ -1539,10 +1529,14 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
 – Hostel Admin`
     });
+    const emailSent = emailResult.success;
 
     return res.json({
-      message: 'Warden registered and login credentials emailed.',
-      warden: { firstName, lastName, email, wardenId, wardenPassword }
+      success: true,
+      message: emailSent
+        ? 'Warden registered and login credentials emailed.'
+        : 'Warden registered successfully. Email could not be sent - please share credentials manually.',
+      warden: { firstName, lastName, email, wardenId, wardenPassword, emailSent }
     });
   } catch (err) {
     console.error("Error registering warden:", err);

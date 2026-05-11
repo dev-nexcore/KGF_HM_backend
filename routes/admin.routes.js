@@ -137,13 +137,13 @@ router.post('/reset-password', resetPassword);
 // ====================== USER MANAGEMENT ROUTES ======================
 router.post(
   '/register-student',
-  // verifyAdminToken,
+  verifyAdminToken,
  uploadStudentDocuments,
   registerStudent
 );
 router.post(
   '/register-parent',
-  // verifyAdminToken,
+  verifyAdminToken,
   uploadParentDocuments,
   registerParent
 );
@@ -183,6 +183,7 @@ router.get('/bed-occupancy-status', getBedOccupancyStatus);
 router.get('/dashboard/total-revenue', getTotalRevenue);
 router.get('/dashboard/pending-payments', getPendingPayments);
 router.get('/dashboard/financial-summary', getFinancialSummary);
+
 
 // ====================== LEAVE MANAGEMENT ROUTES ======================
 router.get('/leaves/pending', getPendingLeaveRequests);

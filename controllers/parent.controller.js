@@ -1,5 +1,5 @@
 import "dotenv/config";
-import nodemailer from "nodemailer";
+import sendEmail from "../utils/sendEmail.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from "bcrypt";
 import { Parent } from "../models/parent.model.js";
@@ -18,15 +18,7 @@ import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js";
 
 
 
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: +process.env.MAIL_PORT,
-  secure: process.env.MAIL_SECURE === "true",
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+// Removed local transporter - using centralized sendEmail utility instead
 
 // Generate access token for parent
 const generateToken = (parent) => {
@@ -90,8 +82,7 @@ const sendLoginOTP = async (req, res) => {
     );
 
     // 📧 Send OTP via Email
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+    await sendEmail({
       to: parent.email,
       subject: 'Your Parent Login OTP',
       text: `Hello ${parent.firstName},
@@ -346,8 +337,7 @@ const forgotPassword = async (req, res) => {
       { upsert: true }
     );
 
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+    await sendEmail({
       to: email,
       subject: "Parent Password Reset OTP",
       text: `Dear ${parent.firstName} ${parent.lastName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,

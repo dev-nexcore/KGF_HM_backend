@@ -158,6 +158,35 @@ const getBedOccupancyStatus = async (req, res) => {
     return res.status(500).json({ message: "Error fetching data." });
   }
 };
+const getQuickStats = async (req, res) => {
+  try {
+    const totalStudents = await Student.countDocuments();
+
+    const totalRooms = await Inventory.countDocuments({
+      itemName: { $regex: /^Room/i }
+    });
+
+    const activeStaff = await Warden.countDocuments({
+      status: "active"
+    });
+
+    const pendingTasks =
+      await Complaint.countDocuments({ status: "pending" }) +
+      await Leave.countDocuments({ status: "pending" });
+
+    return res.json({
+      totalStudents,
+      totalRooms,
+      activeStaff,
+      pendingTasks
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      message: "Failed to fetch quick stats"
+    });
+  }
+};
 
 export{
     getTodaysCheckInOutStatus,

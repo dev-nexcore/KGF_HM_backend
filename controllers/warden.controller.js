@@ -1257,6 +1257,42 @@ const getAllWarden = async (req, res) => {
   }
 };
 
+const updateWarden = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, email, contactNumber, wardenId } = req.body;
+
+    const warden = await Warden.findByIdAndUpdate(
+      id,
+      { firstName, lastName, email, contactNumber, wardenId },
+      { new: true }
+    );
+
+    if (!warden) {
+      return res.status(404).json({ success: false, message: "Warden not found" });
+    }
+
+    res.status(200).json({ success: true, message: "Warden updated successfully", warden });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Update failed", error: error.message });
+  }
+};
+
+const deleteWarden = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const warden = await Warden.findByIdAndDelete(id);
+
+    if (!warden) {
+      return res.status(404).json({ success: false, message: "Warden not found" });
+    }
+
+    res.status(200).json({ success: true, message: "Warden deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Delete failed", error: error.message });
+  }
+};
+
 
 
 // <--------- Emergency Contact Page ----------->
@@ -1415,6 +1451,8 @@ export {
   getWardenDashboardStats,
   updateEmergencyContact,
   getAllWarden,
+  updateWarden,
+  deleteWarden,
   deleteLeaveRequest,
   getAllAvailableBed,
   deleteInspection,

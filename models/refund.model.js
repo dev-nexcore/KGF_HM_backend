@@ -2,19 +2,14 @@ import mongoose from "mongoose";
 
 const refundSchema = new mongoose.Schema(
   {
+    refundId: {
+      type: String,
+      unique: true,
+    },
     studentId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",
       required: true,
-    },
-    refundType: {
-      type: String,
-      required: true,
-      enum: ["Security Deposit", "Damages Fee", "Mess fee Overpayment", "Others"],
-    },
-    otherRefundType: {
-      type: String,
-      default: "",
     },
     amount: {
       type: Number,
@@ -26,10 +21,28 @@ const refundSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "refunded", "rejected"],
+      enum: ["pending", "completed", "rejected"],
       default: "pending",
     },
-    requestedAt: {
+    paymentMethod: {
+      type: String,
+      enum: ["bank_transfer", "upi", "cash", "cheque", ""],
+      default: "",
+    },
+    adminNotes: {
+      type: String,
+      default: "",
+    },
+    processedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Admin",
+      default: null,
+    },
+    processedDate: {
+      type: Date,
+      default: null,
+    },
+    requestDate: {
       type: Date,
       default: Date.now,
     },

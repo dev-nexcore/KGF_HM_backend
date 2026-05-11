@@ -5,7 +5,7 @@ const auditLogSchema = new mongoose.Schema({
   adminId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin',
-    required: true,
+    required: false, // Changed from true to false
   },
   adminName: {
     type: String,
