@@ -94,12 +94,6 @@ const inventorySchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: [
-      'Available',
-      'In Use',
-      'In maintenance',
-      'Damaged'
-    ],
     default: 'Available'
   },
 
