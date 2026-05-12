@@ -13,29 +13,7 @@ const auditLogSchema = new mongoose.Schema({
   },
   actionType: {
     type: String,
-    required: true,
-    enum: [
-      'Student Registered',
-      'Student updated',
-      'Parent Registered', 
-      'Warden Registered',
-      'Leave Approved',
-      'Leave Rejected',
-      'Leave Message Sent',
-      'Complaint Resolved',
-      'Complaint Updated',
-      'Notice Issued',
-      'Inventory Added',
-      'Admin Login',
-      'Admin Logout',
-      'Password Reset',
-      'Bulk Leave Update',
-      'Bulk Complaint Update',
-      'Student Profile Updated',
-      'Fee Status Updated',
-      'Check-in Approved',
-      'Check-out Approved'
-    ]
+    required: true
   },
   description: {
     type: String,
@@ -43,7 +21,6 @@ const auditLogSchema = new mongoose.Schema({
   },
   targetType: {
     type: String,
-    enum: ['Student', 'Parent', 'Warden', 'Leave', 'Complaint', 'Notice', 'Inventory', 'System'],
     required: true
   },
   targetId: {

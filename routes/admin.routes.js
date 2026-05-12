@@ -26,6 +26,7 @@ import {
   registerParent,
   registerWarden,
    getAllStudents,
+   getAllWardens,
    getStudentsWithoutParents,
   getStudentById,
   updateStudent,
@@ -122,6 +123,19 @@ import{
   updateInspectionStatus
 } from "../controllers/admin/inspection.controller.js"
 
+import {
+  getAllRequisitions,
+  updateRequisitionStatus,
+  getRequisitionById
+} from "../controllers/admin/requisition.controller.js";
+
+import {
+  getAttendanceLogs,
+  getAttendanceStats,
+  markManualAttendance
+} from "../controllers/admin/attendance.controller.js";
+
+
 const router = Router();
 
 // In admin.route.js - AUTH ROUTES section
@@ -149,6 +163,7 @@ router.post(
 );
 router.post('/register-warden', registerWarden);
 router.get('/students', getAllStudents);
+router.get('/wardens', getAllWardens);
 router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
 // router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
@@ -224,10 +239,10 @@ router.get('/invoices/management', getManagementInvoices);
 router.put('/invoices/management/:invoiceId/status', updateManagementInvoiceStatus);
 
 // Staff Salary Management
-router.post('/salary/generate', generateStaffSalary);
-router.get('/salary', getStaffSalaries);
-router.put('/salary/:salaryId/status', updateSalaryStatus);
-router.get('/salary/:salaryId/slip', generateSalarySlip);
+router.post('/salary/generate', verifyAdminToken, generateStaffSalary);
+router.get('/salary', verifyAdminToken, getStaffSalaries);
+router.put('/salary/:salaryId/status', verifyAdminToken, updateSalaryStatus);
+router.get('/salary/:salaryId/slip', verifyAdminToken, generateSalarySlip);
 
 // Refund Management
 router.post('/refunds', initiateRefund);
@@ -239,6 +254,17 @@ router.get('/audit-logs', getAuditLogs);
 router.get('/audit-logs/statistics', getAuditLogStatistics);
 router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
+
+// ====================== WARDEN REQUISITION ROUTES ======================
+router.get('/requisitions', getAllRequisitions);
+router.get('/requisitions/:id', getRequisitionById);
+router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus);
+
+// ====================== ATTENDANCE ROUTES ======================
+router.get('/attendance/logs', getAttendanceLogs);
+router.get('/attendance/stats', getAttendanceStats);
+router.post('/attendance/manual', verifyAdminToken, markManualAttendance);
+
 
 // ====================== CONTENT MANAGEMENT ROUTES ======================
 // General inventory routes

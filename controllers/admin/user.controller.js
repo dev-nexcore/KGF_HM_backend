@@ -1561,15 +1561,15 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
 const getAllStudents = async (req, res) => {
   try {
-    const students = await Student.find({}).select("-password").sort({ createdAt: -1 });
-
+    const students = await Student.find({}).select("-password").populate('roomBedNumber', 'itemName').sort({ createdAt: -1 });
     const transformedStudents = students.map((student) => ({
       id: student.studentId,
       firstName: student.firstName,
       lastName: student.lastName,
       studentId: student.studentId,
       contactNumber: student.contactNumber,
-      roomBedNumber: student.roomBedNumber,
+      roomBedNumber: student.roomBedNumber?.itemName || 'N/A',
+      _id: student._id, // Adding this for reliable matching on frontend
       email: student.email,
       admissionDate: student.admissionDate,
       feeStatus: student.feeStatus,
@@ -1867,10 +1867,28 @@ const getStudentById = async (req, res) => {
 };
 
 
+const getAllWardens = async (req, res) => {
+  try {
+    const wardens = await Warden.find({}).select("-password").sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      message: "Wardens fetched successfully",
+      wardens,
+      count: wardens.length
+    });
+  } catch (err) {
+    console.error("Error fetching wardens:", err);
+    return res.status(500).json({ success: false, message: "Error fetching wardens." });
+  }
+};
+
+
 export {
   registerStudent,
   registerParent,
   registerWarden,
+  getAllWardens,
   getAllStudents,
   getStudentsWithoutParents,
   getStudentById,

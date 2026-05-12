@@ -56,6 +56,18 @@ const staffSalarySchema = new mongoose.Schema({
     enum: ['bank_transfer', 'cash', 'cheque'],
     default: 'bank_transfer'
   },
+  bankName: {
+    type: String,
+    default: ''
+  },
+  accountNumber: {
+    type: String,
+    default: ''
+  },
+  ifscCode: {
+    type: String,
+    default: ''
+  },
   processedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'

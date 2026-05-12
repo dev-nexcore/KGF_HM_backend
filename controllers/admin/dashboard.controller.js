@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Student } from '../../models/student.model.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
 import { Inventory } from '../../models/inventory.model.js';
+import { StaffSalary } from '../../models/staffSalary.model.js';
 
 
 const getTotalRevenue = async (req, res) => {
@@ -24,18 +25,24 @@ const getTotalRevenue = async (req, res) => {
 
 const getPendingPayments = async (req, res) => {
   try {
-    const pendingPayments = await StudentInvoice.aggregate([
+    const pendingInvoices = await StudentInvoice.aggregate([
       { $match: { status: 'pending' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    // Also get count of pending invoices
-    const pendingCount = await StudentInvoice.countDocuments({ status: 'pending' });
+    // Get pending salaries
+    const pendingSalaries = await StaffSalary.aggregate([
+      { $match: { status: 'pending' } },
+      { $group: { _id: null, total: { $sum: '$netSalary' } } }
+    ]);
+
+    const totalPending = (pendingInvoices[0]?.total || 0) + (pendingSalaries[0]?.total || 0);
 
     return res.json({
       message: "Pending payments fetched successfully",
-      pendingPayments: pendingPayments[0]?.total || 0,
-      pendingInvoicesCount: pendingCount
+      pendingPayments: totalPending,
+      pendingInvoicesCount: await StudentInvoice.countDocuments({ status: 'pending' }),
+      pendingSalariesCount: await StaffSalary.countDocuments({ status: 'pending' })
     });
 
   } catch (err) {
@@ -46,51 +53,41 @@ const getPendingPayments = async (req, res) => {
 
 const getFinancialSummary = async (req, res) => {
   try {
-    // Get total revenue
-    const totalRevenue = await StudentInvoice.aggregate([
+    // Total Revenue from Student Invoices (Paid)
+    const revenueIn = await StudentInvoice.aggregate([
       { $match: { status: 'paid' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    // Get pending payments
-    const pendingPayments = await StudentInvoice.aggregate([
+    // Total Salaries Paid (Out)
+    const salariesOut = await StaffSalary.aggregate([
+      { $match: { status: 'paid' } },
+      { $group: { _id: null, total: { $sum: '$netSalary' } } }
+    ]);
+
+    // Pending Invoices (Incoming)
+    const pendingInvoices = await StudentInvoice.aggregate([
       { $match: { status: 'pending' } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    // Get overdue payments (past due date)
-    const today = new Date();
-    const overduePayments = await StudentInvoice.aggregate([
-      { 
-        $match: { 
-          status: 'pending',
-          dueDate: { $lt: today }
-        } 
-      },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
+    // Pending Salaries (Outgoing)
+    const pendingSalaries = await StaffSalary.aggregate([
+      { $match: { status: 'pending' } },
+      { $group: { _id: null, total: { $sum: '$netSalary' } } }
     ]);
 
-    // Get counts
-    const totalInvoices = await StudentInvoice.countDocuments();
-    const paidInvoices = await StudentInvoice.countDocuments({ status: 'paid' });
-    const pendingInvoices = await StudentInvoice.countDocuments({ status: 'pending' });
-    const overdueInvoices = await StudentInvoice.countDocuments({ 
-      status: 'pending',
-      dueDate: { $lt: today }
-    });
+    const totalRevenue = (revenueIn[0]?.total || 0);
+    const totalPending = (pendingInvoices[0]?.total || 0) + (pendingSalaries[0]?.total || 0);
 
     return res.json({
       message: "Financial summary fetched successfully",
       revenue: {
-        totalRevenue: totalRevenue[0]?.total || 0,
-        pendingPayments: pendingPayments[0]?.total || 0,
-        overduePayments: overduePayments[0]?.total || 0
-      },
-      invoiceCounts: {
-        total: totalInvoices,
-        paid: paidInvoices,
-        pending: pendingInvoices,
-        overdue: overdueInvoices
+        totalRevenue,
+        salariesPaid: salariesOut[0]?.total || 0,
+        pendingPayments: totalPending,
+        pendingInvoices: pendingInvoices[0]?.total || 0,
+        pendingSalaries: pendingSalaries[0]?.total || 0
       }
     });
 

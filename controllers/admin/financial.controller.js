@@ -117,7 +117,8 @@ const getStudentInvoices = async (req, res) => {
         dueDate: invoice.dueDate,
         status: invoice.status,
         invoiceType: invoice.invoiceType,
-        paidDate: invoice.paidDate
+        paidDate: invoice.paidDate,
+        studentId: invoice.studentId?._id
       })),
       pagination: {
         currentPage: parseInt(page),
@@ -319,39 +320,80 @@ const updateManagementInvoiceStatus = async (req, res) => {
 
 
 const generateStaffSalary = async (req, res) => {
-  const { staffId, month, year, basicSalary, allowances, deductions, tax, pf, loanDeduction } = req.body;
+  console.log("💰 Processing salary request:", req.body);
+  const { 
+    staffId, 
+    month, 
+    year, 
+    basicSalary, 
+    allowances = 0, 
+    deductions = 0, 
+    tax = 0, 
+    pf = 0, 
+    loanDeduction = 0,
+    paymentMethod = 'bank_transfer',
+    bankName = '',
+    accountNumber = '',
+    ifscCode = ''
+  } = req.body;
 
   try {
+    // Basic validation
+    if (!staffId || !month || !year || basicSalary === undefined) {
+      console.log("❌ Validation failed: missing fields");
+      return res.status(400).json({ message: "Missing required fields: staffId, month, year, or basicSalary" });
+    }
+
     // Find staff member
     const staff = await Warden.findById(staffId);
     if (!staff) {
-      return res.status(404).json({ message: "Staff member not found" });
+      console.log("❌ Warden not found:", staffId);
+      return res.status(404).json({ message: "Staff member (Warden) not found" });
     }
 
     // Check if salary already exists for this month/year
     const existingSalary = await StaffSalary.findOne({ staffId, month, year });
     if (existingSalary) {
-      return res.status(400).json({ message: "Salary already generated for this month" });
+      console.log("❌ Salary already exists for this period");
+      return res.status(400).json({ message: `Salary already generated for ${staff.firstName} in ${month}` });
+    }
+
+    // Ensure all values are numbers
+    const bSalary = Number(basicSalary);
+    const allow = Number(allowances);
+    const ded = Number(deductions);
+    const t = Number(tax);
+    const p = Number(pf);
+    const loan = Number(loanDeduction);
+
+    if (isNaN(bSalary) || isNaN(allow) || isNaN(ded)) {
+      console.log("❌ Invalid numeric values");
+      return res.status(400).json({ message: "Invalid numeric values provided" });
     }
 
     // Calculate net salary
-    const netSalary = basicSalary + allowances - deductions - tax - pf - loanDeduction;
+    const netSalary = bSalary + allow - ded - t - p - loan;
 
     const newSalary = new StaffSalary({
       staffId,
       month,
       year,
-      basicSalary,
-      allowances,
-      deductions,
-      tax,
-      pf,
-      loanDeduction,
+      basicSalary: bSalary,
+      allowances: allow,
+      deductions: ded,
+      tax: t,
+      pf: p,
+      loanDeduction: loan,
       netSalary,
+      paymentMethod,
+      bankName,
+      accountNumber,
+      ifscCode,
       processedBy: req.admin?._id
     });
 
     await newSalary.save();
+    console.log("✅ Salary saved successfully");
 
     // Create audit log
     await createAuditLog({
@@ -365,18 +407,31 @@ const generateStaffSalary = async (req, res) => {
     });
 
     return res.json({
+      success: true,
       message: "Staff salary generated successfully",
       salary: {
+        _id: newSalary._id,
         staffName: `${staff.firstName} ${staff.lastName}`,
         month,
         year,
+        basicSalary: bSalary,
         netSalary,
-        status: 'pending'
+        status: 'pending',
+        bankName,
+        accountNumber,
+        ifscCode,
+        paymentMethod
       }
     });
 
   } catch (err) {
-    console.error("Generate staff salary error:", err);
+    console.error("🔥 Generate staff salary error:", err);
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ message: err.message });
+    }
+    if (err.code === 11000) {
+      return res.status(400).json({ message: "Duplicate salary record detected" });
+    }
     return res.status(500).json({ message: "Error generating staff salary." });
   }
 };
@@ -394,6 +449,7 @@ const getStaffSalaries = async (req, res) => {
 
     const salaries = await StaffSalary.find(query)
       .populate('staffId', 'firstName lastName wardenId email')
+      .populate('processedBy', 'firstName lastName adminId')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -414,6 +470,7 @@ const getStaffSalaries = async (req, res) => {
     ]);
 
     return res.json({
+      success: true,
       message: "Staff salaries fetched successfully",
       salaries: salaries.map(salary => ({
         _id: salary._id,
@@ -427,7 +484,12 @@ const getStaffSalaries = async (req, res) => {
         loanDeduction: salary.loanDeduction,
         netSalary: salary.netSalary,
         status: salary.status,
-        paymentDate: salary.paymentDate
+        paymentDate: salary.paymentDate,
+        bankName: salary.bankName,
+        accountNumber: salary.accountNumber,
+        ifscCode: salary.ifscCode,
+        paymentMethod: salary.paymentMethod,
+        processedByName: salary.processedBy ? `${salary.processedBy.firstName} ${salary.processedBy.lastName}` : 'System Admin'
       })),
       totals: {
         totalPayroll: totals[0]?.totalPayroll || 0,

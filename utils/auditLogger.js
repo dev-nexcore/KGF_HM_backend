@@ -57,7 +57,8 @@ const AuditActionTypes = {
   ADMIN_LOGOUT: 'Admin Logout',
   PASSWORD_RESET: 'Password Reset',
   BULK_LEAVE_UPDATE: 'Bulk Leave Update',
-  BULK_COMPLAINT_UPDATE: 'Bulk Complaint Update'
+  BULK_COMPLAINT_UPDATE: 'Bulk Complaint Update',
+  SALARY_GENERATED: 'Salary Generated'
 };
 
 export{

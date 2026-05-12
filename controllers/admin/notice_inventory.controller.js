@@ -613,7 +613,13 @@ const generateQRCode = async (req, res) => {
 const getItemByQRSlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    const inventoryItem = await Inventory.findOne({ publicSlug: slug });
+    // Robust search: try publicSlug first, then barcodeId
+    const inventoryItem = await Inventory.findOne({
+      $or: [
+        { publicSlug: slug },
+        { barcodeId: slug }
+      ]
+    });
 
     if (!inventoryItem) {
       return res.status(404).json({
