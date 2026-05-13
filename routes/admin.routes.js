@@ -75,7 +75,9 @@ import {
   generateSalarySlip,
   initiateRefund,
   getRefunds,
-  updateRefundStatus
+  updateRefundStatus,
+  createRazorpayOrder,
+  verifyRazorpayPayment
 } from "../controllers/admin/financial.controller.js";
 
 import {
@@ -228,6 +230,10 @@ router.patch('/inspections/:inspectionId/status',verifyAdminToken, updateInspect
 router.post('/invoices/student', generateStudentInvoice);
 router.get('/invoices/student', getStudentInvoices);
 router.put('/invoices/student/:invoiceId/status', updateStudentInvoiceStatus);
+
+// Razorpay Payments
+router.post('/razorpay/create-order', createRazorpayOrder);
+router.post('/razorpay/verify-payment', verifyRazorpayPayment);
 
 // Management Invoices
 router.post('/invoices/management', createManagementInvoice);

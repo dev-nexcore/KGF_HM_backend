@@ -28,10 +28,12 @@ import {
   uploadMyProfileImage,
   deleteMyProfileImage,
   getNotifications,
-  markNotificationsAsSeen
+  markNotificationsAsSeen,
+  uploadMyDocument,
+  getMyDocument
 } from '../controllers/student.controller.js';
 import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
-import { uploadStudent, uploadComplaint } from '../middleware/upload.js';
+import { uploadStudent, uploadComplaint, uploadSingleStudentDocument } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -78,7 +80,7 @@ router.get("/leaves/:studentId", getLeaveHistory);
 router.get("/refunds/:studentId", getRefundHistory);
 router.put("/profile/:studentId", updateStudentProfile);
 router.get("/feeStatus/:studentId", getCurrentFeesStatus);
-router.get('/inspectionSchedule/:studentId', getNextInspection);
+// router.get('/inspectionSchedule/:studentId', getNextInspection);
 router.get('/attendanceSummary/:studentId', getAttendanceSummary);
 router.get('/notifications',  getNotifications);
 router.post('/notifications/mark-seen', markNotificationsAsSeen);
@@ -87,6 +89,12 @@ router.post('/upload-profile-image/:studentId',
   uploadStudent.single('profileImage'),
   uploadMyProfileImage
 );
+router.post('/upload-document/:studentId',
+  uploadSingleStudentDocument.single('document'),
+  uploadMyDocument
+);
+
+router.get('/student-document/:docType', getMyDocument);
 
 router.delete('/delete-profile-image/:studentId', deleteMyProfileImage);
 

@@ -16,12 +16,11 @@ export const ipWhitelist = (req, res, next) => {
 
 const verifyAdminToken = (req, res, next) => {
     const authHeader = req.headers.authorization;
+    let token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : req.query.token;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: "Unauthorized access" });
+    if (!token) {
+        return res.status(401).json({ message: "Unauthorized access - No token provided" });
     }
-
-    const token = authHeader.split(' ')[1];
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -41,13 +40,11 @@ const verifyAdminToken = (req, res, next) => {
 
 const verifyWardenToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
+  let token = authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : req.query.token;
 
-  // Check if Authorization header is present and starts with Bearer
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!token) {
     return res.status(401).json({ message: "Access denied. No token provided." });
   }
-
-  const token = authHeader.split(" ")[1];
 
   try {
     // Verify the token using your secret key
@@ -65,12 +62,7 @@ const verifyWardenToken = (req, res, next) => {
 const authenticateParent = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'No token provided' });
-    }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    let token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : req.query.token;
     
     if (!token) {
       return res.status(401).json({ message: 'No token provided' });

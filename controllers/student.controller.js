@@ -1356,6 +1356,7 @@ import Attendance from "../models/attendance.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Refund } from "../models/refund.model.js";
 import { Fee } from "../models/fee.model.js";
+import { StudentInvoice } from "../models/studentInvoice.model.js";
 import { Notice } from "../models/notice.model.js";
 import { Inspection } from '../models/inspection.model.js';
 import { Inventory } from '../models/inventory.model.js';
@@ -2472,6 +2473,66 @@ const uploadMyProfileImage = async (req, res) => {
   }
 };
 
+// Upload a specific compliance document
+const uploadMyDocument = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { documentType } = req.body; // e.g., 'aadharCard', 'panCard', 'studentIdCard', 'feesReceipt'
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file provided' });
+    }
+
+    if (!['aadharCard', 'panCard', 'studentIdCard', 'feesReceipt'].includes(documentType)) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: 'Invalid document type' });
+    }
+
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    // Delete old document if exists
+    if (student.documents && student.documents[documentType] && student.documents[documentType].path) {
+      const oldPath = path.join(process.cwd(), student.documents[documentType].path);
+      if (fs.existsSync(oldPath)) {
+        try {
+          fs.unlinkSync(oldPath);
+        } catch (e) { console.error('Error deleting old doc:', e); }
+      }
+    }
+
+    // Update student
+    const filePath = req.file.path.replace(/\\/g, '/');
+    if (!student.documents) student.documents = {};
+    
+    student.documents[documentType] = {
+      filename: req.file.filename,
+      path: filePath,
+      uploadedAt: new Date()
+    };
+
+    // Mark as modified if it's a nested object
+    student.markModified('documents');
+    await student.save();
+
+    const imageUrl = `${req.protocol}://${req.get('host')}/${filePath}`;
+
+    res.status(200).json({
+      success: true,
+      message: `${documentType} uploaded successfully`,
+      url: imageUrl
+    });
+
+  } catch (error) {
+    console.error('Document upload error:', error);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ success: false, message: 'Upload failed', error: error.message });
+  }
+};
+
 // Delete student's own profile image
 const deleteMyProfileImage = async (req, res) => {
   try {
@@ -2578,6 +2639,21 @@ const getStudentProfile = async (req, res) => {
 
     console.log("✔️ Profile image URL sent:", imageUrl);
 
+    const formatDocUrl = (doc) => {
+      if (!doc || !doc.path) return null;
+      const imgPath = doc.path.replace(/\\/g, "/");
+      return imgPath.startsWith("http")
+        ? imgPath
+        : `${req.protocol}://${req.get("host")}/${imgPath}`;
+    };
+
+    const formattedDocs = {
+      aadharCard: formatDocUrl(student.documents?.aadharCard),
+      panCard: formatDocUrl(student.documents?.panCard),
+      studentIdCard: formatDocUrl(student.documents?.studentIdCard),
+      feesReceipt: formatDocUrl(student.documents?.feesReceipt),
+    };
+
     return res.json({
       firstName: student.firstName,
       lastName: student.lastName,
@@ -2592,6 +2668,10 @@ const getStudentProfile = async (req, res) => {
       lastCheckInDate: lastLog?.checkInDate || null,
       checkStatus,
       checkTime,
+      emergencyContactName: student.emergencyContactName,
+      emergencyContactNumber: student.emergencyContactNumber,
+      admissionDate: student.admissionDate,
+      documents: formattedDocs,
     });
 
   } catch (err) {
@@ -2641,16 +2721,25 @@ const getCurrentFeesStatus = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const fees = await Fee.find({ studentId: student._id }).select("feeType amount status dueDate");
+    // UPDATED: Now fetching from StudentInvoice (used by Admin) instead of Fee model
+    const invoices = await StudentInvoice.find({ studentId: student._id })
+      .select("invoiceType amount status dueDate invoiceNumber paidDate description")
+      .sort({ dueDate: -1 });
 
     const now = new Date();
 
-    const updatedFees = fees.map((fee) => {
-      const isOverdue = fee.status === 'unpaid' && new Date(fee.dueDate) < now;
+    const updatedFees = invoices.map((invoice) => {
+      const isOverdue = invoice.status === 'pending' && new Date(invoice.dueDate) < now;
 
       return {
-        ...fee.toObject(),
-        status: isOverdue ? 'overdue' : fee.status,
+        _id: invoice._id,
+        feeType: invoice.invoiceType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // hostel_fee -> Hostel Fee
+        amount: invoice.amount,
+        status: isOverdue ? 'overdue' : invoice.status === 'pending' ? 'unpaid' : invoice.status,
+        dueDate: invoice.dueDate,
+        paidDate: invoice.paidDate,
+        invoiceNumber: invoice.invoiceNumber,
+        description: invoice.description
       };
     });
 
@@ -2687,7 +2776,7 @@ const getNextInspection = async (req, res) => {
     const student = await Student.findOne({ studentId }).populate('roomBedNumber');
 
     if (!student || !student.roomBedNumber) {
-      return res.status(404).json({ message: 'Student room not found' });
+      return res.status(200).json(null);
     }
 
     const targetRoom = `Room ${student.roomBedNumber.roomNo || student.roomBedNumber}`;
@@ -2940,6 +3029,45 @@ const getStudentAttendance = async (req, res) => {
   }
 };
 
+const getMyDocument = async (req, res) => {
+  try {
+    const { docType } = req.params;
+    const studentId = req.studentId;
+
+    if (!studentId) {
+      return res.status(401).json({ message: "Student not authenticated" });
+    }
+
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    if (!student.documents || !student.documents[docType]) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    const documentData = student.documents[docType];
+    const filePath = documentData.path || documentData.filename;
+
+    if (!filePath) {
+      return res.status(404).json({ message: "Document path not found" });
+    }
+
+    const absolutePath = path.resolve(filePath);
+
+    if (fs.existsSync(absolutePath)) {
+      return res.sendFile(absolutePath);
+    } else {
+      console.error(`File not found on disk: ${absolutePath}`);
+      return res.status(404).json({ message: "File not found on server" });
+    }
+  } catch (err) {
+    console.error("Get my document error:", err);
+    return res.status(500).json({ message: "Server error while fetching document" });
+  }
+};
+
 export {
   sendLoginOTP,
   login,
@@ -2965,7 +3093,8 @@ export {
   getAttendanceLog,
   deleteMyProfileImage,
   uploadMyProfileImage,
+  uploadMyDocument,
   getNotifications,
   markNotificationsAsSeen,
-  getStudentAttendance
+  getStudentAttendance, getMyDocument
 }

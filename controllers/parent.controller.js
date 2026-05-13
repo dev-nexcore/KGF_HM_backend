@@ -9,10 +9,13 @@ import { Otp } from "../models/otp.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Notice } from "../models/notice.model.js";
 import { Refund } from "../models/refund.model.js";
+import { StudentInvoice } from "../models/studentInvoice.model.js";
+import Attendance from "../models/attendance.model.js"; // Import Attendance model if exists
 
 import path from 'path';
 import fs from 'fs';
-
+import crypto from 'crypto';
+import razorpay from '../config/razorpay.config.js';
 import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js";
 
 
@@ -432,7 +435,8 @@ const getProfile = async (req, res) => {
         contactNumber: student.contactNumber,
         admissionDate: student.admissionDate,
         emergencyContactName: student.emergencyContactName,
-        emergencyContactNumber: student.emergencyContactNumber
+        emergencyContactNumber: student.emergencyContactNumber,
+        documents: student.documents || null, // Include documents
       }
     };
 
@@ -523,7 +527,8 @@ const getStudentProfile = async (req, res) => {
       profileImage: imageUrl, // This should now work properly
       photo: imageUrl, // Also provide as 'photo' field for compatibility
       createdAt: student.createdAt,
-      updatedAt: student.updatedAt
+      updatedAt: student.updatedAt,
+      documents: student.documents || null, // Include documents
     };
 
     console.log('✅ Sending profile with image:', studentProfile.profileImage);
@@ -712,51 +717,111 @@ const dashboard = async (req, res) => {
   }
 
   try {
-    // Run both DB queries at the same time
-    const [student, warden] = await Promise.all([
-      Student.findOne({ studentId })
-        .populate({ path: "roomBedNumber", select: "location floor roomNo itemName description barCodeId" })
-        .lean(),
-
-      Warden.findOne({ wardenId: "W123" }).lean(), // TODO: make dynamic
-    ]);
-    console.log("student details:", student)
+    // 1. Fetch Student with room details
+    const student = await Student.findOne({ studentId })
+      .populate({ path: "roomBedNumber", select: "location floor roomNo itemName description barCodeId" })
+      .lean();
 
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // 2. Fetch Invoices for Fees Overview
+    const invoices = await StudentInvoice.find({ studentId: student._id }).sort({ createdAt: -1 });
+    
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    const amountDue = invoices
+      .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+      .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    
+    const lastPaidInvoice = invoices.find(inv => inv.status === 'paid');
+    const paidDate = lastPaidInvoice ? lastPaidInvoice.paidDate : null;
+
+    // 3. Attendance Summary (from student model or separate collection)
+    // If student model has summary, use it. Otherwise calculate.
+    const totalDays = student.attendanceSummary?.totalDays || 0;
+    const presentDays = student.attendanceSummary?.presentDays || 0;
+    const absentDays = student.attendanceSummary?.absentDays || 0;
+    
+    // Find last absence
+    let lastAbsence = "No recent absences";
+    if (student.attendanceLog && student.attendanceLog.length > 0) {
+      // This depends on how attendanceLog is structured. 
+      // Assuming it's a list of records where status might be 'absent'
+      // But usually, attendance is a separate collection.
+    }
+
+    // 4. Warden Info (Try to find warden for the room/floor)
+    let warden = null;
+    if (student.roomBedNumber?.floor) {
+       warden = await Warden.findOne({ floor: student.roomBedNumber.floor }).lean();
+    }
+    if (!warden) {
+      warden = await Warden.findOne({ wardenId: "W123" }).lean(); // Fallback
+    }
+
+    // 5. Fetch Latest Notices (Last 3)
+    const latestNotices = await Notice.find()
+      .sort({ issueDate: -1 })
+      .limit(3)
+      .lean();
+
+    // 6. Fetch Latest Leave Request
+    const latestLeave = await Leave.findOne({ studentId: student._id })
+      .sort({ appliedAt: -1 })
+      .lean();
+
     const roomBedDisplay = getRoomBedDisplay(student.roomBedNumber);
     const roomBedDetails = getRoomBedDetails(student.roomBedNumber);
     const wardenName = warden ? `${warden.firstName} ${warden.lastName}` : "Not Assigned";
+
+    // Handle profile image
+    let imageUrl = null;
+    if (student.profileImage && typeof student.profileImage === "string" && student.profileImage.trim() !== "") {
+      const imgPath = student.profileImage.replace(/\\/g, "/");
+      imageUrl = imgPath.startsWith("http")
+        ? imgPath
+        : `${req.protocol}://${req.get("host")}/${imgPath}`;
+    }
 
     return res.status(200).json({
       studentInfo: {
         studentId: student.studentId,
         firstName: student.firstName,
         lastName: student.lastName,
-        photo: student.profileImage || null,
+        profileImage: imageUrl,
+        photo: imageUrl,
         contactNumber: student.contactNumber,
         email: student.email,
         roomBedNumber: roomBedDisplay,
         roomBedDetails: roomBedDetails,
-        admissionDate: student.admissionDate,
-        checkInDate: student.checkInDate,
-        checkOutDate: student.checkOutDate,
-        emergencyContactName: student.emergencyContactName,
-        emergencyContactNumber: student.emergencyContactNumber,
+        documents: student.documents || null, // Include documents
       },
       attendanceSummary: {
-        totalDays: student.attendanceSummary?.totalDays || 0,
-        presentDays: student.attendanceSummary?.presentDays || 0,
-        absentDays: student.attendanceSummary?.absentDays || 0,
+        totalDays,
+        presentDays,
+        absentDays,
+        attendancePercentage: totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0,
+        isPresentToday: student.attendanceLog?.some(log => 
+          new Date(log.checkInDate).toDateString() === new Date().toDateString()
+        ) || false,
+        lastAbsence: student.lastAbsenceDate || "N/A"
       },
       feesOverview: {
-        status: student.feeStatus || "Not Available",
-        totalAmount: student.feeAmount || 0,
-        amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
+        status: amountDue > 0 ? "Pending" : (totalAmount > 0 ? "Paid" : "No Invoice"),
+        totalAmount,
+        amountDue,
+        paidDate: paidDate,
+        dueDate: invoices.find(inv => inv.status === 'pending')?.dueDate || "N/A"
       },
-      wardenInfo: { wardenName },
+      wardenInfo: { wardenName, contactNumber: warden?.contactNumber || "N/A" },
+      latestNotices,
+      latestLeave: latestLeave ? {
+        type: latestLeave.leaveType,
+        status: latestLeave.status,
+        startDate: latestLeave.startDate,
+        endDate: latestLeave.endDate
+      } : null
     });
 
   } catch (err) {
@@ -1251,6 +1316,130 @@ const markNoticeAsRead = async (req, res) => {
   }
 };
 
+
+// ====================== RAZORPAY INTEGRATION FOR PARENTS ======================
+
+const createRazorpayOrder = async (req, res) => {
+  const { amount, currency = 'INR', studentId } = req.body;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) return res.status(404).json({ message: "Student not found" });
+
+    const options = {
+      amount: Math.round(amount * 100), // amount in the smallest currency unit
+      currency,
+      receipt: `RCPT_${Date.now()}`,
+      notes: {
+        studentId: student.studentId,
+        studentName: `${student.firstName} ${student.lastName}`
+      }
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    return res.json({
+      success: true,
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency
+    });
+  } catch (err) {
+    console.error("Create Razorpay order error:", err);
+    return res.status(500).json({ message: "Error creating payment order." });
+  }
+};
+
+const verifyRazorpayPayment = async (req, res) => {
+  const { 
+    razorpay_order_id, 
+    razorpay_payment_id, 
+    razorpay_signature 
+  } = req.body;
+
+  try {
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    const isSignatureValid = expectedSignature === razorpay_signature;
+
+    if (!isSignatureValid) {
+      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    }
+
+    return res.json({
+      success: true,
+      message: "Payment verified successfully"
+    });
+
+  } catch (err) {
+    console.error("Verify Razorpay payment error:", err);
+    return res.status(500).json({ message: "Error verifying payment." });
+  }
+};
+
+// Serve student document files directly for Parent
+const getStudentDocument = async (req, res) => {
+  try {
+    const parentStudentId = req.studentId; // From the parent's JWT token
+    const { docType } = req.params;
+
+    const allowedDocs = [
+      "aadharCard",
+      "panCard",
+      "studentIdCard",
+      "feesReceipt",
+    ];
+
+    if (!allowedDocs.includes(docType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document type",
+      });
+    }
+
+    const student = await Student.findOne({ studentId: parentStudentId });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    const document = student.documents?.[docType];
+
+    if (!document || !document.path) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+
+    const filePath = path.resolve(document.path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "File missing on server",
+      });
+    }
+
+    return res.sendFile(filePath);
+
+  } catch (error) {
+    console.error("Document view error for Parent:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error opening document",
+    });
+  }
+};
+
 export {
   sendLoginOTP,      // NEW: Added for OTP login
   login,             // UPDATED: Now uses OTP instead of password
@@ -1273,7 +1462,11 @@ export {
   notices,
   getRefundHistory,
   requestRefund,
-  markNoticeAsRead
+  markNoticeAsRead,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
+  getStudentDocument, // Added this
 };
+
 
 

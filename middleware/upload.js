@@ -440,6 +440,14 @@ export const uploadStudentDocuments = multer({
   { name: "feesReceipt", maxCount: 1 },
 ]);
 
+export const uploadSingleStudentDocument = multer({
+  storage: studentDocumentStorage,
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+});
+
 // Parent documents upload
 export const uploadParentDocuments = multer({
   storage: parentDocumentStorage,

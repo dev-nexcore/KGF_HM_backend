@@ -644,6 +644,7 @@ const getStudentListForWarden = async (req, res) => {
         barcodeId: student.roomBedNumber?.barcodeId || null,
         roomNo: student.roomBedNumber?.roomNo || null,
         status: currentStatus,
+        documents: student.documents || null, // Include documents
       };
     });
 
@@ -1444,6 +1445,64 @@ const updateEmergencyContact = async (req, res) => {
 
 
 
+// Serve student document files directly for Warden
+const getStudentDocument = async (req, res) => {
+  try {
+    const { studentId, docType } = req.params;
+
+    const allowedDocs = [
+      "aadharCard",
+      "panCard",
+      "studentIdCard",
+      "feesReceipt",
+    ];
+
+    if (!allowedDocs.includes(docType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document type",
+      });
+    }
+
+    const student = await Student.findOne({ studentId });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    const document = student.documents?.[docType];
+
+    if (!document || !document.path) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+
+    const filePath = path.resolve(document.path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "File missing on server",
+      });
+    }
+
+    return res.sendFile(filePath);
+
+  } catch (error) {
+    console.error("Document view error for Warden:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error opening document",
+    });
+  }
+};
+
 export {
   sendLoginOTP,
   login as loginWarden,
@@ -1479,4 +1538,5 @@ export {
   getAllAvailableBed,
   deleteInspection,
   checkPunchStatus,
+  getStudentDocument,
 }

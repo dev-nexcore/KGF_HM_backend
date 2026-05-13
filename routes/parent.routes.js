@@ -1,5 +1,5 @@
 import express from 'express';
-import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile,getStudentProfile, uploadProfileImage, updateProfile, removeProfileImage } from '../controllers/parent.controller.js';
+import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile,getStudentProfile, uploadProfileImage, updateProfile, removeProfileImage, createRazorpayOrder, verifyRazorpayPayment, getStudentDocument } from '../controllers/parent.controller.js';
 import { authenticateParent,verifyStudentOrParentToken } from '../middleware/auth.middleware.js';
 import {uploadParent} from '../middleware/upload.js';
 import { requestRefund, getRefundHistory } from '../controllers/parent.controller.js';
@@ -12,6 +12,7 @@ router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
+router.get('/student-document/:docType', authenticateParent, getStudentDocument);
 router.get('/profile', authenticateParent, getProfile);
 router.post('/profile/image', authenticateParent, uploadParent.single('profileImage'), uploadProfileImage);
 router.put('/profile', authenticateParent, updateProfile);
@@ -25,8 +26,13 @@ router.get('/fees',authenticateParent, fees);
 router.get('/notices',authenticateParent, notices);
 router.patch('/notices/:noticeId/read',authenticateParent, markNoticeAsRead);
 router.post('/refresh-token', refreshAccessToken);
+
+// Razorpay routes
+router.post('/create-razorpay-order', authenticateParent, createRazorpayOrder);
+router.post('/verify-razorpay-payment', authenticateParent, verifyRazorpayPayment);
+
 //refund routes
 
 router.post("/refund", verifyStudentOrParentToken, requestRefund);
 router.get("/refunds", verifyStudentOrParentToken, getRefundHistory);
-export default router;
+export default router;
