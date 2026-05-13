@@ -9,6 +9,7 @@ import wardenRoutes from "./routes/warden.routes.js";
 import studentRoutes from "./routes/student.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import staffRoutes from "./routes/staff.routes.js";
+import inquiryRoutes from "./routes/inquiry.routes.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -73,6 +74,7 @@ app.use(
   "/api/staffauth",
   staffRoutes
 );
+app.use("/api/inquiries", inquiryRoutes);
 
 // ----- Static files (uploads) -----
 const __filename = fileURLToPath(import.meta.url);
