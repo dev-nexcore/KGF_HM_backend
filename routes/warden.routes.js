@@ -34,7 +34,13 @@ import {
   deleteInspection,
   checkPunchStatus,
   sendLoginOTP,
-  getStudentDocument
+  getStudentDocument,
+  registerWorker,
+  registerStudent,
+  registerParent,
+  getAllWorkers,
+  getAllParents,
+  getWardenRequisitions,
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -105,6 +111,23 @@ router.delete("/delete/:id", deleteWarden);
 router.get("/emergency-contact", getEmergencyContacts);
 router.put('/emergency-contact/:studentId', updateEmergencyContact);
 
+
+// Worker Registration and Management
+router.post("/register-worker", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerWorker);
+router.get("/workers", getAllWorkers);
+
+
+// Student Registration
+router.post("/register-student", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerStudent);
+
+
+// Parent Registration and Management
+router.post("/register-parent", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerParent);
+router.get("/parents", getAllParents);
+
+
+// Requisitions
+router.get("/requisitions", verifyWardenToken, getWardenRequisitions);
 
 
 export default router;

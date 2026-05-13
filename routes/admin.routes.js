@@ -129,7 +129,8 @@ import{
 import {
   getAllRequisitions,
   updateRequisitionStatus,
-  getRequisitionById
+  getRequisitionById,
+  getRequisitionStats
 } from "../controllers/admin/requisition.controller.js";
 
 import {
@@ -258,8 +259,9 @@ router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
 
 // ====================== WARDEN REQUISITION ROUTES ======================
-router.get('/requisitions', getAllRequisitions);
+router.get('/requisitions/stats', getRequisitionStats);
 router.get('/requisitions/:id', getRequisitionById);
+router.get('/requisitions', getAllRequisitions);
 router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus);
 
 // ====================== ATTENDANCE ROUTES ======================

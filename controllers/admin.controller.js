@@ -25,6 +25,8 @@ import { StudentInvoice } from '../models/studentInvoice.model.js';
 import { ManagementInvoice } from '../models/managementInvoice.model.js';
 import { StaffSalary } from '../models/staffSalary.model.js';
 import { Refund } from '../models/refund.model.js';
+import { Requisition } from '../models/requisition.model.js';
+import { Staff } from '../models/staff.model.js';
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
     host:    process.env.MAIL_HOST,      // smtp.gmail.com
@@ -2556,6 +2558,328 @@ const exportAuditLogs = async (req, res) => {
 };
 
 
+// <--------- Requisition Management ----------->
+
+// Get all requisitions with optional filters
+const getAllRequisitions = async (req, res) => {
+  try {
+    const { status, type, search } = req.query;
+    
+    const filter = {};
+    
+    if (status) {
+      filter.status = status;
+    }
+    
+    if (type) {
+      filter.requisitionType = type;
+    }
+    
+    if (search) {
+      filter.$or = [
+        { requestedByName: { $regex: search, $options: 'i' } },
+        { _id: mongoose.Types.ObjectId.isValid(search) ? search : null }
+      ];
+    }
+    
+    const requisitions = await Requisition.find(filter)
+      .populate('requestedBy', 'wardenId firstName lastName email')
+      .sort({ createdAt: -1 })
+      .lean();
+    
+    return res.status(200).json({
+      success: true,
+      requisitions,
+    });
+  } catch (error) {
+    console.error("Error fetching requisitions:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch requisitions",
+      error: error.message,
+    });
+  }
+};
+
+// Get requisition statistics
+const getRequisitionStats = async (req, res) => {
+  try {
+    const total = await Requisition.countDocuments();
+    const pending = await Requisition.countDocuments({ status: 'pending' });
+    const approved = await Requisition.countDocuments({ status: 'approved' });
+    const rejected = await Requisition.countDocuments({ status: 'rejected' });
+    
+    return res.status(200).json({
+      success: true,
+      stats: {
+        total,
+        pending,
+        approved,
+        rejected,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching requisition stats:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch requisition statistics",
+      error: error.message,
+    });
+  }
+};
+
+// Approve requisition and create entity
+const approveRequisition = async (req, res) => {
+  try {
+    const { requisitionId } = req.params;
+    const adminId = req.admin?.id;
+    
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Admin authentication required",
+      });
+    }
+    
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+    
+    const requisition = await Requisition.findById(requisitionId);
+    if (!requisition) {
+      return res.status(404).json({
+        success: false,
+        message: "Requisition not found",
+      });
+    }
+    
+    if (requisition.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status transition. Only pending requisitions can be approved.",
+      });
+    }
+    
+    const { requisitionType, data, documents } = requisition;
+    
+    // Check for duplicate email
+    let existingEntity;
+    if (requisitionType === 'student') {
+      existingEntity = await Student.findOne({ email: data.email });
+    } else if (requisitionType === 'parent') {
+      existingEntity = await Parent.findOne({ email: data.email });
+    } else if (requisitionType === 'worker' || requisitionType === 'staff') {
+      existingEntity = await Staff.findOne({ email: data.email });
+    }
+    
+    if (existingEntity) {
+      return res.status(409).json({
+        success: false,
+        message: "Email already registered",
+      });
+    }
+    
+    // Create entity based on type
+    let createdEntity;
+    let entityId;
+    let randomPassword = Math.random().toString(36).slice(-8);
+    
+    if (requisitionType === 'student') {
+      // Auto-generate Student ID
+      const lastStudent = await Student.findOne().sort({ studentId: -1 }).select("studentId");
+      let newStudentId = "STU001";
+      if (lastStudent && lastStudent.studentId) {
+        const lastIdNumber = parseInt(lastStudent.studentId.replace("STU", ""));
+        const nextIdNumber = lastIdNumber + 1;
+        newStudentId = `STU${String(nextIdNumber).padStart(3, "0")}`;
+      }
+      
+      createdEntity = new Student({
+        ...data,
+        studentId: newStudentId,
+        password: randomPassword,
+        documents,
+      });
+      await createdEntity.save();
+      entityId = newStudentId;
+      
+    } else if (requisitionType === 'parent') {
+      // Auto-generate Parent ID
+      const lastParent = await Parent.findOne().sort({ parentId: -1 }).select("parentId");
+      let newParentId = "PAR001";
+      if (lastParent && lastParent.parentId) {
+        const lastIdNumber = parseInt(lastParent.parentId.replace("PAR", ""));
+        const nextIdNumber = lastIdNumber + 1;
+        newParentId = `PAR${String(nextIdNumber).padStart(3, "0")}`;
+      }
+      
+      createdEntity = new Parent({
+        ...data,
+        parentId: newParentId,
+        password: randomPassword,
+        documents,
+      });
+      await createdEntity.save();
+      entityId = newParentId;
+      
+    } else if (requisitionType === 'worker' || requisitionType === 'staff') {
+      // Auto-generate Staff ID
+      const lastStaff = await Staff.findOne().sort({ staffId: -1 }).select("staffId");
+      let newStaffId = "STF001";
+      if (lastStaff && lastStaff.staffId) {
+        const lastIdNumber = parseInt(lastStaff.staffId.replace("STF", ""));
+        const nextIdNumber = lastIdNumber + 1;
+        newStaffId = `STF${String(nextIdNumber).padStart(3, "0")}`;
+      }
+      
+      createdEntity = new Staff({
+        ...data,
+        staffId: newStaffId,
+        password: randomPassword,
+        documents,
+        role: requisitionType === 'worker' ? 'worker' : 'staff',
+      });
+      await createdEntity.save();
+      entityId = newStaffId;
+    }
+    
+    // Update requisition status
+    requisition.status = 'approved';
+    requisition.approvedBy = adminId;
+    requisition.approvedByName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || admin.email;
+    requisition.approvedAt = new Date();
+    await requisition.save();
+    
+    // Send credentials email
+    try {
+      await transporter.sendMail({
+        from: `"Hostel Management" <${process.env.MAIL_USER}>`,
+        to: data.email,
+        subject: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} Registration - Login Credentials`,
+        text: `Hello ${data.firstName} ${data.lastName},\n\nYou have been registered in the Hostel Management System.\n\nYour login credentials:\nID: ${entityId}\nPassword: ${randomPassword}\n\nPlease change your password after first login.\n\n– Hostel Management System`,
+      });
+    } catch (emailError) {
+      console.error("Error sending credentials email:", emailError);
+      // Continue even if email fails
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} registered successfully`,
+      entityId,
+    });
+    
+  } catch (error) {
+    console.error("Error approving requisition:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to approve requisition",
+      error: error.message,
+    });
+  }
+};
+
+// Reject requisition
+const rejectRequisition = async (req, res) => {
+  try {
+    const { requisitionId } = req.params;
+    const { rejectionReason } = req.body;
+    const adminId = req.admin?.id;
+    
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Admin authentication required",
+      });
+    }
+    
+    if (!rejectionReason || rejectionReason.trim() === '') {
+      return res.status(400).json({
+        success: false,
+        message: "Rejection reason is required",
+      });
+    }
+    
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+    
+    const requisition = await Requisition.findById(requisitionId);
+    if (!requisition) {
+      return res.status(404).json({
+        success: false,
+        message: "Requisition not found",
+      });
+    }
+    
+    if (requisition.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status transition. Only pending requisitions can be rejected.",
+      });
+    }
+    
+    requisition.status = 'rejected';
+    requisition.rejectedBy = adminId;
+    requisition.rejectedByName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || admin.email;
+    requisition.rejectedAt = new Date();
+    requisition.rejectionReason = rejectionReason;
+    await requisition.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: "Requisition rejected successfully",
+    });
+    
+  } catch (error) {
+    console.error("Error rejecting requisition:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reject requisition",
+      error: error.message,
+    });
+  }
+};
+
+// Update requisition notes
+const updateRequisitionNotes = async (req, res) => {
+  try {
+    const { requisitionId } = req.params;
+    const { notes } = req.body;
+    
+    const requisition = await Requisition.findById(requisitionId);
+    if (!requisition) {
+      return res.status(404).json({
+        success: false,
+        message: "Requisition not found",
+      });
+    }
+    
+    requisition.notes = notes;
+    await requisition.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: "Notes updated successfully",
+    });
+    
+  } catch (error) {
+    console.error("Error updating requisition notes:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update notes",
+      error: error.message,
+    });
+  }
+};
 
 
 
@@ -2610,5 +2934,10 @@ export {
     generateSalarySlip,
     initiateRefund,
     getRefunds,
-    updateRefundStatus
+    updateRefundStatus,
+    getAllRequisitions,
+    getRequisitionStats,
+    approveRequisition,
+    rejectRequisition,
+    updateRequisitionNotes,
 };
