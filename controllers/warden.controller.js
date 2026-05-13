@@ -424,16 +424,24 @@ const getWardenDashboardStats = async (req, res) => {
     const totalStudents = await Student.countDocuments();
 
     // Total Beds
-    const totalBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i } });
+    const bedFilter = {
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    };
+
+    // Total Beds
+    const totalBeds = await Inventory.countDocuments(bedFilter);
 
     // In Use Beds
-    const inUseBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i }, status: 'In Use' });
+    const inUseBeds = await Inventory.countDocuments({ ...bedFilter, status: 'In Use' });
 
     // Available Beds
-    const availableBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i }, status: 'Available' });
+    const availableBeds = await Inventory.countDocuments({ ...bedFilter, status: 'Available' });
 
     // Damaged Beds
-    const damagedBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i }, status: 'Damaged' });
+    const damagedBeds = await Inventory.countDocuments({ ...bedFilter, status: 'Damaged' });
 
     // Upcoming Inspections (future + pending) — no limit
     const now = new Date();
@@ -473,7 +481,12 @@ const getBedStats = async (req, res) => {
   try {
     const stats = await Inventory.aggregate([
       {
-        $match:  { itemName: { $regex: /^Bed/i } } // Only count items with itemName === 'Bed'
+        $match:  { 
+          $or: [
+            { category: { $in: ['Furniture', 'BEDS'] } },
+            { itemName: { $regex: /Bed|B\d+/i } }
+          ]
+        } // Only count items with itemName === 'Bed' or BEDS category
       },
       {
         $group: {
@@ -524,8 +537,10 @@ const getBedStatusOverview = async (req, res) => {
 
     // Build filter object dynamically
     const filters = {
-      category: 'Furniture',
-      itemName: /bed/i
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
     };
 
     if (floor) filters.floor = floor;
@@ -718,7 +733,13 @@ const updateStudentRoom = async (req, res) => {
 
 const getAllAvailableBed = async (req, res) => {
   try {
-    const beds = await Inventory.find({ status: 'Available', itemName: { $regex: /^Bed/i } }).select('barcodeId roomNo');
+    const beds = await Inventory.find({ 
+      status: 'Available', 
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ] 
+    }).select('barcodeId roomNo');
     res.status(200).json({ success: true, beds });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch beds', error: error.message });

@@ -1236,8 +1236,10 @@ const downloadQRCode = async (req, res) => {
 const getAvailableBeds = async (req, res) => {
   try {
     const availableBeds = await Inventory.find({
-      category: 'Furniture',
-      itemName: { $regex: /^Bed/i },
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ],
       status: 'Available'
     }).select('_id itemName barcodeId roomNo floor location');
 
@@ -1259,8 +1261,10 @@ const getAvailableRooms = async (req, res) => {
     const availableRooms = await Inventory.aggregate([
       {
         $match: {
-          category: 'Furniture',
-          itemName: { $regex: /^Bed/i },
+          $or: [
+            { category: { $in: ['Furniture', 'BEDS'] } },
+            { itemName: { $regex: /Bed|B\d+/i } }
+          ],
           status: 'Available'
         }
       },
