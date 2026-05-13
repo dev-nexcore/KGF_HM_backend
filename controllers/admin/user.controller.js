@@ -1561,14 +1561,14 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 
 const getAllStudents = async (req, res) => {
   try {
-    const students = await Student.find({}).select("-password").populate('roomBedNumber', 'itemName').sort({ createdAt: -1 });
+    const students = await Student.find({}).select("-password").populate('roomBedNumber', 'itemName barcodeId floor roomNo').sort({ createdAt: -1 });
     const transformedStudents = students.map((student) => ({
       id: student.studentId,
       firstName: student.firstName,
       lastName: student.lastName,
       studentId: student.studentId,
       contactNumber: student.contactNumber,
-      roomBedNumber: student.roomBedNumber?.itemName || 'N/A',
+      roomBedNumber: student.roomBedNumber || 'Not Assigned',
       _id: student._id, // Adding this for reliable matching on frontend
       email: student.email,
       admissionDate: student.admissionDate,
