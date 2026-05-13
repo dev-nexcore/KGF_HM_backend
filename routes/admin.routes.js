@@ -100,6 +100,7 @@ import {
   generateQRCode,
   downloadQRCode,
   deleteInventoryItem,
+  deleteAllInventory,
   getAvailableBeds,
   getAvailableRooms,
   updateInventoryReceipt,
@@ -172,11 +173,6 @@ router.delete('/delete-student/:studentId', deleteStudent);
 
 router.get('/student-document/:studentId/:docType', getStudentDocument);
 
-router.post(
-  "/inventory/bulk-upload",
-  uploadBulk.single("file"),
-  bulkUploadInventory
-);
 
 router.post(
   "/inventory/:id/replacement-request",
@@ -272,7 +268,7 @@ router.get('/inventory', getInventoryItems);
 router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
 
 // ADD THESE TWO NEW ROUTES HERE (before specific routes)
-router.post('/inventory/bulk-upload', upload.single('file'), bulkUploadInventory);
+router.post('/inventory/bulk-upload', uploadBulk.single('file'), bulkUploadInventory);
 router.post('/inventory/bulk-qr-generate', bulkGenerateQRCodes);
 
 // Specific inventory routes (these must come BEFORE /inventory/:id)
@@ -289,6 +285,7 @@ router.put('/inventory/:id', updateInventoryItem);
 router.put('/inventory/:id/receipt', upload.single('receipt'), updateInventoryReceipt);
 router.post('/inventory/:id/qr-code', generateQRCode);
 router.get('/inventory/:id/qr-code/download', downloadQRCode); 
+router.delete('/inventory/delete-all', deleteAllInventory);
 router.delete('/inventory/:id', deleteInventoryItem);
 
 // *** NOTICE ROUTES ***
