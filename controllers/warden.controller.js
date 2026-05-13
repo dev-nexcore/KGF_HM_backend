@@ -23,6 +23,7 @@ import { Fee } from '../models/fee.model.js';
 import { Parent } from '../models/parent.model.js';
 import { Staff } from '../models/staff.model.js';
 import { Requisition } from '../models/requisition.model.js';
+import { Complaint } from '../models/complaint.model.js';
 
 
 
@@ -460,6 +461,21 @@ const getWardenDashboardStats = async (req, res) => {
       status: "pending"
     });
 
+    // Pending Leave Requests
+    const pendingLeavesCount = await Leave.countDocuments({ status: "pending" });
+
+    // In Progress Complaints
+    const inProgressComplaintsCount = await Complaint.countDocuments({ status: "in progress" });
+
+    // Pending Requisitions by this warden (if warden ID is available in req.user)
+    let pendingRequisitionsCount = 0;
+    if (req.user && req.user.id) {
+      pendingRequisitionsCount = await Requisition.countDocuments({ 
+        requestedBy: req.user.id, 
+        status: "pending" 
+      });
+    }
+
     res.status(200).json({
       totalStudents,
       totalBeds,
@@ -467,7 +483,10 @@ const getWardenDashboardStats = async (req, res) => {
       availableBeds,
       damagedBeds,
       upcomingInspectionCount,
-      upcomingInspections
+      upcomingInspections,
+      pendingLeavesCount,
+      inProgressComplaintsCount,
+      pendingRequisitionsCount
     });
 
   } catch (error) {
@@ -1510,7 +1529,7 @@ const getStudentDocument = async (req, res) => {
 
 // <--------- Worker Registration (Staff) ----------->
 
-const registerWorker = async (req, res) => {
+const registerIntern = async (req, res) => {
   try {
     const {
       firstName,
@@ -1569,9 +1588,9 @@ const registerWorker = async (req, res) => {
       }
     }
 
-    // Create requisition
+    // Create requisition for Student Intern
     const requisition = new Requisition({
-      requisitionType: "worker",
+      requisitionType: "intern",
       status: "pending",
       requestedBy: wardenId,
       requestedByName: `${warden.firstName} ${warden.lastName}`,
@@ -1580,10 +1599,8 @@ const registerWorker = async (req, res) => {
         lastName,
         email,
         contactNumber,
-        roomNumber,
-        bedNumber,
-        emergencyContact,
-        emergencyContactName,
+        studentId, // Linked student ID
+        designation: designation || "Student Intern",
         admissionDate,
         feeStatus,
       },
@@ -1594,7 +1611,7 @@ const registerWorker = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Worker registration request submitted successfully. Awaiting admin approval.",
+      message: "Student Intern registration request submitted. Awaiting administrative approval.",
       requisitionId: requisition._id,
     });
   } catch (error) {
@@ -1831,7 +1848,7 @@ const getWardenRequisitions = async (req, res) => {
 };
 
 
-const getAllWorkers = async (req, res) => {
+const getAllInterns = async (req, res) => {
   try {
     const workers = await Staff.find()
       .select("staffId firstName lastName email contactNumber designation shiftStart shiftEnd salary")
@@ -1911,10 +1928,10 @@ export {
   deleteInspection,
   checkPunchStatus,
   getStudentDocument,
-  registerWorker,
+  registerIntern,
   registerStudent,
   registerParent,
-  getAllWorkers,
+  getAllInterns,
   getAllParents,
   getWardenRequisitions,
 }

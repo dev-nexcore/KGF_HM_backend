@@ -35,10 +35,10 @@ import {
   checkPunchStatus,
   sendLoginOTP,
   getStudentDocument,
-  registerWorker,
+  registerIntern,
   registerStudent,
   registerParent,
-  getAllWorkers,
+  getAllInterns,
   getAllParents,
   getWardenRequisitions,
 } from "../controllers/warden.controller.js";
@@ -112,9 +112,9 @@ router.get("/emergency-contact", getEmergencyContacts);
 router.put('/emergency-contact/:studentId', updateEmergencyContact);
 
 
-// Worker Registration and Management
-router.post("/register-worker", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerWorker);
-router.get("/workers", getAllWorkers);
+// Student Intern Registration and Management
+router.post("/register-intern", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerIntern);
+router.get("/interns", getAllInterns);
 
 
 // Student Registration
