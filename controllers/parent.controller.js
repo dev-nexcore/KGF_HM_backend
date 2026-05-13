@@ -435,7 +435,8 @@ const getProfile = async (req, res) => {
         contactNumber: student.contactNumber,
         admissionDate: student.admissionDate,
         emergencyContactName: student.emergencyContactName,
-        emergencyContactNumber: student.emergencyContactNumber
+        emergencyContactNumber: student.emergencyContactNumber,
+        documents: student.documents || null, // Include documents
       }
     };
 
@@ -526,7 +527,8 @@ const getStudentProfile = async (req, res) => {
       profileImage: imageUrl, // This should now work properly
       photo: imageUrl, // Also provide as 'photo' field for compatibility
       createdAt: student.createdAt,
-      updatedAt: student.updatedAt
+      updatedAt: student.updatedAt,
+      documents: student.documents || null, // Include documents
     };
 
     console.log('✅ Sending profile with image:', studentProfile.profileImage);
@@ -793,6 +795,7 @@ const dashboard = async (req, res) => {
         email: student.email,
         roomBedNumber: roomBedDisplay,
         roomBedDetails: roomBedDetails,
+        documents: student.documents || null, // Include documents
       },
       attendanceSummary: {
         totalDays,
@@ -1378,6 +1381,65 @@ const verifyRazorpayPayment = async (req, res) => {
   }
 };
 
+// Serve student document files directly for Parent
+const getStudentDocument = async (req, res) => {
+  try {
+    const parentStudentId = req.studentId; // From the parent's JWT token
+    const { docType } = req.params;
+
+    const allowedDocs = [
+      "aadharCard",
+      "panCard",
+      "studentIdCard",
+      "feesReceipt",
+    ];
+
+    if (!allowedDocs.includes(docType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document type",
+      });
+    }
+
+    const student = await Student.findOne({ studentId: parentStudentId });
+
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    const document = student.documents?.[docType];
+
+    if (!document || !document.path) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+
+    const filePath = path.resolve(document.path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "File missing on server",
+      });
+    }
+
+    return res.sendFile(filePath);
+
+  } catch (error) {
+    console.error("Document view error for Parent:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error opening document",
+    });
+  }
+};
+
 export {
   sendLoginOTP,      // NEW: Added for OTP login
   login,             // UPDATED: Now uses OTP instead of password
@@ -1402,7 +1464,8 @@ export {
   requestRefund,
   markNoticeAsRead,
   createRazorpayOrder,
-  verifyRazorpayPayment
+  verifyRazorpayPayment,
+  getStudentDocument, // Added this
 };
 
 

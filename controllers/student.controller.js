@@ -2473,6 +2473,66 @@ const uploadMyProfileImage = async (req, res) => {
   }
 };
 
+// Upload a specific compliance document
+const uploadMyDocument = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { documentType } = req.body; // e.g., 'aadharCard', 'panCard', 'studentIdCard', 'feesReceipt'
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file provided' });
+    }
+
+    if (!['aadharCard', 'panCard', 'studentIdCard', 'feesReceipt'].includes(documentType)) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, message: 'Invalid document type' });
+    }
+
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    // Delete old document if exists
+    if (student.documents && student.documents[documentType] && student.documents[documentType].path) {
+      const oldPath = path.join(process.cwd(), student.documents[documentType].path);
+      if (fs.existsSync(oldPath)) {
+        try {
+          fs.unlinkSync(oldPath);
+        } catch (e) { console.error('Error deleting old doc:', e); }
+      }
+    }
+
+    // Update student
+    const filePath = req.file.path.replace(/\\/g, '/');
+    if (!student.documents) student.documents = {};
+    
+    student.documents[documentType] = {
+      filename: req.file.filename,
+      path: filePath,
+      uploadedAt: new Date()
+    };
+
+    // Mark as modified if it's a nested object
+    student.markModified('documents');
+    await student.save();
+
+    const imageUrl = `${req.protocol}://${req.get('host')}/${filePath}`;
+
+    res.status(200).json({
+      success: true,
+      message: `${documentType} uploaded successfully`,
+      url: imageUrl
+    });
+
+  } catch (error) {
+    console.error('Document upload error:', error);
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+    res.status(500).json({ success: false, message: 'Upload failed', error: error.message });
+  }
+};
+
 // Delete student's own profile image
 const deleteMyProfileImage = async (req, res) => {
   try {
@@ -2716,7 +2776,7 @@ const getNextInspection = async (req, res) => {
     const student = await Student.findOne({ studentId }).populate('roomBedNumber');
 
     if (!student || !student.roomBedNumber) {
-      return res.status(404).json({ message: 'Student room not found' });
+      return res.status(200).json(null);
     }
 
     const targetRoom = `Room ${student.roomBedNumber.roomNo || student.roomBedNumber}`;
@@ -2969,6 +3029,45 @@ const getStudentAttendance = async (req, res) => {
   }
 };
 
+const getMyDocument = async (req, res) => {
+  try {
+    const { docType } = req.params;
+    const studentId = req.studentId;
+
+    if (!studentId) {
+      return res.status(401).json({ message: "Student not authenticated" });
+    }
+
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    if (!student.documents || !student.documents[docType]) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    const documentData = student.documents[docType];
+    const filePath = documentData.path || documentData.filename;
+
+    if (!filePath) {
+      return res.status(404).json({ message: "Document path not found" });
+    }
+
+    const absolutePath = path.resolve(filePath);
+
+    if (fs.existsSync(absolutePath)) {
+      return res.sendFile(absolutePath);
+    } else {
+      console.error(`File not found on disk: ${absolutePath}`);
+      return res.status(404).json({ message: "File not found on server" });
+    }
+  } catch (err) {
+    console.error("Get my document error:", err);
+    return res.status(500).json({ message: "Server error while fetching document" });
+  }
+};
+
 export {
   sendLoginOTP,
   login,
@@ -2994,7 +3093,8 @@ export {
   getAttendanceLog,
   deleteMyProfileImage,
   uploadMyProfileImage,
+  uploadMyDocument,
   getNotifications,
   markNotificationsAsSeen,
-  getStudentAttendance
+  getStudentAttendance, getMyDocument
 }

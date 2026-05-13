@@ -33,7 +33,8 @@ import {
   getAllAvailableBed,
   deleteInspection,
   checkPunchStatus,
-  sendLoginOTP
+  sendLoginOTP,
+  getStudentDocument
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -70,6 +71,7 @@ router.get("/students", getStudentListForWarden);
 router.put("/students/:studentId", updateStudentRoom);
 router.get('/students/count', getTotalStudents);
 router.get('/students/available-bed', getAllAvailableBed);
+router.get('/student-document/:studentId/:docType', getStudentDocument);
 
 
 
