@@ -886,9 +886,20 @@ export const bulkUploadInventory = async (req, res) => {
     }
 
     const filePath = req.file.path;
-
+    const ext = path.extname(req.file.originalname).toLowerCase();
     const workbook = new ExcelJS.Workbook();
-    await workbook.csv.read(fs.createReadStream(filePath));
+
+    if (ext === '.csv') {
+      await workbook.csv.read(fs.createReadStream(filePath));
+    } else if (ext === '.xlsx') {
+      await workbook.xlsx.readFile(filePath);
+    } else {
+      fs.unlinkSync(filePath);
+      return res.status(400).json({
+        success: false,
+        message: "Invalid file format. Please upload a .csv or .xlsx file."
+      });
+    }
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
@@ -1406,6 +1417,40 @@ const deleteInventoryItem = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to delete inventory item'
+    });
+  }
+};
+
+// Delete all inventory items
+const deleteAllInventory = async (req, res) => {
+  try {
+    const items = await Inventory.find({});
+    
+    // Cleanup physical files
+    for (const item of items) {
+      // Delete QR code
+      if (item.qrCodeUrl) {
+        const qrPath = path.join(process.cwd(), 'public', 'qrcodes', `${item._id}.png`);
+        if (fs.existsSync(qrPath)) fs.unlinkSync(qrPath);
+      }
+      // Delete receipt
+      if (item.receiptUrl) {
+        const receiptPath = path.join(process.cwd(), item.receiptUrl);
+        if (fs.existsSync(receiptPath)) fs.unlinkSync(receiptPath);
+      }
+    }
+
+    await Inventory.deleteMany({});
+
+    res.status(200).json({
+      success: true,
+      message: 'All inventory items deleted successfully'
+    });
+  } catch (err) {
+    console.error("Error deleting all inventory items:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete all inventory items"
     });
   }
 };
@@ -2094,6 +2139,7 @@ export {
   updateInventoryItem,
   getInventoryItemById,
   deleteInventoryItem,
+  deleteAllInventory,
   getAvailableBeds,
   getAvailableRooms,
   updateInventoryReceipt,
