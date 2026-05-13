@@ -53,7 +53,7 @@ const staffSalarySchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['bank_transfer', 'cash', 'cheque'],
+    enum: ['bank_transfer', 'cash', 'cheque', 'razorpay'],
     default: 'bank_transfer'
   },
   bankName: {
@@ -67,6 +67,14 @@ const staffSalarySchema = new mongoose.Schema({
   ifscCode: {
     type: String,
     default: ''
+  },
+  razorpayPaymentId: {
+    type: String,
+    default: null
+  },
+  razorpayOrderId: {
+    type: String,
+    default: null
   },
   processedBy: {
     type: mongoose.Schema.Types.ObjectId,

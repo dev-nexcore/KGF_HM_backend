@@ -8,6 +8,8 @@ import { ManagementInvoice } from '../../models/managementInvoice.model.js';
 import { StaffSalary } from '../../models/staffSalary.model.js';
 import { Refund } from '../../models/refund.model.js';
 import { sendBulkNotifications, sendNotification } from '../../utils/sendNotification.js';
+import razorpay from '../../config/razorpay.config.js';
+import crypto from 'crypto';
 
 // configure SMTP transporter
 const transporter = nodemailer.createTransport({
@@ -800,18 +802,120 @@ ${status === 'completed' ?
     }
 
     return res.json({
-      message: `Refund ${status} successfully`,
-      refund: {
-        refundId: refund.refundId,
-        studentName: refund.studentId.studentName,
-        status: refund.status,
-        processedDate: refund.processedDate
-      }
+      success: true,
+      message: `Refund ${status} successfully`
     });
 
   } catch (err) {
     console.error("Update refund status error:", err);
     return res.status(500).json({ message: "Error updating refund status." });
+  }
+};
+
+// ====================== RAZORPAY INTEGRATION ======================
+
+const createRazorpayOrder = async (req, res) => {
+  const { amount, currency = 'INR', receiptId, type } = req.body;
+
+  try {
+    const options = {
+      amount: Math.round(amount * 100), // amount in the smallest currency unit
+      currency,
+      receipt: receiptId,
+      notes: {
+        type: type // 'student_invoice' or 'staff_salary'
+      }
+    };
+
+    const order = await razorpay.orders.create(options);
+
+    return res.json({
+      success: true,
+      order
+    });
+  } catch (err) {
+    console.error("Create Razorpay order error:", err);
+    return res.status(500).json({ message: "Error creating payment order." });
+  }
+};
+
+const verifyRazorpayPayment = async (req, res) => {
+  const { 
+    razorpay_order_id, 
+    razorpay_payment_id, 
+    razorpay_signature,
+    id, // Invoice ID or Salary ID
+    type // 'student_invoice' or 'staff_salary'
+  } = req.body;
+
+  try {
+    // 1. Verify signature
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(body.toString())
+      .digest('hex');
+
+    const isSignatureValid = expectedSignature === razorpay_signature;
+
+    if (!isSignatureValid) {
+      return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    }
+
+    // 2. Update the record
+    if (type === 'student_invoice') {
+      const invoice = await StudentInvoice.findById(id).populate('studentId');
+      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+      invoice.status = 'paid';
+      invoice.paidDate = new Date();
+      invoice.paymentMethod = 'razorpay';
+      invoice.razorpayPaymentId = razorpay_payment_id;
+      invoice.razorpayOrderId = razorpay_order_id;
+      await invoice.save();
+
+      // Audit Log
+      await createAuditLog({
+        adminId: req.admin?._id,
+        adminName: req.admin?.adminId || 'System',
+        actionType: 'Invoice Paid (Razorpay)',
+        description: `Invoice ${invoice.invoiceNumber} paid via Razorpay by ${invoice.studentId?.studentName}`,
+        targetType: 'Invoice',
+        targetId: invoice.invoiceNumber,
+        targetName: invoice.studentId?.studentName
+      });
+
+    } else if (type === 'staff_salary') {
+      const salary = await StaffSalary.findById(id).populate('staffId');
+      if (!salary) return res.status(404).json({ message: "Salary record not found" });
+
+      salary.status = 'paid';
+      salary.paymentDate = new Date();
+      salary.paymentMethod = 'razorpay';
+      salary.razorpayPaymentId = razorpay_payment_id;
+      salary.razorpayOrderId = razorpay_order_id;
+      await salary.save();
+
+      // Audit Log
+      await createAuditLog({
+        adminId: req.admin?._id,
+        adminName: req.admin?.adminId || 'System',
+        actionType: 'Salary Paid (Razorpay)',
+        description: `Salary paid via Razorpay to ${salary.staffId?.firstName} ${salary.staffId?.lastName}`,
+        targetType: 'Salary',
+        targetId: salary._id.toString(),
+        targetName: `${salary.staffId?.firstName} ${salary.staffId?.lastName}`
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Payment verified and record updated successfully"
+    });
+
+  } catch (err) {
+    console.error("Verify Razorpay payment error:", err);
+    return res.status(500).json({ message: "Error verifying payment." });
   }
 };
 
@@ -828,5 +932,7 @@ export {
   generateSalarySlip,
   initiateRefund,
   getRefunds,
-  updateRefundStatus
+  updateRefundStatus,
+  createRazorpayOrder,
+  verifyRazorpayPayment
 }

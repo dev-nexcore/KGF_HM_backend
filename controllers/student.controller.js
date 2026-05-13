@@ -1356,6 +1356,7 @@ import Attendance from "../models/attendance.model.js";
 import { Leave } from "../models/leave.model.js";
 import { Refund } from "../models/refund.model.js";
 import { Fee } from "../models/fee.model.js";
+import { StudentInvoice } from "../models/studentInvoice.model.js";
 import { Notice } from "../models/notice.model.js";
 import { Inspection } from '../models/inspection.model.js';
 import { Inventory } from '../models/inventory.model.js';
@@ -2578,6 +2579,21 @@ const getStudentProfile = async (req, res) => {
 
     console.log("✔️ Profile image URL sent:", imageUrl);
 
+    const formatDocUrl = (doc) => {
+      if (!doc || !doc.path) return null;
+      const imgPath = doc.path.replace(/\\/g, "/");
+      return imgPath.startsWith("http")
+        ? imgPath
+        : `${req.protocol}://${req.get("host")}/${imgPath}`;
+    };
+
+    const formattedDocs = {
+      aadharCard: formatDocUrl(student.documents?.aadharCard),
+      panCard: formatDocUrl(student.documents?.panCard),
+      studentIdCard: formatDocUrl(student.documents?.studentIdCard),
+      feesReceipt: formatDocUrl(student.documents?.feesReceipt),
+    };
+
     return res.json({
       firstName: student.firstName,
       lastName: student.lastName,
@@ -2592,6 +2608,10 @@ const getStudentProfile = async (req, res) => {
       lastCheckInDate: lastLog?.checkInDate || null,
       checkStatus,
       checkTime,
+      emergencyContactName: student.emergencyContactName,
+      emergencyContactNumber: student.emergencyContactNumber,
+      admissionDate: student.admissionDate,
+      documents: formattedDocs,
     });
 
   } catch (err) {
@@ -2641,16 +2661,25 @@ const getCurrentFeesStatus = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    const fees = await Fee.find({ studentId: student._id }).select("feeType amount status dueDate");
+    // UPDATED: Now fetching from StudentInvoice (used by Admin) instead of Fee model
+    const invoices = await StudentInvoice.find({ studentId: student._id })
+      .select("invoiceType amount status dueDate invoiceNumber paidDate description")
+      .sort({ dueDate: -1 });
 
     const now = new Date();
 
-    const updatedFees = fees.map((fee) => {
-      const isOverdue = fee.status === 'unpaid' && new Date(fee.dueDate) < now;
+    const updatedFees = invoices.map((invoice) => {
+      const isOverdue = invoice.status === 'pending' && new Date(invoice.dueDate) < now;
 
       return {
-        ...fee.toObject(),
-        status: isOverdue ? 'overdue' : fee.status,
+        _id: invoice._id,
+        feeType: invoice.invoiceType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // hostel_fee -> Hostel Fee
+        amount: invoice.amount,
+        status: isOverdue ? 'overdue' : invoice.status === 'pending' ? 'unpaid' : invoice.status,
+        dueDate: invoice.dueDate,
+        paidDate: invoice.paidDate,
+        invoiceNumber: invoice.invoiceNumber,
+        description: invoice.description
       };
     });
 

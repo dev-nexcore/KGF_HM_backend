@@ -26,7 +26,7 @@ const studentInvoiceSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'card', 'online', 'bank_transfer'],
+    enum: ['cash', 'card', 'online', 'bank_transfer', 'razorpay'],
     default: null
   },
   paidDate: {
@@ -46,8 +46,16 @@ const studentInvoiceSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'
   },
-  // Future payment gateway fields
+  // Payment gateway fields
   transactionId: {
+    type: String,
+    default: null
+  },
+  razorpayPaymentId: {
+    type: String,
+    default: null
+  },
+  razorpayOrderId: {
     type: String,
     default: null
   }
