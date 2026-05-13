@@ -81,18 +81,21 @@ const generateStudentInvoice = async (req, res) => {
 
 const getStudentInvoices = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10, search } = req.query;
+    const { status, page = 1, limit = 10, search, studentId } = req.query;
 
     let query = {};
     if (status && status !== 'all') {
       query.status = status;
+    }
+    if (studentId) {
+      query.studentId = studentId;
     }
 
     const skip = (page - 1) * limit;
 
     // Get invoices with student details
     const invoices = await StudentInvoice.find(query)
-      .populate('studentId', 'studentName studentId roomBedNumber email')
+      .populate('studentId', 'firstName lastName studentId roomBedNumber email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -137,21 +140,38 @@ const getStudentInvoices = async (req, res) => {
 
 const updateStudentInvoiceStatus = async (req, res) => {
   const { invoiceId } = req.params;
-  const { status, paymentMethod, adminNotes } = req.body;
+  const { status, paymentMethod, paidAmountToAdd } = req.body;
 
   try {
     const invoice = await StudentInvoice.findById(invoiceId)
-      .populate('studentId', 'studentName studentId email');
+      .populate('studentId', 'firstName lastName studentId email');
 
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    // Update invoice
-    invoice.status = status;
-    if (status === 'paid') {
-      invoice.paidDate = new Date();
-      invoice.paymentMethod = paymentMethod;
+    const studentDisplayName = `${invoice.studentId?.firstName || ""} ${invoice.studentId?.lastName || ""}`.trim() || invoice.studentId?.studentId || "Student";
+
+    // Handle partial payment logic
+    if (paidAmountToAdd && Number(paidAmountToAdd) > 0) {
+      invoice.paidAmount = (invoice.paidAmount || 0) + Number(paidAmountToAdd);
+      invoice.paymentMethod = paymentMethod || invoice.paymentMethod;
+      
+      // If fully paid, update status
+      if (invoice.paidAmount >= invoice.amount) {
+        invoice.status = 'paid';
+        invoice.paidDate = new Date();
+      } else {
+        invoice.status = 'pending'; // Keep as pending if partial
+      }
+    } else if (status) {
+      // Direct status update
+      invoice.status = status;
+      if (status === 'paid') {
+        invoice.paidAmount = invoice.amount; // Full payment
+        invoice.paidDate = new Date();
+        invoice.paymentMethod = paymentMethod || invoice.paymentMethod;
+      }
     }
 
     await invoice.save();
@@ -160,20 +180,16 @@ const updateStudentInvoiceStatus = async (req, res) => {
     await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
-      actionType: `Invoice ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-      description: `Marked invoice ${invoice.invoiceNumber} as ${status} for ${invoice.studentId.studentName}`,
+      actionType: `Invoice ${invoice.status.toUpperCase()}`,
+      description: `Updated invoice ${invoice.invoiceNumber} for ${studentDisplayName}. Paid: ₹${invoice.paidAmount}/${invoice.amount}`,
       targetType: 'Invoice',
       targetId: invoice.invoiceNumber,
-      targetName: `${invoice.studentId.studentName} - ₹${invoice.amount}`
+      targetName: `${studentDisplayName} - ₹${invoice.amount}`
     });
 
     return res.json({
-      message: `Invoice marked as ${status} successfully`,
-      invoice: {
-        invoiceNumber: invoice.invoiceNumber,
-        status: invoice.status,
-        paidDate: invoice.paidDate
-      }
+      message: `Invoice updated successfully`,
+      invoice
     });
 
   } catch (err) {

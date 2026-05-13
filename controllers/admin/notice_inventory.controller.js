@@ -1257,28 +1257,34 @@ const getAvailableBeds = async (req, res) => {
 };
 const getAvailableRooms = async (req, res) => {
   try {
-    // Get unique available rooms
-    const availableRooms = await Inventory.aggregate([
-      {
-        $match: {
-          $or: [
-            { category: { $in: ['Furniture', 'BEDS'] } },
-            { itemName: { $regex: /Bed|B\d+/i } }
-          ],
-          status: 'Available'
-        }
-      },
-      {
-        $group: {
-          _id: "$roomNo",
-          floor: { $first: "$floor" },
-          location: { $first: "$location" }
-        }
-      },
-      {
-        $sort: { _id: 1 }
+    // Get unique available rooms and their total bed count (capacity)
+    const allBedItems = await Inventory.find({
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
+
+    const roomStats = {};
+    allBedItems.forEach(bed => {
+      const roomKey = bed.roomNo;
+      if (!roomStats[roomKey]) {
+        roomStats[roomKey] = {
+          _id: roomKey,
+          floor: bed.floor,
+          location: bed.location,
+          totalBeds: 0,
+          availableCount: 0
+        };
       }
-    ]);
+      roomStats[roomKey].totalBeds++;
+      if (bed.status === 'Available') {
+        roomStats[roomKey].availableCount++;
+      }
+    });
+
+    // Only return rooms that have available beds
+    const availableRooms = Object.values(roomStats).filter(r => r.availableCount > 0);
 
     res.status(200).json({
       success: true,

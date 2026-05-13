@@ -20,6 +20,7 @@ const studentSchema = new mongoose.Schema({
   emergencyContactName: { type: String },
   relation: { type: String },
   emergencyContactNumber: { type: String },
+  roomType: { type: String, default: "" }, // Add this
   password: { type: String, required: true },
   
   // ADD THESE DOCUMENT FIELDS

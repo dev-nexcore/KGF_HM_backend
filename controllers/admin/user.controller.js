@@ -1192,6 +1192,7 @@ import { Student } from '../../models/student.model.js';
 import { Parent } from '../../models/parent.model.js';
 import { Warden } from '../../models/warden.model.js';
 import { Inventory } from '../../models/inventory.model.js';
+import { StudentInvoice } from '../../models/studentInvoice.model.js';
 import fs from 'fs';
 import path from 'path'; // ✅ ADD THIS — getStudentDocument ke liye zaroori hai
 
@@ -1216,7 +1217,8 @@ const registerStudent = async (req, res) => {
     emergencyContactName,
     emergencyContactNumber,
     hasCollegeId,
-    isWorking
+    isWorking,
+    roomType
   } = req.body;
 
   try {
@@ -1311,7 +1313,8 @@ const registerStudent = async (req, res) => {
       password,
       documents,
       hasCollegeId,
-      isWorking
+      isWorking,
+      roomType
     });
 
     await newStudent.save();
@@ -1562,30 +1565,60 @@ Please log in at https://www.KGF-HM.com and change your password after first log
 const getAllStudents = async (req, res) => {
   try {
     const students = await Student.find({}).select("-password").populate('roomBedNumber', 'itemName barcodeId floor roomNo').sort({ createdAt: -1 });
-    const transformedStudents = students.map((student) => ({
-      id: student.studentId,
-      firstName: student.firstName,
-      lastName: student.lastName,
-      studentId: student.studentId,
-      contactNumber: student.contactNumber,
-      roomBedNumber: student.roomBedNumber || 'Not Assigned',
-      _id: student._id, // Adding this for reliable matching on frontend
-      email: student.email,
-      admissionDate: student.admissionDate,
-      feeStatus: student.feeStatus,
-      emergencyContactName: student.emergencyContactName,
-      emergencyContactNumber: student.emergencyContactNumber,
-      hasCollegeId: student.hasCollegeId,
-      isWorking: student.isWorking,
-      documents: {
-        aadharCard: student.documents?.aadharCard || null,
-        panCard: student.documents?.panCard || null,
-        studentIdCard: student.documents?.studentIdCard || null,
-        feesReceipt: student.documents?.feesReceipt || null,
-      },
-      createdAt: student.createdAt,
-      updatedAt: student.updatedAt,
-    }));
+    
+    // Fetch all beds to calculate room capacities (room types)
+    const allBedItems = await Inventory.find({
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
+    const capacityMap = {};
+    allBedItems.forEach(bed => {
+      if (bed.roomNo) {
+        capacityMap[bed.roomNo] = (capacityMap[bed.roomNo] || 0) + 1;
+      }
+    });
+
+    // Fetch all pending invoices to calculate dues
+    const pendingInvoices = await StudentInvoice.find({ status: 'pending' });
+    const duesMap = {};
+    pendingInvoices.forEach(inv => {
+      const sId = inv.studentId.toString();
+      duesMap[sId] = (duesMap[sId] || 0) + inv.amount;
+    });
+
+    const transformedStudents = students.map((student) => {
+      // Infer roomType if not explicitly set but a room is assigned
+      const inferredRoomType = student.roomType || (student.roomBedNumber?.roomNo ? String(capacityMap[student.roomBedNumber.roomNo]) : "");
+
+      return {
+        id: student.studentId,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        studentId: student.studentId,
+        contactNumber: student.contactNumber,
+        roomBedNumber: student.roomBedNumber || 'Not Assigned',
+        _id: student._id,
+        email: student.email,
+        admissionDate: student.admissionDate,
+        feeStatus: student.feeStatus,
+        dues: duesMap[student._id.toString()] || 0,
+        roomType: inferredRoomType,
+        emergencyContactName: student.emergencyContactName,
+        emergencyContactNumber: student.emergencyContactNumber,
+        hasCollegeId: student.hasCollegeId,
+        isWorking: student.isWorking,
+        documents: {
+          aadharCard: student.documents?.aadharCard || null,
+          panCard: student.documents?.panCard || null,
+          studentIdCard: student.documents?.studentIdCard || null,
+          feesReceipt: student.documents?.feesReceipt || null,
+        },
+        createdAt: student.createdAt,
+        updatedAt: student.updatedAt,
+      };
+    });
 
     return res.json({
       success: true,
@@ -1678,7 +1711,7 @@ const updateStudent = async (req, res) => {
   const { studentId } = req.params;
   const {
     firstName, lastName, contactNumber, email, roomBedNumber,
-    emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking
+    emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType
   } = req.body;
 
   try {
@@ -1692,7 +1725,7 @@ const updateStudent = async (req, res) => {
     // ✅ Build update object with text fields
     const updateData = {
       firstName, lastName, contactNumber, email, roomBedNumber,
-      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking
+      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType
     };
 
     // ✅ Add document updates only if new files uploaded
