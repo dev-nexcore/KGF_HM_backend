@@ -2,6 +2,7 @@ import 'dotenv/config';
 import nodemailer from 'nodemailer';
 import { Student } from '../../models/student.model.js';
 import { Warden } from '../../models/warden.model.js';
+import { Staff } from '../../models/staff.model.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
 import { ManagementInvoice } from '../../models/managementInvoice.model.js';
@@ -362,11 +363,17 @@ const generateStaffSalary = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields: staffId, month, year, or basicSalary" });
     }
 
-    // Find staff member
-    const staff = await Warden.findById(staffId);
+    // Find staff member in both collections
+    let staff = await Warden.findById(staffId);
+    let staffType = 'Warden';
     if (!staff) {
-      console.log("❌ Warden not found:", staffId);
-      return res.status(404).json({ message: "Staff member (Warden) not found" });
+      staff = await Staff.findById(staffId);
+      staffType = 'Staff';
+    }
+
+    if (!staff) {
+      console.log("❌ Staff member not found:", staffId);
+      return res.status(404).json({ message: "Staff member not found in Wardens or Staff records" });
     }
 
     // Check if salary already exists for this month/year
@@ -394,6 +401,7 @@ const generateStaffSalary = async (req, res) => {
 
     const newSalary = new StaffSalary({
       staffId,
+      onModel: staffType, // 'Warden' or 'Staff'
       month,
       year,
       basicSalary: bSalary,
@@ -466,7 +474,7 @@ const getStaffSalaries = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const salaries = await StaffSalary.find(query)
-      .populate('staffId', 'firstName lastName wardenId email')
+      .populate('staffId', 'firstName lastName wardenId staffId email designation')
       .populate('processedBy', 'firstName lastName adminId')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -474,15 +482,27 @@ const getStaffSalaries = async (req, res) => {
 
     const totalSalaries = await StaffSalary.countDocuments(query);
 
-    // Calculate totals for the current query
+    // Calculate totals for the current month/year globally (ignore status filter for totals)
+    const totalsQuery = {};
+    if (month) totalsQuery.month = month;
+    if (year) totalsQuery.year = parseInt(year);
+
     const totals = await StaffSalary.aggregate([
-      { $match: query },
+      { $match: totalsQuery },
       {
         $group: {
           _id: null,
-          totalPayroll: { $sum: '$basicSalary' },
-          totalDeductions: { $sum: { $add: ['$deductions', '$tax', '$pf', '$loanDeduction'] } },
-          totalPayout: { $sum: '$netSalary' }
+          totalPayroll: { 
+            $sum: { $add: [{ $ifNull: ['$basicSalary', 0] }, { $ifNull: ['$allowances', 0] }] } 
+          },
+          totalDeductions: { 
+            $sum: { $add: [{ $ifNull: ['$deductions', 0] }, { $ifNull: ['$tax', 0] }, { $ifNull: ['$pf', 0] }, { $ifNull: ['$loanDeduction', 0] }] } 
+          },
+          totalPayout: {
+            $sum: {
+              $cond: [{ $eq: ['$status', 'paid'] }, { $ifNull: ['$netSalary', 0] }, 0]
+            }
+          }
         }
       }
     ]);
@@ -492,8 +512,8 @@ const getStaffSalaries = async (req, res) => {
       message: "Staff salaries fetched successfully",
       salaries: salaries.map(salary => ({
         _id: salary._id,
-        staffName: `${salary.staffId.firstName} ${salary.staffId.lastName}`,
-        role: 'Warden', // You can add role field to Warden model later
+        staffName: salary.staffId ? `${salary.staffId.firstName} ${salary.staffId.lastName}` : 'Unknown Staff',
+        role: salary.staffId?.designation || 'Warden', 
         month: salary.month,
         year: salary.year,
         basicSalary: salary.basicSalary,
@@ -533,7 +553,7 @@ const updateSalaryStatus = async (req, res) => {
 
   try {
     const salary = await StaffSalary.findById(salaryId)
-      .populate('staffId', 'firstName lastName wardenId');
+      .populate('staffId', 'firstName lastName wardenId staffId');
 
     if (!salary) {
       return res.status(404).json({ message: "Salary record not found" });
@@ -578,7 +598,7 @@ const generateSalarySlip = async (req, res) => {
 
   try {
     const salary = await StaffSalary.findById(salaryId)
-      .populate('staffId', 'firstName lastName wardenId email contactNumber');
+      .populate('staffId', 'firstName lastName wardenId staffId email contactNumber designation');
 
     if (!salary) {
       return res.status(404).json({ message: "Salary record not found" });
@@ -587,10 +607,11 @@ const generateSalarySlip = async (req, res) => {
     // Generate detailed salary slip data
     const salarySlip = {
       staffDetails: {
-        name: `${salary.staffId.firstName} ${salary.staffId.lastName}`,
-        id: salary.staffId.wardenId,
-        email: salary.staffId.email,
-        contact: salary.staffId.contactNumber
+        name: salary.staffId ? `${salary.staffId.firstName} ${salary.staffId.lastName}` : 'N/A',
+        id: salary.staffId?.staffId || salary.staffId?.wardenId || 'N/A',
+        email: salary.staffId?.email || 'N/A',
+        contact: salary.staffId?.contactNumber || 'N/A',
+        role: salary.staffId?.designation || 'Warden'
       },
       salaryDetails: {
         month: salary.month,
