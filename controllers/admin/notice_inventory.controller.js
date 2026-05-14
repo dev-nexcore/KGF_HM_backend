@@ -1465,6 +1465,58 @@ const deleteAllInventory = async (req, res) => {
   }
 };
 
+// Bulk delete inventory items
+const bulkDeleteInventory = async (req, res) => {
+  try {
+    const { itemIds } = req.body;
+
+    if (!itemIds || !Array.isArray(itemIds) || itemIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Item IDs array is required'
+      });
+    }
+
+    const items = await Inventory.find({ _id: { $in: itemIds } });
+
+    if (items.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No items found'
+      });
+    }
+
+    // Cleanup physical files for all items
+    for (const item of items) {
+      // Delete QR code
+      if (item.qrCodeUrl) {
+        const qrPath = path.join(process.cwd(), 'public', 'qrcodes', `${item._id}.png`);
+        if (fs.existsSync(qrPath)) fs.unlinkSync(qrPath);
+      }
+      // Delete receipt
+      if (item.receiptUrl) {
+        const receiptPath = path.join(process.cwd(), item.receiptUrl);
+        if (fs.existsSync(receiptPath)) fs.unlinkSync(receiptPath);
+      }
+    }
+
+    await Inventory.deleteMany({ _id: { $in: itemIds } });
+
+    res.status(200).json({
+      success: true,
+      message: `${items.length} inventory items deleted successfully`
+    });
+
+  } catch (error) {
+    console.error('Bulk delete error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete inventory items',
+      error: error.message
+    });
+  }
+};
+
 
 // const issueNotice = async (req, res) => {
 //   const {
@@ -2164,5 +2216,6 @@ export {
   generateStockReport,
   bulkGenerateQRCodes,
   getAvailableRoomsFloors,
+  bulkDeleteInventory,
 
 }

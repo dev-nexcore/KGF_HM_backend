@@ -3,8 +3,14 @@ import mongoose from 'mongoose';
 const staffSalarySchema = new mongoose.Schema({
   staffId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Warden',
-    required: true
+    required: true,
+    refPath: 'onModel'
+  },
+  onModel: {
+    type: String,
+    required: true,
+    enum: ['Warden', 'Staff'],
+    default: 'Warden'
   },
   month: {
     type: String,

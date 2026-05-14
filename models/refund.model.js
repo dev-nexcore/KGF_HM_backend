@@ -41,6 +41,22 @@ const refundSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    fees: {
+      type: Number,
+      default: 0,
+    },
+    securityDeposit: {
+      type: Number,
+      default: 0,
+    },
+    deduction: {
+      type: Number,
+      default: 0,
+    },
+    deductionReason: {
+      type: String,
+      default: "",
+    },
     processedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Admin",

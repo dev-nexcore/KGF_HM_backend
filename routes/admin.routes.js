@@ -32,6 +32,9 @@ import {
   getStudentById,
   updateStudent,
   deleteStudent,
+
+  deleteParent,
+  updateParent,
 } from "../controllers/admin/user.controller.js";
 
 import {
@@ -116,7 +119,7 @@ import {
   bulkGenerateQRCodes,
   updateReplacementRequestStatus,
   applyReplacementRequest,
-
+  bulkDeleteInventory,
 } from "../controllers/admin/notice_inventory.controller.js";
 
 import{
@@ -172,6 +175,9 @@ router.get('/students', getAllStudents);
 router.get('/parents', getAllParents);
 router.get('/wardens', getAllWardens);
 router.get('/students-without-parents', getStudentsWithoutParents);
+router.get('/parents', getAllParents);
+router.delete('/delete-parent/:id', verifyAdminToken, deleteParent);
+router.put('/update-parent/:id', verifyAdminToken, updateParent);
 router.get('/student/:studentId', getStudentById);
 // router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
 router.put('/update-student/:studentId', verifyAdminToken, uploadStudentDocuments, updateStudent);
@@ -282,6 +288,7 @@ router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
 // ADD THESE TWO NEW ROUTES HERE (before specific routes)
 router.post('/inventory/bulk-upload', uploadBulk.single('file'), bulkUploadInventory);
 router.post('/inventory/bulk-qr-generate', bulkGenerateQRCodes);
+router.post('/inventory/bulk-delete', bulkDeleteInventory);
 
 // Specific inventory routes (these must come BEFORE /inventory/:id)
 router.get('/inventory/stock-report', generateStockReport);

@@ -1191,6 +1191,7 @@ import nodemailer from 'nodemailer';
 import { Student } from '../../models/student.model.js';
 import { Parent } from '../../models/parent.model.js';
 import { Warden } from '../../models/warden.model.js';
+import { Staff } from '../../models/staff.model.js';
 import { Inventory } from '../../models/inventory.model.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
 import fs from 'fs';
@@ -1223,7 +1224,7 @@ const registerStudent = async (req, res) => {
 
   try {
 
-    // Check for duplicate email before proceeding
+
     const existingStudentByEmail = await Student.findOne({ email });
     if (existingStudentByEmail) {
       return res.status(409).json({
@@ -1235,20 +1236,21 @@ const registerStudent = async (req, res) => {
     const generateStudentId = async () => {
       const count = await Student.countDocuments();
       const paddedNumber = String(count + 1).padStart(3, "0");
-      const studentId = `STU-${paddedNumber}`;
+      const prefix = (isWorking === 'true' || isWorking === true) ? "STUW" : "STU";
+      const studentId = `${prefix}-${paddedNumber}`;
       const existingStudent = await Student.findOne({ studentId });
 
       if (existingStudent) {
         const allStudents = await Student.find({}, { studentId: 1 }).sort({ studentId: -1 });
         let maxNumber = 0;
         allStudents.forEach((student) => {
-          const match = student.studentId.match(/STU-(\d+)/);
+          const match = student.studentId.match(/(?:STU|STUW)-(\d+)/);
           if (match) {
             const number = parseInt(match[1]);
             if (number > maxNumber) maxNumber = number;
           }
         });
-        return `STU-${String(maxNumber + 1).padStart(3, "0")}`;
+        return `${prefix}-${String(maxNumber + 1).padStart(3, "0")}`;
       }
       return studentId;
     };
@@ -1903,16 +1905,29 @@ const getStudentById = async (req, res) => {
 const getAllWardens = async (req, res) => {
   try {
     const wardens = await Warden.find({}).select("-password").sort({ createdAt: -1 });
+    const otherStaff = await Staff.find({}).select("-password").sort({ createdAt: -1 });
+
+    // Normalize other staff to look like wardens for the frontend
+    const normalizedStaff = otherStaff.map(s => ({
+      ...s.toObject(),
+      wardenId: s.staffId, // Map staffId to wardenId for frontend compatibility
+      role: s.designation || 'Staff'
+    }));
+
+    const allStaff = [
+      ...wardens.map(w => ({ ...w.toObject(), role: 'Warden' })),
+      ...normalizedStaff
+    ];
 
     return res.json({
       success: true,
-      message: "Wardens fetched successfully",
-      wardens,
-      count: wardens.length
+      message: "Staff members fetched successfully",
+      wardens: allStaff,
+      count: allStaff.length
     });
   } catch (err) {
-    console.error("Error fetching wardens:", err);
-    return res.status(500).json({ success: false, message: "Error fetching wardens." });
+    console.error("Error fetching staff:", err);
+    return res.status(500).json({ success: false, message: "Error fetching staff members." });
   }
 };
 
@@ -1933,6 +1948,48 @@ const getAllParents = async (req, res) => {
 };
 
 
+// const getAllParents = async (req, res) => {
+//   try {
+//     const parents = await Parent.find({}).sort({ createdAt: -1 });
+//     return res.json({
+//       success: true,
+//       parents,
+//     });
+//   } catch (err) {
+//     console.error("Error fetching parents:", err);
+//     return res.status(500).json({ success: false, message: "Error fetching parents." });
+//   }
+// };
+
+const deleteParent = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const parent = await Parent.findByIdAndDelete(id);
+    if (!parent) return res.status(404).json({ success: false, message: "Parent not found." });
+    return res.json({ success: true, message: "Parent deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting parent:", err);
+    return res.status(500).json({ success: false, message: "Error deleting parent." });
+  }
+};
+
+const updateParent = async (req, res) => {
+  const { id } = req.params;
+  const { firstName, lastName, email, relation, contactNumber } = req.body;
+  try {
+    const parent = await Parent.findByIdAndUpdate(
+      id,
+      { firstName, lastName, email, relation, contactNumber },
+      { new: true }
+    );
+    if (!parent) return res.status(404).json({ success: false, message: "Parent not found." });
+    return res.json({ success: true, parent });
+  } catch (err) {
+    console.error("Error updating parent:", err);
+    return res.status(500).json({ success: false, message: "Error updating parent." });
+  }
+};
+
 export {
   registerStudent,
   registerParent,
@@ -1944,5 +2001,8 @@ export {
   getStudentById,
   updateStudent,
   deleteStudent,
-  getStudentDocument,  // ✅ Export karna mat bhoolo
+  getStudentDocument,
+
+  deleteParent,
+  updateParent,
 }
