@@ -1931,6 +1931,22 @@ const getAllWardens = async (req, res) => {
   }
 };
 
+const getAllParents = async (req, res) => {
+  try {
+    const parents = await Parent.find({}).sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      message: "Parents fetched successfully",
+      parents,
+      count: parents.length
+    });
+  } catch (err) {
+    console.error("Error fetching parents:", err);
+    return res.status(500).json({ success: false, message: "Error fetching parents." });
+  }
+};
+
 
 const getAllParents = async (req, res) => {
   try {
@@ -1980,6 +1996,7 @@ export {
   registerWarden,
   getAllWardens,
   getAllStudents,
+  getAllParents,
   getStudentsWithoutParents,
   getStudentById,
   updateStudent,

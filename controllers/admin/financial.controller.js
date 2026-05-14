@@ -96,7 +96,14 @@ const getStudentInvoices = async (req, res) => {
 
     // Get invoices with student details
     const invoices = await StudentInvoice.find(query)
-      .populate('studentId', 'firstName lastName studentId roomBedNumber email')
+      .populate({
+        path: 'studentId',
+        select: 'firstName lastName studentId roomBedNumber email',
+        populate: {
+          path: 'roomBedNumber',
+          select: 'roomNo floor itemName'
+        }
+      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -104,10 +111,10 @@ const getStudentInvoices = async (req, res) => {
     // Filter by search if provided
     let filteredInvoices = invoices;
     if (search) {
-      filteredInvoices = invoices.filter(invoice =>
-        invoice.studentId?.studentName?.toLowerCase().includes(search.toLowerCase()) ||
-        invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase())
-      );
+      filteredInvoices = invoices.filter(invoice => {
+        const fullName = `${invoice.studentId?.firstName || ""} ${invoice.studentId?.lastName || ""}`.toLowerCase();
+        return fullName.includes(search.toLowerCase()) || invoice.invoiceNumber.toLowerCase().includes(search.toLowerCase());
+      });
     }
 
     const totalInvoices = await StudentInvoice.countDocuments(query);
@@ -117,8 +124,8 @@ const getStudentInvoices = async (req, res) => {
       invoices: filteredInvoices.map(invoice => ({
         _id: invoice._id,
         invoiceNumber: invoice.invoiceNumber,
-        studentName: invoice.studentId?.studentName || 'Unknown',
-        roomNumber: invoice.studentId?.roomBedNumber || 'N/A',
+        studentName: invoice.studentId ? `${invoice.studentId.firstName} ${invoice.studentId.lastName}` : 'Unknown',
+        roomNumber: invoice.studentId?.roomBedNumber ? `${invoice.studentId.roomBedNumber.roomNo}/${invoice.studentId.roomBedNumber.itemName}` : 'N/A',
         amount: invoice.amount,
         dueDate: invoice.dueDate,
         status: invoice.status,
@@ -512,6 +519,8 @@ const getStaffSalaries = async (req, res) => {
       message: "Staff salaries fetched successfully",
       salaries: salaries.map(salary => ({
         _id: salary._id,
+        staffName: salary.staffId ? `${salary.staffId.firstName} ${salary.staffId.lastName}` : "Deleted Staff",
+        role: 'Warden', // You can add role field to Warden model later
         staffName: salary.staffId ? `${salary.staffId.firstName} ${salary.staffId.lastName}` : 'Unknown Staff',
         role: salary.staffId?.designation || 'Warden', 
         month: salary.month,

@@ -3,6 +3,9 @@ import { Student } from '../../models/student.model.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
 import { Inventory } from '../../models/inventory.model.js';
 import { StaffSalary } from '../../models/staffSalary.model.js';
+import { Warden } from '../../models/warden.model.js';
+import { Leave } from '../../models/leave.model.js';
+import { Complaint } from '../../models/complaint.model.js';
 
 
 const getTotalRevenue = async (req, res) => {
@@ -167,15 +170,16 @@ const getQuickStats = async (req, res) => {
       status: "active"
     });
 
-    const pendingTasks =
-      await Complaint.countDocuments({ status: "pending" }) +
-      await Leave.countDocuments({ status: "pending" });
+    const pendingLeaves = await Leave.countDocuments({ status: "pending" });
+    const pendingComplaints = await Complaint.countDocuments({ status: "pending" });
 
     return res.json({
       totalStudents,
       totalRooms,
       activeStaff,
-      pendingTasks
+      pendingTasks: pendingLeaves + pendingComplaints,
+      pendingLeaves,
+      pendingComplaints
     });
 
   } catch (err) {
@@ -190,5 +194,6 @@ export{
     getBedOccupancyStatus,
     getTotalRevenue,
     getPendingPayments,
-    getFinancialSummary
+    getFinancialSummary,
+    getQuickStats
 }

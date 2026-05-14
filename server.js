@@ -30,7 +30,7 @@ app.use('/receipts', express.static(path.join(process.cwd(), 'public/receipts'))
 app.use('/public/receipts', express.static(path.join(process.cwd(), 'public/receipts')));
 
 // ----- DB connection -----
-connectDB();
+await connectDB();
 
 // ----- CORS -----
   const corsOptions = {

@@ -19,6 +19,11 @@ import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js";
 
 
 import { sendBulkNotifications, sendNotification } from '../utils/sendNotification.js';
+import { Fee } from '../models/fee.model.js';
+import { Parent } from '../models/parent.model.js';
+import { Staff } from '../models/staff.model.js';
+import { Requisition } from '../models/requisition.model.js';
+import { Complaint } from '../models/complaint.model.js';
 
 
 
@@ -456,6 +461,21 @@ const getWardenDashboardStats = async (req, res) => {
       status: "pending"
     });
 
+    // Pending Leave Requests
+    const pendingLeavesCount = await Leave.countDocuments({ status: "pending" });
+
+    // In Progress Complaints
+    const inProgressComplaintsCount = await Complaint.countDocuments({ status: "in progress" });
+
+    // Pending Requisitions by this warden (if warden ID is available in req.user)
+    let pendingRequisitionsCount = 0;
+    if (req.user && req.user.id) {
+      pendingRequisitionsCount = await Requisition.countDocuments({ 
+        requestedBy: req.user.id, 
+        status: "pending" 
+      });
+    }
+
     res.status(200).json({
       totalStudents,
       totalBeds,
@@ -463,7 +483,10 @@ const getWardenDashboardStats = async (req, res) => {
       availableBeds,
       damagedBeds,
       upcomingInspectionCount,
-      upcomingInspections
+      upcomingInspections,
+      pendingLeavesCount,
+      inProgressComplaintsCount,
+      pendingRequisitionsCount
     });
 
   } catch (error) {
@@ -588,7 +611,7 @@ const getStudentListForWarden = async (req, res) => {
     // Fetch students with attendance log and bed info
     const allStudents = await Student.find(studentFilter)
       .populate({ path: "roomBedNumber", select: "barcodeId roomNo" })
-      .select("studentId firstName lastName contactNumber roomBedNumber attendanceLog");
+      .select("studentId firstName lastName contactNumber roomBedNumber attendanceLog feeStatus");
 
     const today = new Date();
 
@@ -644,6 +667,7 @@ const getStudentListForWarden = async (req, res) => {
         barcodeId: student.roomBedNumber?.barcodeId || null,
         roomNo: student.roomBedNumber?.roomNo || null,
         status: currentStatus,
+        feeStatus: student.feeStatus || "N/A",
         documents: student.documents || null, // Include documents
       };
     });
@@ -1503,6 +1527,371 @@ const getStudentDocument = async (req, res) => {
   }
 };
 
+// <--------- Worker Registration (Staff) ----------->
+
+const registerIntern = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      roomNumber,
+      bedNumber,
+      emergencyContact,
+      emergencyContactName,
+      admissionDate,
+      feeStatus,
+    } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !contactNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled",
+      });
+    }
+
+    // Get warden info from token
+    const wardenId = req.user?.id;
+    if (!wardenId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Warden authentication required",
+      });
+    }
+
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(404).json({
+        success: false,
+        message: "Warden not found",
+      });
+    }
+
+    // Prepare document data from uploaded files
+    const documents = {};
+    if (req.files) {
+      if (req.files.aadharCard && req.files.aadharCard[0]) {
+        documents.aadharCard = {
+          filename: req.files.aadharCard[0].filename,
+          path: req.files.aadharCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      if (req.files.panCard && req.files.panCard[0]) {
+        documents.panCard = {
+          filename: req.files.panCard[0].filename,
+          path: req.files.panCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+    }
+
+    // Create requisition for Student Intern
+    const requisition = new Requisition({
+      requisitionType: "intern",
+      status: "pending",
+      requestedBy: wardenId,
+      requestedByName: `${warden.firstName} ${warden.lastName}`,
+      data: {
+        firstName,
+        lastName,
+        email,
+        contactNumber,
+        studentId, // Linked student ID
+        designation: designation || "Student Intern",
+        admissionDate,
+        feeStatus,
+      },
+      documents,
+    });
+
+    await requisition.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Student Intern registration request submitted. Awaiting administrative approval.",
+      requisitionId: requisition._id,
+    });
+  } catch (error) {
+    console.error("Error creating worker requisition:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit worker registration request",
+      error: error.message,
+    });
+  }
+};
+
+
+// <--------- Student Registration Requisition ----------->
+
+const registerStudent = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      roomNumber,
+      bedNumber,
+      emergencyContact,
+      emergencyContactName,
+      admissionDate,
+      feeStatus,
+    } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !contactNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled",
+      });
+    }
+
+    // Get warden info from token
+    const wardenId = req.user?.id;
+    if (!wardenId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Warden authentication required",
+      });
+    }
+
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(404).json({
+        success: false,
+        message: "Warden not found",
+      });
+    }
+
+    // Prepare document data from uploaded files
+    const documents = {};
+    if (req.files) {
+      if (req.files.aadharCard && req.files.aadharCard[0]) {
+        documents.aadharCard = {
+          filename: req.files.aadharCard[0].filename,
+          path: req.files.aadharCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      if (req.files.panCard && req.files.panCard[0]) {
+        documents.panCard = {
+          filename: req.files.panCard[0].filename,
+          path: req.files.panCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+    }
+
+    // Create requisition
+    const requisition = new Requisition({
+      requisitionType: "student",
+      status: "pending",
+      requestedBy: wardenId,
+      requestedByName: `${warden.firstName} ${warden.lastName}`,
+      data: {
+        firstName,
+        lastName,
+        email,
+        contactNumber,
+        roomNumber,
+        bedNumber,
+        emergencyContact,
+        emergencyContactName,
+        admissionDate,
+        feeStatus,
+      },
+      documents,
+    });
+
+    await requisition.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Student registration request submitted successfully. Awaiting admin approval.",
+      requisitionId: requisition._id,
+    });
+  } catch (error) {
+    console.error("Error creating student requisition:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit student registration request",
+      error: error.message,
+    });
+  }
+};
+
+
+// <--------- Parent Registration Requisition ----------->
+
+const registerParent = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      relation,
+      studentId,
+    } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email || !contactNumber || !relation || !studentId) {
+      return res.status(400).json({
+        success: false,
+        message: "All required fields must be filled",
+      });
+    }
+
+    // Get warden info from token
+    const wardenId = req.user?.id;
+    if (!wardenId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Warden authentication required",
+      });
+    }
+
+    const warden = await Warden.findById(wardenId);
+    if (!warden) {
+      return res.status(404).json({
+        success: false,
+        message: "Warden not found",
+      });
+    }
+
+    // Prepare document data from uploaded files
+    const documents = {};
+    if (req.files) {
+      if (req.files.aadharCard && req.files.aadharCard[0]) {
+        documents.aadharCard = {
+          filename: req.files.aadharCard[0].filename,
+          path: req.files.aadharCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      if (req.files.panCard && req.files.panCard[0]) {
+        documents.panCard = {
+          filename: req.files.panCard[0].filename,
+          path: req.files.panCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+    }
+
+    // Create requisition
+    const requisition = new Requisition({
+      requisitionType: "parent",
+      status: "pending",
+      requestedBy: wardenId,
+      requestedByName: `${warden.firstName} ${warden.lastName}`,
+      data: {
+        firstName,
+        lastName,
+        email,
+        contactNumber,
+        relation,
+        studentId,
+      },
+      documents,
+    });
+
+    await requisition.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Parent registration request submitted successfully. Awaiting admin approval.",
+      requisitionId: requisition._id,
+    });
+  } catch (error) {
+    console.error("Error creating parent requisition:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit parent registration request",
+      error: error.message,
+    });
+  }
+};
+
+
+// <--------- Get Warden's Requisitions ----------->
+
+const getWardenRequisitions = async (req, res) => {
+  try {
+    const wardenId = req.user?.id;
+    if (!wardenId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Warden authentication required",
+      });
+    }
+
+    const requisitions = await Requisition.find({ requestedBy: wardenId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      requisitions,
+    });
+  } catch (error) {
+    console.error("Error fetching warden requisitions:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch requisitions",
+      error: error.message,
+    });
+  }
+};
+
+
+const getAllInterns = async (req, res) => {
+  try {
+    const workers = await Staff.find()
+      .select("staffId firstName lastName email contactNumber designation shiftStart shiftEnd salary")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      workers,
+    });
+  } catch (error) {
+    console.error("Error fetching workers:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch workers",
+      error: error.message,
+    });
+  }
+};
+
+
+// <--------- Parent Management ----------->
+
+const getAllParents = async (req, res) => {
+  try {
+    const parents = await Parent.find()
+      .select("parentId firstName lastName email contactNumber relation studentId")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      parents,
+    });
+  } catch (error) {
+    console.error("Error fetching parents:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch parents",
+      error: error.message,
+    });
+  }
+};
+
+
 export {
   sendLoginOTP,
   login as loginWarden,
@@ -1539,4 +1928,10 @@ export {
   deleteInspection,
   checkPunchStatus,
   getStudentDocument,
+  registerIntern,
+  registerStudent,
+  registerParent,
+  getAllInterns,
+  getAllParents,
+  getWardenRequisitions,
 }
