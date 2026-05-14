@@ -1345,7 +1345,6 @@
 import "dotenv/config";
 import fs from "fs";
 import path from "path";
-import nodemailer from "nodemailer";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import { Student } from "../models/student.model.js";
@@ -1363,18 +1362,7 @@ import { Inventory } from '../models/inventory.model.js';
 import { Notification } from '../models/notification.model.js';
 import { getDistanceKm, uploadSelfie } from '../utils/wasabiUpload.js';
 import { sendWhatsAppMessage } from '../utils/sendWhatsApp.js';
-// import { Payment } from "../models/payment.model.js";
-
-
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST,
-  port: +process.env.MAIL_PORT,
-  secure: process.env.MAIL_SECURE === "true",
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+import sendEmail, { transporter } from "../utils/sendEmail.js";
 
 
 
@@ -1982,10 +1970,10 @@ const fileComplaint = async (req, res) => {
     const emailText = `New Complaint Filed
 
 Student Details:
-- Name: ${student.firstName}
+- Name: ${student.firstName} ${student.lastName}
 - Student ID: ${student.studentId}
 - Email: ${student.email}
-- Room/Bed: ${student.roomBedNumber.itemName || "Not specified"}
+- Room/Bed: ${student.roomBedNumber?.itemName || "Not specified"}
 
 Complaint Details:
 - Type: ${displayType}
@@ -2002,26 +1990,28 @@ Please review and respond accordingly.
 
 - Hostel Management System`;
 
-    // Send notification email to admin
-    await transporter.sendMail({
-      from: `"Hostel System" <${process.env.MAIL_USER}>`,
-      to: process.env.MAIL_USER,
-      subject: `New Complaint: ${subject} - ${student.firstName}`,
-      text: emailText,
-    });
+    // Send notifications
+    try {
+      // Send notification email to admin
+      await transporter.sendMail({
+        from: `"Hostel System" <${process.env.MAIL_USER}>`,
+        to: process.env.MAIL_USER,
+        subject: `New Complaint: ${subject} - ${student.firstName}`,
+        text: emailText,
+      });
 
-    // Send confirmation email to student
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: student.email,
-      subject: `Complaint Filed Successfully - ${subject}`,
-      text: `Hello ${student.studentName},
+      // Send confirmation email to student
+      await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: student.email,
+        subject: `Complaint Filed Successfully - ${subject}`,
+        text: `Hello ${student.firstName} ${student.lastName},
 
 Your complaint has been filed successfully and assigned ticket ID: #${String(
-        newComplaint._id
-      )
-        .slice(-4)
-        .toUpperCase()}
+          newComplaint._id
+        )
+          .slice(-4)
+          .toUpperCase()}
 
 Complaint Details:
 - Subject: ${subject}
@@ -2039,7 +2029,11 @@ We will review your complaint and get back to you soon.
 Thank you for bringing this to our attention.
 
 - Hostel Administration`,
-    });
+      });
+    } catch (emailError) {
+      console.error("Email notification failed for complaint:", emailError.message);
+      // Don't fail the request if email fails
+    }
 
     // Send success response to frontend
     return res.json({
@@ -2059,6 +2053,7 @@ Thank you for bringing this to our attention.
     });
   } catch (err) {
     // Handle any server errors 
+    console.error("File complaint error:", err);
     return res
       .status(500)
       .json({ message: "Server error while filing complaint." });
@@ -2229,19 +2224,20 @@ const applyForLeave = async (req, res) => {
     const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
 
     // Send email to admin (existing functionality)
-    await transporter.sendMail({
-      from: `<${student.email}>`,
-      to: process.env.MAIL_USER,
-      subject: `Leave Application: ${leaveType} from ${student.firstName}`,
-      text: `${newLeave.reason}`,
-    });
+    try {
+      await transporter.sendMail({
+        from: `<${student.email}>`,
+        to: process.env.MAIL_USER,
+        subject: `Leave Application: ${leaveType} from ${student.firstName}`,
+        text: `${newLeave.reason}`,
+      });
 
-    // Send email to parent with leave details and link
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: parent.email,
-      subject: `Leave Application from ${student.firstName} ${student.lastName}`,
-      text: `Dear ${parent.firstName} ${parent.lastName},
+      // Send email to parent with leave details and link
+      await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: parent.email,
+        subject: `Leave Application from ${student.firstName} ${student.lastName}`,
+        text: `Dear ${parent.firstName} ${parent.lastName},
 
 Your child ${student.firstName} ${student.lastName} (Student ID: ${student.studentId}) has submitted a leave application.
 
@@ -2261,43 +2257,37 @@ You can view all leave applications and their current status in the Leave Manage
 If you have any questions or concerns, please contact the hostel administration.
 
 – Hostel Admin`,
-    // Replace the HTML section in your applyForLeave controller:
-
-html: `
-  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-    <h2 style="color: #333; text-align: center;">Leave Application Notification</h2>
-    
-    <p>Dear <strong>${parent.firstName} ${parent.lastName}</strong>,</p>
-    
-    <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has submitted a leave application.</p>
-    
-    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-      <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
-      <ul style="list-style: none; padding: 0;">
-        <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leaveType}</li>
-        <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
-        <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
-        <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
-        <li style="margin: 8px 0;"><strong>Reason:</strong> ${reason}</li>
-        <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: #orange;">Pending Approval</span></li>
-      </ul>
-    </div>
-    
-    <div style="text-align: center; margin: 30px 0;">
-      <a href="https://kokanglobal.org/parent/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-        View Leave Application
-      </a>
-    </div>
-    
-    <p>You can view all leave applications and their current status in the Leave Management section of the Parent Portal.</p>
-    
-    <p>If you have any questions or concerns, please contact the hostel administration.</p>
-    
-    <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-    <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
-  </div>
-      `
-    });
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+            <h2 style="color: #333; text-align: center;">Leave Application Notification</h2>
+            <p>Dear <strong>${parent.firstName} ${parent.lastName}</strong>,</p>
+            <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has submitted a leave application.</p>
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
+              <ul style="list-style: none; padding: 0;">
+                <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leaveType}</li>
+                <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
+                <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
+                <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
+                <li style="margin: 8px 0;"><strong>Reason:</strong> ${reason}</li>
+                <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: orange;">Pending Approval</span></li>
+              </ul>
+            </div>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://kokanglobal.org/parent/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                View Leave Application
+              </a>
+            </div>
+            <p>You can view all leave applications and their current status in the Parent Portal.</p>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
+          </div>
+        `
+      });
+    } catch (emailError) {
+      console.error("Email notification failed during leave application:", emailError.message);
+      // We don't throw here, so the leave is still successfully saved
+    }
 
     return res.json({ 
       message: "Leave application submitted successfully. Parent has been notified via email.", 
@@ -2341,7 +2331,12 @@ const requestRefund = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Generate refund ID
+    const refundCount = await Refund.countDocuments();
+    const refundId = `REF-${Date.now()}-${(refundCount + 1).toString().padStart(4, '0')}`;
+
     const newRefund = new Refund({
+      refundId,
       studentId: student._id,
       refundType,
       otherRefundType: refundType === "Others" ? otherRefundType : "",
@@ -2352,13 +2347,17 @@ const requestRefund = async (req, res) => {
 
     await newRefund.save();
 
-    await transporter.sendMail({
-      from: `<${student.email}>`,
-      to: process.env.MAIL_USER,
-      subject: `Refund Request: ${refundType === "Others" ? `Other (${otherRefundType})` : refundType
-        } from ${student.firstName}`,
-      text: `Refund Amount: ${amount}\nReason: ${reason}`,
-    });
+    // Send email notification (non-blocking)
+    try {
+      await transporter.sendMail({
+        from: `"Hostel Management" <${process.env.MAIL_USER}>`,
+        to: process.env.MAIL_USER,
+        subject: `Refund Request: ${refundType === "Others" ? `Other (${otherRefundType})` : refundType} from ${student.firstName}`,
+        text: `Refund Request Details:\nStudent: ${student.firstName} ${student.lastName}\nStudent ID: ${student.studentId}\nRefund Type: ${refundType}\nAmount: ${amount}\nReason: ${reason}`,
+      });
+    } catch (emailErr) {
+      console.error("Refund notification email failed:", emailErr.message);
+    }
 
     return res.json({
       message: "Refund request submitted successfully",
@@ -2771,7 +2770,7 @@ const getNotices = async (req, res) => {
 
 const getNextInspection = async (req, res) => {
   try {
-    const studentId = req.studentId; // Comes from token (verifyStudentToken)
+    const studentId = req.studentId;
 
     const student = await Student.findOne({ studentId }).populate('roomBedNumber');
 
@@ -2779,12 +2778,20 @@ const getNextInspection = async (req, res) => {
       return res.status(200).json(null);
     }
 
-    const targetRoom = `Room ${student.roomBedNumber.roomNo || student.roomBedNumber}`;
+    const roomNo = student.roomBedNumber.roomNo;
+    const floor = student.roomBedNumber.floor;
 
+    // Search for inspections targeting this room or this floor
     const nextInspection = await Inspection.findOne({
-      target: targetRoom,
       status: 'pending',
-      datetime: { $gte: new Date() }
+      $or: [
+        { target: roomNo },
+        { target: `Room ${roomNo}` },
+        { target: floor },
+        { target: `Floor ${floor}` },
+        { target: `${floor} Floor` },
+        { target: "All Rooms" }
+      ]
     }).sort({ datetime: 1 });
 
     if (!nextInspection) {
@@ -2795,6 +2802,8 @@ const getNextInspection = async (req, res) => {
       title: nextInspection.title,
       date: nextInspection.datetime,
       status: nextInspection.status,
+      target: nextInspection.target,
+      area: nextInspection.area
     });
 
   } catch (err) {

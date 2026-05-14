@@ -5,26 +5,30 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  host: process.env.MAIL_HOST || 'smtp.gmail.com',
+  port: +process.env.MAIL_PORT || 465,
+  secure: process.env.MAIL_SECURE === "true" || process.env.MAIL_PORT == 465,
   auth: {
     user: process.env.MAIL_USER || process.env.SMTP_EMAIL,
     pass: (process.env.MAIL_PASS || process.env.SMTP_PASS)?.trim().replace(/\s+/g, ''),
   },
   tls: {
-    rejectUnauthorized: false // Helps in some environments
+    rejectUnauthorized: false
   }
 });
 
-export default async function sendEmail({ to, subject, text, fromName = "Hostel Admin" }) {
+export default async function sendEmail({ to, subject, text, html, fromName = "Hostel Admin" }) {
   try {
-    const info = await transporter.sendMail({
+    const mailOptions = {
       from: `"${fromName}" <${process.env.MAIL_USER || process.env.SMTP_EMAIL}>`,
       to,
       subject,
-      text,
-    });
+    };
+
+    if (text) mailOptions.text = text;
+    if (html) mailOptions.html = html;
+
+    const info = await transporter.sendMail(mailOptions);
     console.log(`📧 Email sent to ${to}: ${info.messageId}`);
     return { success: true, info };
   } catch (error) {
@@ -32,3 +36,5 @@ export default async function sendEmail({ to, subject, text, fromName = "Hostel 
     return { success: false, error };
   }
 }
+
+export { transporter };

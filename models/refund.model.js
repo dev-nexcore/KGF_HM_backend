@@ -11,6 +11,14 @@ const refundSchema = new mongoose.Schema(
       ref: "Student",
       required: true,
     },
+    refundType: {
+      type: String,
+      required: true,
+    },
+    otherRefundType: {
+      type: String,
+      default: "",
+    },
     amount: {
       type: Number,
       required: true,
@@ -42,7 +50,7 @@ const refundSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    requestDate: {
+    requestedAt: {
       type: Date,
       default: Date.now,
     },

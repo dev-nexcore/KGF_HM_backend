@@ -19,7 +19,7 @@ router.put('/profile', authenticateParent, updateProfile);
 router.delete('/profile/image', authenticateParent, removeProfileImage);
 router.get('/student-profile', authenticateParent, getStudentProfile);
 router.get('/dashboard', authenticateParent,dashboard);
-router.get('/attendance', attendance);
+router.get('/attendance', authenticateParent, attendance);
 router.get('/leave-management', authenticateParent,leaveManagement);
 router.put('/leave-status', authenticateParent, updateLeaveStatus);
 router.get('/fees',authenticateParent, fees);

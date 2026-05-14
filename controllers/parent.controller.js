@@ -1,5 +1,5 @@
 import "dotenv/config";
-import sendEmail from "../utils/sendEmail.js";
+import sendEmail, { transporter } from "../utils/sendEmail.js";
 import jwt from 'jsonwebtoken';
 import bcrypt from "bcrypt";
 import { Parent } from "../models/parent.model.js";
@@ -905,7 +905,13 @@ const attendance = async (req, res) => {
         attendancePercentage,
         isPresentToday,
         lastAbsence: lastAbsenceDate || "No recent absences"
-      }
+      },
+      attendanceLog: attendanceLog.map(entry => ({
+        date: entry.checkInDate,
+        checkIn: entry.checkInDate,
+        checkOut: entry.checkOutDate,
+        status: "Present"
+      }))
     };
 
     return res.json(attendanceData);
@@ -1032,11 +1038,12 @@ const updateLeaveStatus = async (req, res) => {
     const parent = await Parent.findOne({ studentId: student.studentId });
 
     // Send email notification to student
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: student.email,
-      subject: `Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'} - ${leave.leaveType}`,
-      text: `Dear ${student.firstName} ${student.lastName},
+    try {
+      await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: student.email,
+        subject: `Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'} - ${leave.leaveType}`,
+        text: `Dear ${student.firstName} ${student.lastName},
 
 Your leave request has been ${status} by your parent.
 
@@ -1050,53 +1057,53 @@ Leave Details:
 ${parentComment ? `• Parent Comment: ${parentComment}` : ''}
 
 ${status === 'approved' ?
-          'Your leave has been approved. Please follow hostel guidelines for your leave period.' :
-          'Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
-        }
+            'Your leave has been approved. Please follow hostel guidelines for your leave period.' :
+            'Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
+          }
 
 – Hostel Admin`,
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-          <h2 style="color: #333; text-align: center;">Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'}</h2>
-          
-          <p>Dear <strong>${student.firstName} ${student.lastName}</strong>,</p>
-          
-          <p>Your leave request has been <strong style="color: ${status === 'approved' ? '#4CAF50' : '#f44336'};">${status.toUpperCase()}</strong> by your parent.</p>
-          
-          <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
-            <ul style="list-style: none; padding: 0;">
-              <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leave.leaveType}</li>
-              <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
-              <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
-              <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
-              <li style="margin: 8px 0;"><strong>Reason:</strong> ${leave.reason}</li>
-              <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: ${status === 'approved' ? '#4CAF50' : '#f44336'};">${status.toUpperCase()}</span></li>
-              ${parentComment ? `<li style="margin: 8px 0;"><strong>Parent Comment:</strong> ${parentComment}</li>` : ''}
-            </ul>
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+            <h2 style="color: #333; text-align: center;">Leave Request ${status === 'approved' ? 'Approved' : 'Rejected'}</h2>
+            
+            <p>Dear <strong>${student.firstName} ${student.lastName}</strong>,</p>
+            
+            <p>Your leave request has been <strong style="color: ${status === 'approved' ? '#4CAF50' : '#f44336'};">${status.toUpperCase()}</strong> by your parent.</p>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
+              <ul style="list-style: none; padding: 0;">
+                <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leave.leaveType}</li>
+                <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
+                <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
+                <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
+                <li style="margin: 8px 0;"><strong>Reason:</strong> ${leave.reason}</li>
+                <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: ${status === 'approved' ? '#4CAF50' : '#f44336'};">${status.toUpperCase()}</span></li>
+                ${parentComment ? `<li style="margin: 8px 0;"><strong>Parent Comment:</strong> ${parentComment}</li>` : ''}
+              </ul>
+            </div>
+            
+            <div style="background-color: ${status === 'approved' ? '#e8f5e8' : '#ffebee'}; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 0; color: ${status === 'approved' ? '#2e7d32' : '#c62828'};">
+                ${status === 'approved' ?
+            '✅ Your leave has been approved. Please follow hostel guidelines for your leave period.' :
+            '❌ Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
+          }
+              </p>
+            </div>
+            
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+            <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
           </div>
-          
-          <div style="background-color: ${status === 'approved' ? '#e8f5e8' : '#ffebee'}; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p style="margin: 0; color: ${status === 'approved' ? '#2e7d32' : '#c62828'};">
-              ${status === 'approved' ?
-          '✅ Your leave has been approved. Please follow hostel guidelines for your leave period.' :
-          '❌ Your leave request has been rejected. Please contact your parent or hostel administration for more details.'
-        }
-            </p>
-          </div>
-          
-          <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-          <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
-        </div>
-      `
-    });
+        `
+      });
 
-    // Send email to admin about parent's decision
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: process.env.MAIL_USER,
-      subject: `Parent ${status === 'approved' ? 'Approved' : 'Rejected'} Leave - ${student.firstName} ${student.lastName}`,
-      text: `Parent has ${status} a leave request.
+      // Send email to admin about parent's decision
+      await transporter.sendMail({
+        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        to: process.env.MAIL_USER,
+        subject: `Parent ${status === 'approved' ? 'Approved' : 'Rejected'} Leave - ${student.firstName} ${student.lastName}`,
+        text: `Parent has ${status} a leave request.
 
 Student: ${student.firstName} ${student.lastName} (${student.studentId})
 Parent: ${parent ? `${parent.firstName} ${parent.lastName}` : 'Unknown'}
@@ -1106,7 +1113,10 @@ Status: ${status.toUpperCase()}
 ${parentComment ? `Parent Comment: ${parentComment}` : ''}
 
 Please update your records accordingly.`
-    });
+      });
+    } catch (emailError) {
+      console.error("Email notification failed during leave status update:", emailError.message);
+    }
 
     return res.json({
       message: `Leave request ${status} successfully`,
@@ -1141,21 +1151,44 @@ const fees = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Fetch invoices for this student
+    const invoices = await StudentInvoice.find({ studentId: student._id }).sort({ createdAt: -1 });
+
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.amount || 0), 0);
+    const amountDue = invoices
+      .filter(inv => inv.status === 'pending' || inv.status === 'overdue')
+      .reduce((sum, inv) => sum + (inv.amount || 0), 0);
+
     const feesData = {
       studentId: student.studentId,
       firstName: student.firstName,
       lastName: student.lastName,
       feesOverview: {
-        status: student.feeStatus || "Not Available",
-        totalAmount: student.feeAmount || 0,
-        amountDue: student.feeStatus === "Pending" ? student.feeAmount || 0 : 0,
-        dueDate: student.feeDueDate ? new Date(student.feeDueDate).toISOString() : null,
-        paymentHistory: student.paymentHistory?.map(payment => ({
-          amount: payment.amount || 0,
-          date: payment.date ? new Date(payment.date).toISOString() : null,
-          method: payment.method || "Not specified",
-          status: payment.status || "Completed"
-        })) || []
+        status: amountDue > 0 ? "Pending" : (totalAmount > 0 ? "Paid" : "No Invoice"),
+        totalAmount,
+        amountDue,
+        dueDate: invoices.find(inv => inv.status === 'pending')?.dueDate || null,
+        paymentHistory: invoices
+          .filter(inv => inv.status === 'paid')
+          .map(inv => ({
+            _id: inv._id,
+            invoiceNumber: inv.invoiceNumber,
+            amount: inv.amount,
+            date: inv.paidDate || inv.updatedAt,
+            method: inv.paymentMethod || "Online",
+            status: "Completed",
+            type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+          })),
+        allInvoices: invoices.map(inv => ({
+          _id: inv._id,
+          invoiceNumber: inv.invoiceNumber,
+          amount: inv.amount,
+          dueDate: inv.dueDate,
+          paidDate: inv.paidDate,
+          status: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
+          type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          method: inv.paymentMethod || "N/A"
+        }))
       }
     };
 
@@ -1227,7 +1260,12 @@ const requestRefund = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
+    // Generate refund ID
+    const refundCount = await Refund.countDocuments();
+    const refundId = `REF-${Date.now()}-${(refundCount + 1).toString().padStart(4, '0')}`;
+
     const newRefund = new Refund({
+      refundId,
       studentId: student._id,
       refundType,
       otherRefundType: refundType === "Others" ? otherRefundType : "",
@@ -1238,13 +1276,17 @@ const requestRefund = async (req, res) => {
 
     await newRefund.save();
 
-    await transporter.sendMail({
-      from: `<${student.email}>`,
-      to: process.env.MAIL_USER,
-      subject: `Refund Request: ${refundType === "Others" ? `Other (${otherRefundType})` : refundType
-        } from ${student.firstName}`,
-      text: `Refund Amount: ${amount}\nReason: ${reason}`,
-    });
+    // Send email notification (non-blocking)
+    try {
+      await transporter.sendMail({
+        from: `"Hostel Management" <${process.env.MAIL_USER}>`,
+        to: process.env.MAIL_USER,
+        subject: `Refund Request: ${refundType === "Others" ? `Other (${otherRefundType})` : refundType} from ${student.firstName}`,
+        text: `Refund Request Details:\nStudent: ${student.firstName} ${student.lastName}\nStudent ID: ${student.studentId}\nRefund Type: ${refundType}\nAmount: ${amount}\nReason: ${reason}`,
+      });
+    } catch (emailErr) {
+      console.error("Refund notification email failed:", emailErr.message);
+    }
 
     return res.json({
       message: "Refund request submitted successfully",
@@ -1320,7 +1362,7 @@ const markNoticeAsRead = async (req, res) => {
 // ====================== RAZORPAY INTEGRATION FOR PARENTS ======================
 
 const createRazorpayOrder = async (req, res) => {
-  const { amount, currency = 'INR', studentId } = req.body;
+  const { amount, currency = 'INR', studentId, invoiceId } = req.body;
 
   try {
     const student = await Student.findOne({ studentId });
@@ -1332,7 +1374,8 @@ const createRazorpayOrder = async (req, res) => {
       receipt: `RCPT_${Date.now()}`,
       notes: {
         studentId: student.studentId,
-        studentName: `${student.firstName} ${student.lastName}`
+        studentName: `${student.firstName} ${student.lastName}`,
+        invoiceId: invoiceId || null
       }
     };
 
@@ -1354,7 +1397,8 @@ const verifyRazorpayPayment = async (req, res) => {
   const { 
     razorpay_order_id, 
     razorpay_payment_id, 
-    razorpay_signature 
+    razorpay_signature,
+    invoiceId
   } = req.body;
 
   try {
@@ -1368,6 +1412,34 @@ const verifyRazorpayPayment = async (req, res) => {
 
     if (!isSignatureValid) {
       return res.status(400).json({ success: false, message: "Invalid payment signature" });
+    }
+
+    // Update the invoice status if invoiceId is provided
+    if (invoiceId) {
+      const invoice = await StudentInvoice.findById(invoiceId);
+      if (invoice) {
+        invoice.status = 'paid';
+        invoice.paidDate = new Date();
+        invoice.razorpayPaymentId = razorpay_payment_id;
+        invoice.razorpayOrderId = razorpay_order_id;
+        invoice.paymentMethod = 'razorpay';
+        await invoice.save();
+
+        // Also update student's general fee status if needed
+        const student = await Student.findById(invoice.studentId);
+        if (student) {
+          // Check if there are any other pending invoices
+          const pendingInvoices = await StudentInvoice.countDocuments({
+            studentId: student._id,
+            status: { $in: ['pending', 'overdue'] }
+          });
+          
+          if (pendingInvoices === 0) {
+            student.feeStatus = 'Paid';
+            await student.save();
+          }
+        }
+      }
     }
 
     return res.json({
