@@ -657,7 +657,7 @@ const generateSalarySlip = async (req, res) => {
 // ====================== REFUND MANAGEMENT ======================
 
 const initiateRefund = async (req, res) => {
-  const { studentId, amount, reason, paymentMethod } = req.body;
+  const { studentId, amount, reason, paymentMethod, fees, securityDeposit, deduction, deductionReason } = req.body;
 
   try {
     // Find student
@@ -676,6 +676,10 @@ const initiateRefund = async (req, res) => {
       amount,
       reason,
       paymentMethod,
+      fees,
+      securityDeposit,
+      deduction,
+      deductionReason,
       processedBy: req.admin?._id
     });
 
@@ -749,7 +753,11 @@ const getRefunds = async (req, res) => {
         status: refund.status,
         processedBy: refund.processedBy?.adminId || 'N/A',
         processedDate: refund.processedDate,
-        paymentMethod: refund.paymentMethod
+        paymentMethod: refund.paymentMethod,
+        fees: refund.fees,
+        securityDeposit: refund.securityDeposit,
+        deduction: refund.deduction,
+        deductionReason: refund.deductionReason
       })),
       pagination: {
         currentPage: parseInt(page),

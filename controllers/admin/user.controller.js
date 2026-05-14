@@ -1224,7 +1224,7 @@ const registerStudent = async (req, res) => {
 
   try {
 
-    // Check for duplicate email before proceeding
+
     const existingStudentByEmail = await Student.findOne({ email });
     if (existingStudentByEmail) {
       return res.status(409).json({
@@ -1236,7 +1236,7 @@ const registerStudent = async (req, res) => {
     const generateStudentId = async () => {
       const count = await Student.countDocuments();
       const paddedNumber = String(count + 1).padStart(3, "0");
-      const prefix = isWorking ? "STUW" : "STU";
+      const prefix = (isWorking === 'true' || isWorking === true) ? "STUW" : "STU";
       const studentId = `${prefix}-${paddedNumber}`;
       const existingStudent = await Student.findOne({ studentId });
 
@@ -1948,18 +1948,18 @@ const getAllParents = async (req, res) => {
 };
 
 
-const getAllParents = async (req, res) => {
-  try {
-    const parents = await Parent.find({}).sort({ createdAt: -1 });
-    return res.json({
-      success: true,
-      parents,
-    });
-  } catch (err) {
-    console.error("Error fetching parents:", err);
-    return res.status(500).json({ success: false, message: "Error fetching parents." });
-  }
-};
+// const getAllParents = async (req, res) => {
+//   try {
+//     const parents = await Parent.find({}).sort({ createdAt: -1 });
+//     return res.json({
+//       success: true,
+//       parents,
+//     });
+//   } catch (err) {
+//     console.error("Error fetching parents:", err);
+//     return res.status(500).json({ success: false, message: "Error fetching parents." });
+//   }
+// };
 
 const deleteParent = async (req, res) => {
   const { id } = req.params;
@@ -2002,7 +2002,7 @@ export {
   updateStudent,
   deleteStudent,
   getStudentDocument,
-  getAllParents,
+
   deleteParent,
   updateParent,
 }

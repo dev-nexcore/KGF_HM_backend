@@ -32,7 +32,7 @@ import {
   getStudentById,
   updateStudent,
   deleteStudent,
-  getAllParents,
+
   deleteParent,
   updateParent,
 } from "../controllers/admin/user.controller.js";
