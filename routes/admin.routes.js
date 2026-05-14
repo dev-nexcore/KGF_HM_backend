@@ -26,6 +26,7 @@ import {
   registerParent,
   registerWarden,
    getAllStudents,
+   getAllParents,
    getAllWardens,
    getStudentsWithoutParents,
   getStudentById,
@@ -38,7 +39,8 @@ import {
   getBedOccupancyStatus,
   getTotalRevenue,
   getPendingPayments,
-  getFinancialSummary
+  getFinancialSummary,
+  getQuickStats
 } from "../controllers/admin/dashboard.controller.js";
 
 import {
@@ -167,6 +169,7 @@ router.post(
 );
 router.post('/register-warden', registerWarden);
 router.get('/students', getAllStudents);
+router.get('/parents', getAllParents);
 router.get('/wardens', getAllWardens);
 router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/student/:studentId', getStudentById);
@@ -197,6 +200,7 @@ router.get('/bed-occupancy-status', getBedOccupancyStatus);
 router.get('/dashboard/total-revenue', getTotalRevenue);
 router.get('/dashboard/pending-payments', getPendingPayments);
 router.get('/dashboard/financial-summary', getFinancialSummary);
+router.get('/dashboard/quick-stats', getQuickStats);
 
 
 // ====================== LEAVE MANAGEMENT ROUTES ======================
