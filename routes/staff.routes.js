@@ -9,11 +9,14 @@ import {
   deleteStaff,
 } from "../controllers/staff.controller.js";
 
+import { verifyWardenToken } from "../middleware/auth.middleware.js";
+
 const router = express.Router();
 
 // Register
 router.post(
   "/register-staff",
+  verifyWardenToken,
   registerStaff
 );
 

@@ -1,7 +1,8 @@
 // controllers/staff.controller.js
 
 import { Staff } from "../models/staff.model.js";
-// import transporter from "../config/mail.js";
+import { Requisition } from "../models/requisition.model.js";
+import { Warden } from "../models/warden.model.js";
 import sendEmail from '../utils/sendEmail.js';
 
 // Register Staff
@@ -12,7 +13,6 @@ export const registerStaff =
       firstName,
       lastName,
       email,
-      staffId,
       contactNumber,
       designation,
       shiftStart,
@@ -21,105 +21,53 @@ export const registerStaff =
     } = req.body;
 
     try {
-
-      // Check Existing
-      const existingStaff =
-        await Staff.findOne({
-          email,
-        });
-
+      // Check Existing Staff
+      const existingStaff = await Staff.findOne({ email });
       if (existingStaff) {
-        return res
-          .status(409)
-          .json({
-            message:
-              "Staff already exists with same email.",
-          });
+        return res.status(409).json({ success: false, message: "Staff already exists with this email." });
       }
 
-      // Generate Password
-      const cleanName =
-        firstName
-          .replace(
-            /\s+/g,
-            ""
-          )
-          .toLowerCase();
+      // Check Existing Requisition
+      const existingReq = await Requisition.findOne({ "data.email": email, status: "pending" });
+      if (existingReq) {
+        return res.status(409).json({ success: false, message: "A registration request for this email is already pending approval." });
+      }
 
-      const staffPassword =
-        `${cleanName}${lastName}`;
+      // Get Warden info
+      const warden = await Warden.findById(req.user.id);
+      if (!warden) {
+        return res.status(404).json({ success: false, message: "Warden not found" });
+      }
 
-      // Create Staff
-      const newStaff =
-        new Staff({
+      const newRequisition = new Requisition({
+        requisitionType: "staff",
+        requestedBy: req.user.id,
+        requestedByName: `${warden.firstName} ${warden.lastName}`,
+        data: {
           firstName,
           lastName,
           email,
-          staffId,
           contactNumber,
           designation,
           shiftStart,
           shiftEnd,
-          salary,
-          password:
-            staffPassword,
-        });
-
-      await newStaff.save();
-
-      // Send Mail
-      await sendEmail({
-        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-
-        to: email,
-
-        subject:
-          "Your Staff Panel Credentials",
-
-        text: `
-Hello ${firstName} ${lastName},
-
-Your staff account has been created.
-
-• Staff Name: ${firstName} ${lastName}
-• Staff ID: ${staffId}
-• Designation: ${designation}
-• Shift: ${shiftStart} - ${shiftEnd}
-• Password: ${staffPassword}
-
-Please login and change your password.
-
-- Hostel Admin
-`,
+          salary
+        }
       });
+
+      await newRequisition.save();
 
       return res.json({
         success: true,
-
-        message:
-          "Staff registered successfully.",
-
-        staff: {
-          firstName,
-          lastName,
-          email,
-          staffId,
-          designation,
-        },
+        message: "Staff registration request submitted for Admin approval.",
       });
 
     } catch (error) {
-
-      console.error(error);
-
-      return res
-        .status(500)
-        .json({
-          success: false,
-
-          message:
-            "Error registering staff.",
-        });
+      console.error("Error submitting staff requisition:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Error submitting staff registration request.",
+      });
     }
   };
 

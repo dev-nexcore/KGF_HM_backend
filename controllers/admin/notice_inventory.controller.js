@@ -1880,7 +1880,8 @@ await Promise.all(
     console.error("Issue notice error:", err);
     return res.status(500).json({
       success: false,
-      message: "Failed to issue notice"
+      message: `Failed to issue notice: ${err.message}`,
+      error: err.message
     });
   }
 };

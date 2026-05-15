@@ -1218,23 +1218,26 @@ ${status === 'completed' ?
 
 const getTodaysCheckInOutStatus = async (req, res) => {
   try {
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
 
-    // Find students who checked in today
-    const checkIns = await Student.find({
-      checkInDate: { $gte: startOfDay, $lte: endOfDay }
-    });
+    const checkInsCount = await Student.aggregate([
+      { $unwind: "$attendanceLog" },
+      { $match: { "attendanceLog.checkInDate": { $gte: startOfDay, $lte: endOfDay } } },
+      { $count: "count" }
+    ]);
 
-    // Find students who checked out today
-    const checkOuts = await Student.find({
-      checkOutDate: { $gte: startOfDay, $lte: endOfDay }
-    });
+    const checkOutsCount = await Student.aggregate([
+      { $unwind: "$attendanceLog" },
+      { $match: { "attendanceLog.checkOutDate": { $gte: startOfDay, $lte: endOfDay } } },
+      { $count: "count" }
+    ]);
 
     return res.json({
-      checkIns: checkIns.length,
-      checkOuts: checkOuts.length
+      checkIns: checkInsCount[0]?.count || 0,
+      checkOuts: checkOutsCount[0]?.count || 0
     });
   } catch (err) {
     console.error("Error fetching today's check-in/check-out data:", err);
@@ -1244,13 +1247,13 @@ const getTodaysCheckInOutStatus = async (req, res) => {
 
 const getBedOccupancyStatus = async (req, res) => {
   try {
-    // Get all students with a room number
-    const totalBeds = 75
+    const totalBeds = await Inventory.countDocuments({ 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] 
+    });
 
-    // Get the number of students who have checked in
-   const occupiedBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });
+    const occupiedBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });
 
-    const availableBeds = totalBeds - occupiedBeds;
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
 
     return res.json({
       totalBeds,

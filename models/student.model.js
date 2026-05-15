@@ -11,7 +11,7 @@ const studentSchema = new mongoose.Schema({
   roomBedNumber: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Inventory',
-    required: true
+    required: false
   },
   profileImage: { type: String, default: null },
   email: { type: String, required: true, unique: true },
@@ -20,60 +20,40 @@ const studentSchema = new mongoose.Schema({
   emergencyContactName: { type: String },
   relation: { type: String },
   emergencyContactNumber: { type: String },
-  roomType: { type: String, default: "" }, // Add this
+  roomType: { type: String, default: "" },
   password: { type: String, required: true },
   
-  // ADD THESE DOCUMENT FIELDS
-  // documents: {
-  //   aadharCard: {
-  //     filename: { type: String },
-  //     path: { type: String },
-  //     uploadedAt: { type: Date }
-  //   },
-  //   panCard: {
-  //     filename: { type: String },
-  //     path: { type: String },
-  //     uploadedAt: { type: Date }
-  //   }
-  // },
-
-
   documents: {
-
-  aadharCard: {
-    filename: { type: String },
-    path: { type: String },
-    uploadedAt: { type: Date }
+    aadharCard: {
+      filename: { type: String },
+      path: { type: String },
+      uploadedAt: { type: Date }
+    },
+    panCard: {
+      filename: { type: String },
+      path: { type: String },
+      uploadedAt: { type: Date }
+    },
+    studentIdCard: {
+      filename: { type: String },
+      path: { type: String },
+      uploadedAt: { type: Date }
+    },
+    feesReceipt: {
+      filename: { type: String },
+      path: { type: String },
+      uploadedAt: { type: Date }
+    }
   },
 
-  panCard: {
-    filename: { type: String },
-    path: { type: String },
-    uploadedAt: { type: Date }
+  hasCollegeId: {
+    type: Boolean,
+    default: true
   },
-
-  studentIdCard: {
-    filename: { type: String },
-    path: { type: String },
-    uploadedAt: { type: Date }
+  isWorking: {
+    type: Boolean,
+    default: false
   },
-
-  feesReceipt: {
-    filename: { type: String },
-    path: { type: String },
-    uploadedAt: { type: Date }
-  }
-
-},
-
-hasCollegeId: {
-  type: Boolean,
-  default: true
-},
-isWorking: {
-  type: Boolean,
-  default: false
-},
   
   attendanceLog: [
     {
@@ -89,7 +69,7 @@ isWorking: {
     type: String,
     select: false
   },
-});
+}, { timestamps: true });
 
 studentSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
@@ -102,5 +82,3 @@ studentSchema.methods.comparePassword = function (candidatePassword) {
 };
 
 export const Student = mongoose.model('Student', studentSchema);
-
-

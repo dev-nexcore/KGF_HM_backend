@@ -24,6 +24,7 @@ import { Parent } from '../models/parent.model.js';
 import { Staff } from '../models/staff.model.js';
 import { Requisition } from '../models/requisition.model.js';
 import { Complaint } from '../models/complaint.model.js';
+import { StudentInvoice } from '../models/studentInvoice.model.js';
 
 
 
@@ -421,8 +422,6 @@ const getAttendanceLog = async (req, res) => {
 
 
 
-// <------- Warden Dashboard Summary ---------->
-
 const getWardenDashboardStats = async (req, res) => {
   try {
     // Total Students
@@ -460,6 +459,91 @@ const getWardenDashboardStats = async (req, res) => {
       datetime: { $gte: now },
       status: "pending"
     });
+    // Today's Check-In/Check-Out
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const studentsForAttendance = await Student.find({}, { attendanceLog: 1 });
+    let checkIns = 0;
+    let checkOuts = 0;
+
+    studentsForAttendance.forEach((student) => {
+      student.attendanceLog?.forEach((entry) => {
+        const checkIn = entry.checkInDate ? new Date(entry.checkInDate) : null;
+        const checkOut = entry.checkOutDate ? new Date(entry.checkOutDate) : null;
+
+        if (checkIn && checkIn >= startOfDay && checkIn <= endOfDay) {
+          checkIns++;
+        }
+        if (checkOut && checkOut >= startOfDay && checkOut <= endOfDay) {
+          checkOuts++;
+        }
+      });
+    });
+
+    // Recent Activities
+    const [recentLeaves, recentComplaints, recentInspections] = await Promise.all([
+      Leave.find().sort({ appliedAt: -1 }).limit(5).populate('studentId', 'firstName lastName studentId'),
+      Complaint.find().sort({ createdAt: -1 }).limit(5).populate('studentId', 'firstName lastName studentId'),
+      Inspection.find({ status: 'completed' }).sort({ createdAt: -1 }).limit(5)
+    ]);
+
+    // Collect recent attendance activities
+    const attendanceActivities = [];
+    const recentAttendanceStudents = await Student.find(
+      { "attendanceLog.0": { $exists: true } },
+      { firstName: 1, lastName: 1, studentId: 1, attendanceLog: { $slice: -3 } }
+    ).lean();
+
+    recentAttendanceStudents.forEach(student => {
+      student.attendanceLog.forEach(log => {
+        if (log.checkInDate) {
+          attendanceActivities.push({
+            description: `Check-In: ${student.firstName} ${student.lastName}`,
+            user: student.studentId,
+            target: "Attendance",
+            action: "check_in",
+            timestamp: log.checkInDate
+          });
+        }
+        if (log.checkOutDate) {
+          attendanceActivities.push({
+            description: `Check-Out: ${student.firstName} ${student.lastName}`,
+            user: student.studentId,
+            target: "Attendance",
+            action: "check_out",
+            timestamp: log.checkOutDate
+          });
+        }
+      });
+    });
+
+    const recentActivities = [
+      ...recentLeaves.map(l => ({
+        description: `Leave request ${l.status} for ${l.studentId?.firstName || 'Student'} ${l.studentId?.lastName || ''}`,
+        user: l.studentId?.studentId || "System",
+        target: "Leave",
+        action: "leave_request",
+        timestamp: l.appliedAt
+      })),
+      ...recentComplaints.map(c => ({
+        description: `New complaint: ${c.complaintType} by ${c.studentId?.firstName || 'Student'} ${c.studentId?.lastName || ''}`,
+        user: c.studentId?.studentId || "System",
+        target: "Complaint",
+        action: "complaint_filed",
+        timestamp: c.createdAt || c.filedDate
+      })),
+      ...recentInspections.map(i => ({
+        description: `Inspection completed: ${i.title}`,
+        user: i.createdBy || "System",
+        target: "Inspection",
+        action: "inspection_completed",
+        timestamp: i.createdAt
+      })),
+      ...attendanceActivities
+    ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 10);
 
     // Pending Leave Requests
     const pendingLeavesCount = await Leave.countDocuments({ status: "pending" });
@@ -467,7 +551,7 @@ const getWardenDashboardStats = async (req, res) => {
     // In Progress Complaints
     const inProgressComplaintsCount = await Complaint.countDocuments({ status: "in progress" });
 
-    // Pending Requisitions by this warden (if warden ID is available in req.user)
+    // Pending Requisitions by this warden
     let pendingRequisitionsCount = 0;
     if (req.user && req.user.id) {
       pendingRequisitionsCount = await Requisition.countDocuments({ 
@@ -486,7 +570,12 @@ const getWardenDashboardStats = async (req, res) => {
       upcomingInspections,
       pendingLeavesCount,
       inProgressComplaintsCount,
-      pendingRequisitionsCount
+      pendingRequisitionsCount,
+      recentActivities,
+      checkInOutData: {
+        checkIns,
+        checkOuts
+      }
     });
 
   } catch (error) {
@@ -611,7 +700,21 @@ const getStudentListForWarden = async (req, res) => {
     // Fetch students with attendance log and bed info
     const allStudents = await Student.find(studentFilter)
       .populate({ path: "roomBedNumber", select: "barcodeId roomNo" })
-      .select("studentId firstName lastName contactNumber roomBedNumber attendanceLog feeStatus");
+      .select("studentId firstName lastName contactNumber roomBedNumber attendanceLog feeStatus email emergencyContactName emergencyContactNumber admissionDate roomType isWorking documents hasCollegeId");
+
+    // Calculate room capacities (room types) by specifically filtering for beds
+    const allBedItems = await Inventory.find({
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
+    const roomTypeMap = {};
+    allBedItems.forEach(bed => {
+      if (bed.roomNo) {
+        roomTypeMap[bed.roomNo] = (roomTypeMap[bed.roomNo] || 0) + 1;
+      }
+    });
 
     const today = new Date();
 
@@ -645,6 +748,14 @@ const getStudentListForWarden = async (req, res) => {
       }
     });
 
+    // Calculate dues from pending invoices
+    const pendingInvoices = await StudentInvoice.aggregate([
+      { $match: { status: { $in: ["pending", "Pending", "unpaid", "Unpaid"] } } },
+      { $group: { _id: "$studentId", totalDues: { $sum: "$amount" } } }
+    ]);
+    const duesMap = {};
+    pendingInvoices.forEach(inv => { duesMap[inv._id.toString()] = inv.totalDues; });
+
     // Format the final response
     const formattedStudents = filteredStudents.map((student) => {
       const studentIdStr = student._id.toString();
@@ -655,7 +766,7 @@ const getStudentListForWarden = async (req, res) => {
 
       let currentStatus = "Active";
       if (isOnLeave) {
-        currentStatus = "On Leave"; // Highest priority
+        currentStatus = "On Leave";
       } else if (isCheckedOut) {
         currentStatus = "Checked Out";
       }
@@ -663,12 +774,23 @@ const getStudentListForWarden = async (req, res) => {
       return {
         studentId: student.studentId,
         studentName: `${student.firstName} ${student.lastName}`,
+        firstName: student.firstName,
+        lastName: student.lastName,
         contactNumber: student.contactNumber,
+        email: student.email || null,
+        emergencyContactName: student.emergencyContactName || null,
+        emergencyContactNumber: student.emergencyContactNumber || null,
+        admissionDate: student.admissionDate || null,
+        roomType: student.roomType ? String(student.roomType) : (student.roomBedNumber?.roomNo ? String(roomTypeMap[student.roomBedNumber.roomNo]) : null),
+        isWorking: student.isWorking || false,
+        hasCollegeId: student.hasCollegeId ?? true,
+        roomBedNumber: student.roomBedNumber || null,
         barcodeId: student.roomBedNumber?.barcodeId || null,
         roomNo: student.roomBedNumber?.roomNo || null,
         status: currentStatus,
         feeStatus: student.feeStatus || "N/A",
-        documents: student.documents || null, // Include documents
+        dues: duesMap[studentIdStr] || 0,
+        documents: student.documents || null,
       };
     });
 
@@ -1531,96 +1653,39 @@ const getStudentDocument = async (req, res) => {
 
 const registerIntern = async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      contactNumber,
-      roomNumber,
-      bedNumber,
-      emergencyContact,
-      emergencyContactName,
-      admissionDate,
-      feeStatus,
-    } = req.body;
+    const { firstName, lastName, email, contactNumber, roomBedNumber, emergencyContact, emergencyContactName, admissionDate, feeStatus, roomType } = req.body;
 
-    // Validate required fields
-    if (!firstName || !lastName || !email || !contactNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "All required fields must be filled",
-      });
-    }
+    const existingStudent = await Student.findOne({ email });
+    if (existingStudent) return res.status(409).json({ success: false, message: "Worker with this email already exists" });
 
-    // Get warden info from token
-    const wardenId = req.user?.id;
-    if (!wardenId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: Warden authentication required",
-      });
-    }
+    const existingReq = await Requisition.findOne({ "data.email": email, status: "pending" });
+    if (existingReq) return res.status(409).json({ success: false, message: "A registration request for this email is already pending approval" });
 
-    const warden = await Warden.findById(wardenId);
-    if (!warden) {
-      return res.status(404).json({
-        success: false,
-        message: "Warden not found",
-      });
-    }
-
-    // Prepare document data from uploaded files
+    const warden = await Warden.findById(req.user.id);
     const documents = {};
     if (req.files) {
-      if (req.files.aadharCard && req.files.aadharCard[0]) {
-        documents.aadharCard = {
-          filename: req.files.aadharCard[0].filename,
-          path: req.files.aadharCard[0].path,
-          uploadedAt: new Date(),
-        };
-      }
-      if (req.files.panCard && req.files.panCard[0]) {
-        documents.panCard = {
-          filename: req.files.panCard[0].filename,
-          path: req.files.panCard[0].path,
-          uploadedAt: new Date(),
-        };
-      }
+      Object.keys(req.files).forEach(key => {
+        documents[key] = { filename: req.files[key][0].filename, path: req.files[key][0].path, uploadedAt: new Date() };
+      });
     }
 
-    // Create requisition for Student Intern
-    const requisition = new Requisition({
-      requisitionType: "intern",
-      status: "pending",
-      requestedBy: wardenId,
+    const newRequisition = new Requisition({
+      requisitionType: "worker",
+      requestedBy: req.user.id,
       requestedByName: `${warden.firstName} ${warden.lastName}`,
       data: {
-        firstName,
-        lastName,
-        email,
-        contactNumber,
-        studentId, // Linked student ID
-        designation: designation || "Student Intern",
-        admissionDate,
-        feeStatus,
+        firstName, lastName, email, contactNumber, roomBedNumber: roomBedNumber === "Not Assigned" ? null : roomBedNumber,
+        emergencyContact, emergencyContactName, admissionDate: admissionDate || new Date(),
+        feeStatus, roomType, isWorking: true
       },
-      documents,
+      documents
     });
 
-    await requisition.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Student Intern registration request submitted. Awaiting administrative approval.",
-      requisitionId: requisition._id,
-    });
+    await newRequisition.save();
+    return res.status(201).json({ success: true, message: "Registration request submitted for Admin approval" });
   } catch (error) {
-    console.error("Error creating worker requisition:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to submit worker registration request",
-      error: error.message,
-    });
+    console.error("Error submitting worker registration:", error);
+    res.status(500).json({ success: false, message: "Failed to submit registration request", error: error.message });
   }
 };
 
@@ -1629,98 +1694,39 @@ const registerIntern = async (req, res) => {
 
 const registerStudent = async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      contactNumber,
-      roomNumber,
-      bedNumber,
-      emergencyContact,
-      emergencyContactName,
-      admissionDate,
-      feeStatus,
-    } = req.body;
+    const { firstName, lastName, email, contactNumber, roomBedNumber, emergencyContact, emergencyContactName, admissionDate, feeStatus, roomType, hasCollegeId } = req.body;
 
-    // Validate required fields
-    if (!firstName || !lastName || !email || !contactNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "All required fields must be filled",
-      });
-    }
+    const existingStudent = await Student.findOne({ email });
+    if (existingStudent) return res.status(409).json({ success: false, message: "Student with this email already exists" });
 
-    // Get warden info from token
-    const wardenId = req.user?.id;
-    if (!wardenId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: Warden authentication required",
-      });
-    }
+    const existingReq = await Requisition.findOne({ "data.email": email, status: "pending" });
+    if (existingReq) return res.status(409).json({ success: false, message: "A registration request for this email is already pending approval" });
 
-    const warden = await Warden.findById(wardenId);
-    if (!warden) {
-      return res.status(404).json({
-        success: false,
-        message: "Warden not found",
-      });
-    }
-
-    // Prepare document data from uploaded files
+    const warden = await Warden.findById(req.user.id);
     const documents = {};
     if (req.files) {
-      if (req.files.aadharCard && req.files.aadharCard[0]) {
-        documents.aadharCard = {
-          filename: req.files.aadharCard[0].filename,
-          path: req.files.aadharCard[0].path,
-          uploadedAt: new Date(),
-        };
-      }
-      if (req.files.panCard && req.files.panCard[0]) {
-        documents.panCard = {
-          filename: req.files.panCard[0].filename,
-          path: req.files.panCard[0].path,
-          uploadedAt: new Date(),
-        };
-      }
+      Object.keys(req.files).forEach(key => {
+        documents[key] = { filename: req.files[key][0].filename, path: req.files[key][0].path, uploadedAt: new Date() };
+      });
     }
 
-    // Create requisition
-    const requisition = new Requisition({
+    const newRequisition = new Requisition({
       requisitionType: "student",
-      status: "pending",
-      requestedBy: wardenId,
+      requestedBy: req.user.id,
       requestedByName: `${warden.firstName} ${warden.lastName}`,
       data: {
-        firstName,
-        lastName,
-        email,
-        contactNumber,
-        roomNumber,
-        bedNumber,
-        emergencyContact,
-        emergencyContactName,
-        admissionDate,
-        feeStatus,
+        firstName, lastName, email, contactNumber, roomBedNumber: roomBedNumber === "Not Assigned" ? null : roomBedNumber,
+        emergencyContact, emergencyContactName, admissionDate: admissionDate || new Date(),
+        feeStatus, roomType, isWorking: false, hasCollegeId: hasCollegeId === 'true'
       },
-      documents,
+      documents
     });
 
-    await requisition.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Student registration request submitted successfully. Awaiting admin approval.",
-      requisitionId: requisition._id,
-    });
+    await newRequisition.save();
+    return res.status(201).json({ success: true, message: "Registration request submitted for Admin approval" });
   } catch (error) {
-    console.error("Error creating student requisition:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to submit student registration request",
-      error: error.message,
-    });
+    console.error("Error submitting student registration:", error);
+    res.status(500).json({ success: false, message: "Failed to submit registration request", error: error.message });
   }
 };
 
@@ -1729,92 +1735,41 @@ const registerStudent = async (req, res) => {
 
 const registerParent = async (req, res) => {
   try {
-    const {
-      firstName,
-      lastName,
-      email,
-      contactNumber,
-      relation,
-      studentId,
-    } = req.body;
+    const { firstName, lastName, email, contactNumber, relation, studentId } = req.body;
 
-    // Validate required fields
-    if (!firstName || !lastName || !email || !contactNumber || !relation || !studentId) {
-      return res.status(400).json({
-        success: false,
-        message: "All required fields must be filled",
-      });
-    }
+    const existingParent = await Parent.findOne({ email });
+    if (existingParent) return res.status(409).json({ success: false, message: "Parent with this email already exists" });
 
-    // Get warden info from token
-    const wardenId = req.user?.id;
-    if (!wardenId) {
-      return res.status(401).json({
-        success: false,
-        message: "Unauthorized: Warden authentication required",
-      });
-    }
+    const existingReq = await Requisition.findOne({ "data.email": email, status: "pending" });
+    if (existingReq) return res.status(409).json({ success: false, message: "A registration request for this email is already pending approval" });
 
-    const warden = await Warden.findById(wardenId);
-    if (!warden) {
-      return res.status(404).json({
-        success: false,
-        message: "Warden not found",
-      });
-    }
+    const student = await Student.findOne({ studentId });
+    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
 
-    // Prepare document data from uploaded files
+    const warden = await Warden.findById(req.user.id);
     const documents = {};
     if (req.files) {
-      if (req.files.aadharCard && req.files.aadharCard[0]) {
-        documents.aadharCard = {
-          filename: req.files.aadharCard[0].filename,
-          path: req.files.aadharCard[0].path,
-          uploadedAt: new Date(),
-        };
-      }
-      if (req.files.panCard && req.files.panCard[0]) {
-        documents.panCard = {
-          filename: req.files.panCard[0].filename,
-          path: req.files.panCard[0].path,
-          uploadedAt: new Date(),
-        };
-      }
+      Object.keys(req.files).forEach(key => {
+        documents[key] = { filename: req.files[key][0].filename, path: req.files[key][0].path, uploadedAt: new Date() };
+      });
     }
 
-    // Create requisition
-    const requisition = new Requisition({
+    const newRequisition = new Requisition({
       requisitionType: "parent",
-      status: "pending",
-      requestedBy: wardenId,
+      requestedBy: req.user.id,
       requestedByName: `${warden.firstName} ${warden.lastName}`,
-      data: {
-        firstName,
-        lastName,
-        email,
-        contactNumber,
-        relation,
-        studentId,
-      },
-      documents,
+      data: { firstName, lastName, email, contactNumber, relation, studentId },
+      documents
     });
 
-    await requisition.save();
-
-    return res.status(201).json({
-      success: true,
-      message: "Parent registration request submitted successfully. Awaiting admin approval.",
-      requisitionId: requisition._id,
-    });
+    await newRequisition.save();
+    return res.status(201).json({ success: true, message: "Registration request submitted for Admin approval" });
   } catch (error) {
-    console.error("Error creating parent requisition:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to submit parent registration request",
-      error: error.message,
-    });
+    console.error("Error submitting parent registration:", error);
+    res.status(500).json({ success: false, message: "Failed to submit registration request", error: error.message });
   }
 };
+
 
 
 // <--------- Get Warden's Requisitions ----------->
@@ -1850,23 +1805,120 @@ const getWardenRequisitions = async (req, res) => {
 
 const getAllInterns = async (req, res) => {
   try {
-    const workers = await Staff.find()
-      .select("staffId firstName lastName email contactNumber designation shiftStart shiftEnd salary")
-      .sort({ createdAt: -1 });
+    const workers = await Student.find({ isWorking: true })
+      .populate({ path: "roomBedNumber", select: "barcodeId roomNo" })
+      .select("studentId firstName lastName email contactNumber roomBedNumber admissionDate feeStatus roomType isWorking documents");
 
-    return res.status(200).json({
-      success: true,
-      workers,
-    });
+    return res.status(200).json({ success: true, workers });
   } catch (error) {
     console.error("Error fetching workers:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch workers",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: "Failed to fetch workers", error: error.message });
   }
 };
+
+const getStudentsWithoutParents = async (req, res) => {
+  try {
+    const parents = await Parent.find().select('studentId');
+    const parentStudentIds = parents.map(p => p.studentId);
+    const students = await Student.find({ studentId: { $nin: parentStudentIds } }).select('studentId firstName lastName');
+    res.status(200).json({ success: true, students });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch students without parents", error: error.message });
+  }
+};
+
+const updateStudentWarden = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const updateData = { ...req.body };
+    
+    if (req.files) {
+      const student = await Student.findOne({ studentId });
+      const documents = student.documents || {};
+      Object.keys(req.files).forEach(key => {
+        documents[key] = { filename: req.files[key][0].filename, path: req.files[key][0].path, uploadedAt: new Date() };
+      });
+      updateData.documents = documents;
+    }
+
+    const updatedStudent = await Student.findOneAndUpdate({ studentId }, updateData, { new: true });
+    res.status(200).json({ success: true, message: "Student updated successfully", student: updatedStudent });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update student", error: error.message });
+  }
+};
+
+const getAvailableBedsInventory = async (req, res) => {
+  try {
+    const beds = await Inventory.find({ 
+      status: 'Available', 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] 
+    }).select('barcodeId roomNo floor');
+    res.status(200).json({ success: true, availableBeds: beds });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch available beds", error: error.message });
+  }
+};
+
+const getAvailableRoomsInventory = async (req, res) => {
+  try {
+    const beds = await Inventory.find({ 
+      status: 'Available', 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] 
+    });
+    
+    const roomsMap = {};
+    beds.forEach(bed => {
+      if (!roomsMap[bed.roomNo]) {
+        roomsMap[bed.roomNo] = { _id: bed.roomNo, roomNo: bed.roomNo, floor: bed.floor, totalBeds: 0 };
+      }
+      roomsMap[bed.roomNo].totalBeds++;
+    });
+
+    res.status(200).json({ success: true, availableRooms: Object.values(roomsMap) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch available rooms", error: error.message });
+  }
+};
+
+const getInventoryItemById = async (req, res) => {
+  try {
+    const item = await Inventory.findById(req.params.id);
+    res.status(200).json({ success: true, inventory: item });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch item", error: error.message });
+  }
+};
+
+const getStudentInvoicesForWarden = async (req, res) => {
+  try {
+    const { studentId } = req.query;
+    const invoices = await StudentInvoice.find({ studentId }).sort({ createdAt: -1 });
+    res.status(200).json({ success: true, invoices });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to fetch invoices", error: error.message });
+  }
+};
+
+const updateParentWarden = async (req, res) => {
+  try {
+    const updatedParent = await Parent.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.status(200).json({ success: true, message: "Parent updated successfully", parent: updatedParent });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update parent", error: error.message });
+  }
+};
+
+const deleteParentWarden = async (req, res) => {
+  try {
+    await Parent.findByIdAndDelete(req.params.id);
+    res.status(200).json({ success: true, message: "Parent deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to delete parent", error: error.message });
+  }
+};
+
+
 
 
 // <--------- Parent Management ----------->
@@ -1934,4 +1986,66 @@ export {
   getAllInterns,
   getAllParents,
   getWardenRequisitions,
+  getStudentsWithoutParents,
+  updateStudentWarden,
+  getAvailableBedsInventory,
+  getAvailableRoomsInventory,
+  getInventoryItemById,
+  getStudentInvoicesForWarden,
+  updateParentWarden,
+  deleteParentWarden,
+  submitNoticeRequisition
 }
+
+const submitNoticeRequisition = async (req, res) => {
+  const {
+    template,
+    title,
+    message,
+    issueDate,
+    recipientType,
+    individualRecipient
+  } = req.body;
+
+  try {
+    if (!title || !message || !issueDate || !recipientType) {
+      return res.status(400).json({
+        success: false,
+        message: "Title, message, issue date, and recipient type are required."
+      });
+    }
+
+    const warden = await Warden.findById(req.user.id);
+    if (!warden) {
+      return res.status(404).json({ success: false, message: "Warden not found" });
+    }
+
+    const newRequisition = new Requisition({
+      requisitionType: "notice",
+      requestedBy: req.user.id,
+      requestedByName: `${warden.firstName} ${warden.lastName}`,
+      data: {
+        template,
+        title,
+        message,
+        issueDate,
+        recipientType,
+        individualRecipient
+      }
+    });
+
+    await newRequisition.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Notice request submitted for Admin approval."
+    });
+
+  } catch (error) {
+    console.error("Error submitting notice requisition:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to submit notice request"
+    });
+  }
+};

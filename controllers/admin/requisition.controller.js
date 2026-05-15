@@ -5,8 +5,10 @@ import { Student } from "../../models/student.model.js";
 import { Parent } from "../../models/parent.model.js";
 import { Staff } from "../../models/staff.model.js";
 import { Admin } from "../../models/admin.model.js";
+import { Notice } from "../../models/notice.model.js";
 import mongoose from 'mongoose';
 import sendEmail from '../../utils/sendEmail.js';
+import { sendBulkNotifications } from '../../utils/sendNotification.js';
 
 // Get all requisitions with optional filters
 export const getAllRequisitions = async (req, res) => {
@@ -82,7 +84,7 @@ export const updateRequisitionStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { status, rejectionReason, notes } = req.body;
-    const adminId = req.admin?.id;
+    const adminId = req.admin?._id;
 
     if (!adminId) {
       return res.status(401).json({
@@ -120,83 +122,228 @@ export const updateRequisitionStatus = async (req, res) => {
       
       // Check for duplicate email
       let existingEntity;
-      if (requisitionType === 'student') {
+      if (requisitionType === 'student' || requisitionType === 'worker') {
         existingEntity = await Student.findOne({ email: data.email });
       } else if (requisitionType === 'parent') {
         existingEntity = await Parent.findOne({ email: data.email });
-      } else if (requisitionType === 'worker' || requisitionType === 'staff') {
+      } else if (requisitionType === 'staff') {
         existingEntity = await Staff.findOne({ email: data.email });
       }
       
       if (existingEntity) {
         return res.status(409).json({
           success: false,
-          message: "Email already registered",
+          message: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} with this email already exists`,
         });
       }
       
-      // Create entity based on type
       let createdEntity;
       let entityId;
-      let randomPassword = Math.random().toString(36).slice(-8);
+      let password;
       
-      if (requisitionType === 'student') {
-        // Auto-generate Student ID
-        const lastStudent = await Student.findOne().sort({ studentId: -1 }).select("studentId");
-        let newStudentId = "STU001";
+      if (requisitionType === 'student' || requisitionType === 'worker') {
+        const isWorking = requisitionType === 'worker';
+        const prefix = isWorking ? "STUW" : "STU";
+        
+        // Generate ID
+        const idRegex = new RegExp(`^${prefix}`);
+        const lastStudent = await Student.findOne({ studentId: idRegex }).sort({ studentId: -1 }).select("studentId");
+        let nextId = `${prefix}001`;
         if (lastStudent && lastStudent.studentId) {
-          const lastIdNumber = parseInt(lastStudent.studentId.replace("STU", ""));
-          const nextIdNumber = lastIdNumber + 1;
-          newStudentId = `STU${String(nextIdNumber).padStart(3, "0")}`;
+          const match = lastStudent.studentId.match(/\d+/);
+          if (match) {
+            const lastNumber = parseInt(match[0]);
+            nextId = `${prefix}${String(lastNumber + 1).padStart(3, "0")}`;
+          }
         }
         
-        createdEntity = new Student({
-          ...data,
-          studentId: newStudentId,
-          password: randomPassword,
+        password = `${data.firstName.toLowerCase().replace(/\s+/g, '')}${nextId}`;
+        
+        const studentData = {
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          contactNumber: data.contactNumber,
+          admissionDate: data.admissionDate || new Date(),
+          feeStatus: data.feeStatus || "Unpaid",
+          roomType: data.roomType || "",
+          emergencyContactName: data.emergencyContactName || "",
+          emergencyContactNumber: data.emergencyContact || data.emergencyContactNumber || "",
+          studentId: nextId,
+          password,
           documents,
+          isWorking,
+          hasCollegeId: data.hasCollegeId === true || data.hasCollegeId === 'true'
+        };
+
+        // Only add roomBedNumber if it's a valid ObjectId
+        if (data.roomBedNumber && mongoose.Types.ObjectId.isValid(data.roomBedNumber)) {
+          studentData.roomBedNumber = data.roomBedNumber;
+        }
+
+        try {
+          createdEntity = new Student(studentData);
+          await createdEntity.save();
+          entityId = nextId;
+        } catch (saveError) {
+          console.error("Error saving student:", saveError);
+          return res.status(400).json({
+            success: false,
+            message: `Registration failed: ${saveError.message}`,
+            error: saveError.message
+          });
+        }
+        
+      } else if (requisitionType === 'staff') {
+        const prefix = "STF";
+        const idRegex = new RegExp(`^${prefix}`);
+        const lastStaff = await Staff.findOne({ staffId: idRegex }).sort({ staffId: -1 }).select("staffId");
+        let nextId = `${prefix}001`;
+        if (lastStaff && lastStaff.staffId) {
+          const match = lastStaff.staffId.match(/\d+/);
+          if (match) {
+            const lastNumber = parseInt(match[0]);
+            nextId = `${prefix}${String(lastNumber + 1).padStart(3, "0")}`;
+          }
+        }
+
+        password = `${data.firstName.toLowerCase().replace(/\s+/g, '')}${nextId}`;
+
+        createdEntity = new Staff({
+          ...data,
+          staffId: nextId,
+          password
         });
         await createdEntity.save();
-        entityId = newStudentId;
-        
+        entityId = nextId;
+
       } else if (requisitionType === 'parent') {
-        // Auto-generate Parent ID
-        const lastParent = await Parent.findOne().sort({ parentId: -1 }).select("parentId");
-        let newParentId = "PAR001";
-        if (lastParent && lastParent.parentId) {
-          const lastIdNumber = parseInt(lastParent.parentId.replace("PAR", ""));
-          const nextIdNumber = lastIdNumber + 1;
-          newParentId = `PAR${String(nextIdNumber).padStart(3, "0")}`;
+        const student = await Student.findOne({ studentId: data.studentId });
+        if (!student) {
+          return res.status(404).json({ success: false, message: "Student associated with this parent not found" });
         }
+        
+        password = `${data.firstName.toLowerCase().replace(/\s+/g, '')}${data.studentId}`;
         
         createdEntity = new Parent({
           ...data,
-          parentId: newParentId,
-          password: randomPassword,
-          documents,
+          password,
+          documents
         });
         await createdEntity.save();
-        entityId = newParentId;
+        entityId = data.studentId; 
         
-      } else if (requisitionType === 'worker' || requisitionType === 'staff') {
-        // Auto-generate Staff ID
-        const lastStaff = await Staff.findOne().sort({ staffId: -1 }).select("staffId");
-        let newStaffId = "STF001";
-        if (lastStaff && lastStaff.staffId) {
-          const lastIdNumber = parseInt(lastStaff.staffId.replace("STF", ""));
-          const nextIdNumber = lastIdNumber + 1;
-          newStaffId = `STF${String(nextIdNumber).padStart(3, "0")}`;
+      } else if (requisitionType === 'notice') {
+        // ---------------- DATE PARSING ----------------
+        let parsedIssueDate;
+        const issueDateRaw = data.issueDate;
+
+        if (!isNaN(Date.parse(issueDateRaw))) {
+          parsedIssueDate = new Date(issueDateRaw);
+        } else if (typeof issueDateRaw === "string" && issueDateRaw.includes("-")) {
+          const [dd, mm, yyyy] = issueDateRaw.split("-");
+          parsedIssueDate = new Date(`${yyyy}-${mm}-${dd}`);
         }
-        
-        createdEntity = new Staff({
+
+        // Final safety check
+        if (!parsedIssueDate || isNaN(parsedIssueDate)) {
+          parsedIssueDate = new Date(); // Fallback to current date
+        }
+
+        // Create the actual Notice
+        const notice = new Notice({
           ...data,
-          staffId: newStaffId,
-          password: randomPassword,
-          documents,
-          role: requisitionType === 'worker' ? 'worker' : 'staff',
+          issueDate: parsedIssueDate,
+          createdBy: adminId
         });
-        await createdEntity.save();
-        entityId = newStaffId;
+        await notice.save();
+        
+        // Notification Logic
+        const { title, message, recipientType, individualRecipient } = data;
+        let recipients = [];
+        let studentRecipients = [];
+
+        if (recipientType === "All") {
+          const students = await Student.find({}, "_id email");
+          const parents = await Parent.find({}, "email");
+          const wardens = await Warden.find({}, "email");
+          studentRecipients = students;
+          recipients = [
+            ...students.map(s => s.email),
+            ...parents.map(p => p.email),
+            ...wardens.map(w => w.email)
+          ].filter(Boolean);
+
+        } else if (recipientType === "Student") {
+          if (!individualRecipient) {
+            const students = await Student.find({}, "_id email");
+            studentRecipients = students;
+            recipients = students.map(s => s.email).filter(Boolean);
+          } else {
+            const student = await Student.findOne({ studentId: individualRecipient }, "_id email");
+            if (student?.email) recipients.push(student.email);
+            if (student) studentRecipients.push(student);
+          }
+        } else if (recipientType === "Parent") {
+          if (!individualRecipient) {
+            const parents = await Parent.find({}, "email");
+            recipients = parents.map(p => p.email).filter(Boolean);
+          } else {
+            const parent = await Parent.findOne({ studentId: individualRecipient });
+            if (parent?.email) recipients.push(parent.email);
+          }
+        } else if (recipientType === "Warden") {
+          if (!individualRecipient) {
+            const wardens = await Warden.find({}, "email");
+            recipients = wardens.map(w => w.email).filter(Boolean);
+          } else {
+            const warden = await Warden.findOne({ wardenId: individualRecipient });
+            if (warden?.email) recipients.push(warden.email);
+          }
+        }
+
+        // Send Emails (Wrapped in try-catch to avoid 500 if one fails)
+        try {
+          await Promise.all(
+            recipients.map(email =>
+              sendEmail({
+                to: email,
+                subject: `Notice: ${title}`,
+                text: message,
+                fromName: "Hostel Management"
+              })
+            )
+          );
+        } catch (emailError) {
+          console.error("Failed to send some emails for notice:", emailError);
+        }
+
+        // Send Push Notifications
+        if (studentRecipients.length > 0) {
+          try {
+            await sendBulkNotifications(
+              studentRecipients,
+              `New notice: ${title}`,
+              "notice",
+              "/notices"
+            );
+          } catch (notificationError) {
+            console.error("Failed to send push notifications:", notificationError);
+          }
+        }
+
+        // Update requisition status and return early for notice as it doesn't need the general email sending below
+        requisition.status = 'approved';
+        requisition.approvedBy = adminId;
+        requisition.approvedByName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || admin.email;
+        requisition.approvedAt = new Date();
+        if (notes) requisition.notes = notes;
+        await requisition.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "Notice approved and issued successfully"
+        });
       }
       
       // Update requisition status
@@ -211,19 +358,19 @@ export const updateRequisitionStatus = async (req, res) => {
       try {
         await sendEmail({
           to: data.email,
-          subject: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} Registration - Login Credentials`,
-          text: `Hello ${data.firstName} ${data.lastName},\n\nYou have been registered in the Hostel Management System.\n\nYour login credentials:\nID: ${entityId}\nPassword: ${randomPassword}\n\nPlease change your password after first login.\n\n– Hostel Management System`,
+          subject: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} Registration Approved`,
+          text: `Hello ${data.firstName} ${data.lastName},\n\nYour registration request has been approved by the Admin.\n\nYour login credentials:\nID: ${entityId}\nPassword: ${password}\n\nPlease change your password after first login.\n\n– Hostel Management System`,
           fromName: "Hostel Management"
         });
       } catch (emailError) {
         console.error("Error sending credentials email:", emailError);
-        // Continue even if email fails
       }
       
       return res.status(200).json({
         success: true,
-        message: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} registered successfully`,
+        message: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} approved and registered successfully`,
         entityId,
+        password
       });
     }
 

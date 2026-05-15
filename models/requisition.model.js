@@ -4,7 +4,7 @@ const requisitionSchema = new mongoose.Schema(
   {
     requisitionType: {
       type: String,
-      enum: ["student", "parent", "worker", "staff"],
+      enum: ["student", "parent", "worker", "staff", "notice"],
       required: true,
     },
     
