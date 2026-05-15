@@ -59,6 +59,7 @@ import {
 import {
   getAllComplaints,
   getOpenComplaints,
+  getInProgressComplaints,
   getResolvedComplaints,
   updateComplaintStatus,
   getComplaintStatistics,
@@ -220,7 +221,8 @@ router.get('/leaves/student/:studentId', getStudentLeaveHistory);
 
 // ====================== COMPLAINT MANAGEMENT ROUTES ======================
 router.get('/complaints', getAllComplaints);
-router.get('/complaints/open', getOpenComplaints);
+router.get('/complaints/pending', getOpenComplaints);
+router.get('/complaints/inprogress', getInProgressComplaints);
 router.get('/complaints/resolved', getResolvedComplaints);
 router.get('/complaints/statistics', getComplaintStatistics);
 router.get('/complaints/:complaintId', getComplaintDetails);

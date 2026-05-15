@@ -1922,14 +1922,14 @@ const getOpenComplaints = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    const openComplaints = await Complaint.find({ status: 'in progress' })
-      .populate('studentId', 'studentName studentId email contactNumber')
+    const openComplaints = await Complaint.find({ status: 'pending' })
+      .populate('studentId', 'studentName studentId email contactNumber roomNumber')
       .select('complaintType subject description status filedDate')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalOpen = await Complaint.countDocuments({ status: 'in progress' });
+    const totalOpen = await Complaint.countDocuments({ status: 'pending' });
 
     return res.json({ 
       message: "Open complaints fetched successfully",
@@ -1944,7 +1944,8 @@ const getOpenComplaints = async (req, res) => {
         raisedBy: complaint.studentId ? {
           name: complaint.studentId.studentName,
           studentId: complaint.studentId.studentId,
-          email: complaint.studentId.email
+          email: complaint.studentId.email,
+          roomNumber: complaint.studentId.roomNumber
         } : null
       })),
       pagination: {
@@ -1958,6 +1959,52 @@ const getOpenComplaints = async (req, res) => {
   } catch (err) {
     console.error("Fetch open complaints error:", err);
     return res.status(500).json({ message: "Server error while fetching open complaints." });
+  }
+};
+
+// Get in-progress complaints
+const getInProgressComplaints = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const inProgressComplaints = await Complaint.find({ status: 'in progress' })
+      .populate('studentId', 'studentName studentId email contactNumber roomNumber')
+      .select('complaintType subject description status filedDate')
+      .sort({ filedDate: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalInProgress = await Complaint.countDocuments({ status: 'in progress' });
+
+    return res.json({ 
+      message: "In-progress complaints fetched successfully",
+      complaints: inProgressComplaints.map(complaint => ({
+        _id: complaint._id,
+        ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
+        subject: complaint.subject,
+        description: complaint.description,
+        complaintType: complaint.complaintType,
+        status: complaint.status,
+        filedDate: complaint.filedDate,
+        raisedBy: complaint.studentId ? {
+          name: complaint.studentId.studentName,
+          studentId: complaint.studentId.studentId,
+          email: complaint.studentId.email,
+          roomNumber: complaint.studentId.roomNumber
+        } : null
+      })),
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalInProgress / limit),
+        totalComplaints: totalInProgress,
+        hasNextPage: page * limit < totalInProgress,
+        hasPreviousPage: page > 1
+      }
+    });
+  } catch (err) {
+    console.error("Fetch in-progress complaints error:", err);
+    return res.status(500).json({ message: "Server error while fetching in-progress complaints." });
   }
 };
 
@@ -2010,12 +2057,12 @@ const getResolvedComplaints = async (req, res) => {
 // Update complaint status (Approve/Resolve or Reject)
 const updateComplaintStatus = async (req, res) => {
   const { complaintId } = req.params;
-  const { status, adminNotes } = req.body; // status should be 'resolved' or 'in progress'
+  const { status, adminNotes } = req.body; // status can be 'pending', 'in progress', or 'resolved'
 
   try {
     // Validate status
-    if (!['resolved', 'in progress'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. Must be 'resolved' or 'in progress'." });
+    if (!['pending', 'in progress', 'resolved'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', or 'resolved'." });
     }
 
     // Find the complaint
@@ -2213,8 +2260,8 @@ const bulkUpdateComplaintStatus = async (req, res) => {
   const { complaintIds, status, adminNotes } = req.body;
 
   try {
-    if (!['resolved', 'in progress'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. Must be 'resolved' or 'in progress'." });
+    if (!['pending', 'in progress', 'resolved'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', or 'resolved'." });
     }
 
     if (!Array.isArray(complaintIds) || complaintIds.length === 0) {
@@ -2910,6 +2957,7 @@ export {
     bulkUpdateLeaveStatus,
     getAllComplaints,
     getOpenComplaints,
+    getInProgressComplaints,
     getResolvedComplaints,
     updateComplaintStatus,
     getComplaintStatistics,

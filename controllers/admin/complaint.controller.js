@@ -119,14 +119,14 @@ const getOpenComplaints = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    const openComplaints = await Complaint.find({ status: 'in progress' })
-      .populate('studentId', 'studentName studentId email contactNumber')
+    const openComplaints = await Complaint.find({ status: 'pending' })
+      .populate('studentId', 'studentName studentId email contactNumber roomNumber')
       .select('complaintType otherComplaintType subject description status filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalOpen = await Complaint.countDocuments({ status: 'in progress' });
+    const totalOpen = await Complaint.countDocuments({ status: 'pending' });
 
     return res.json({
       message: "Open complaints fetched successfully",
@@ -150,7 +150,8 @@ const getOpenComplaints = async (req, res) => {
           raisedBy: complaint.studentId ? {
             name: complaint.studentId.studentName,
             studentId: complaint.studentId.studentId,
-            email: complaint.studentId.email
+            email: complaint.studentId.email,
+            roomNumber: complaint.studentId.roomNumber
           } : null
         };
       }),
@@ -165,6 +166,62 @@ const getOpenComplaints = async (req, res) => {
   } catch (err) {
     console.error("Fetch open complaints error:", err);
     return res.status(500).json({ message: "Server error while fetching open complaints." });
+  }
+};
+
+// Get in-progress complaints
+const getInProgressComplaints = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const inProgressComplaints = await Complaint.find({ status: 'in progress' })
+      .populate('studentId', 'studentName studentId email contactNumber roomNumber')
+      .select('complaintType otherComplaintType subject description status filedDate attachments')
+      .sort({ filedDate: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalInProgress = await Complaint.countDocuments({ status: 'in progress' });
+
+    return res.json({
+      message: "In-progress complaints fetched successfully",
+      complaints: inProgressComplaints.map(complaint => {
+        const displayType = complaint.complaintType === "Others" && complaint.otherComplaintType
+          ? `Others (${complaint.otherComplaintType})`
+          : complaint.complaintType;
+
+        return {
+          _id: complaint._id,
+          ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
+          subject: complaint.subject,
+          description: complaint.description,
+          complaintType: complaint.complaintType,
+          otherComplaintType: complaint.otherComplaintType || '',
+          displayType: displayType,
+          status: complaint.status,
+          filedDate: complaint.filedDate,
+          hasAttachments: complaint.attachments.length > 0,
+          attachmentCount: complaint.attachments.length,
+          raisedBy: complaint.studentId ? {
+            name: complaint.studentId.studentName,
+            studentId: complaint.studentId.studentId,
+            email: complaint.studentId.email,
+            roomNumber: complaint.studentId.roomNumber
+          } : null
+        };
+      }),
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalInProgress / limit),
+        totalComplaints: totalInProgress,
+        hasNextPage: page * limit < totalInProgress,
+        hasPreviousPage: page > 1
+      }
+    });
+  } catch (err) {
+    console.error("Fetch in-progress complaints error:", err);
+    return res.status(500).json({ message: "Server error while fetching in-progress complaints." });
   }
 };
 
@@ -219,12 +276,12 @@ const getResolvedComplaints = async (req, res) => {
 // Update complaint status (Approve/Resolve or Reject)
 const updateComplaintStatus = async (req, res) => {
   const { complaintId } = req.params;
-  const { status, adminNotes } = req.body; // status should be 'resolved' or 'in progress'
+  const { status, adminNotes } = req.body; // status can be 'pending', 'in progress', or 'resolved'
 
   try {
     // Validate status
-    if (!['resolved', 'in progress'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. Must be 'resolved' or 'in progress'." });
+    if (!['pending', 'in progress', 'resolved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', 'resolved', or 'rejected'." });
     }
 
     // Find the complaint
@@ -244,8 +301,8 @@ const updateComplaintStatus = async (req, res) => {
 
     // Send email notification to student
     const student = complaint.studentId;
-    const statusText = status === 'resolved' ? 'RESOLVED' : 'IN PROGRESS';
-    const statusEmoji = status === 'resolved' ? '✅' : '🔄';
+    const statusText = status === 'in progress' ? 'INPROCESS TICKET' : status === 'resolved' ? 'RESOLVED SECTION' : status === 'rejected' ? 'REJECTED' : 'OPEN TICKET';
+    const statusEmoji = status === 'in progress' ? '⚙️' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
 
     const emailSubject = `Complaint ${statusText} - ${complaint.subject}`;
     const emailBody = `Hello ${student.studentName},
@@ -490,8 +547,8 @@ const bulkUpdateComplaintStatus = async (req, res) => {
   const { complaintIds, status, adminNotes } = req.body;
 
   try {
-    if (!['resolved', 'in progress'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. Must be 'resolved' or 'in progress'." });
+    if (!['pending', 'in progress', 'resolved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', 'resolved', or 'rejected'." });
     }
 
     if (!Array.isArray(complaintIds) || complaintIds.length === 0) {
@@ -521,8 +578,8 @@ const bulkUpdateComplaintStatus = async (req, res) => {
     // Send emails to all affected students
     const emailPromises = complaints.map(async (complaint) => {
       const student = complaint.studentId;
-      const statusText = status === 'resolved' ? 'RESOLVED' : 'IN PROGRESS';
-      const statusEmoji = status === 'resolved' ? '✅' : '🔄';
+      const statusText = status === 'in progress' ? 'INPROCESS TICKET' : status === 'resolved' ? 'RESOLVED SECTION' : status === 'rejected' ? 'REJECTED' : 'OPEN TICKET';
+      const statusEmoji = status === 'in progress' ? '⚙️' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
 
       const emailSubject = `Complaint ${statusText} - ${complaint.subject}`;
       const emailBody = `Hello ${student.studentName},
@@ -605,6 +662,7 @@ ${status === 'resolved' ?
 export {
   getAllComplaints,
   getOpenComplaints,
+  getInProgressComplaints,
   getResolvedComplaints,
   updateComplaintStatus,
   getComplaintStatistics,

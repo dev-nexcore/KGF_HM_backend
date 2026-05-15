@@ -1888,7 +1888,9 @@ const checkOutStudent = async (req, res) => {
 
 
 const fileComplaint = async (req, res) => {
- 
+  console.log("📥 Received fileComplaint request");
+  console.log("📦 Body:", req.body);
+  console.log("👤 StudentId from token:", req.studentId);
 
   const {
     complaintType,
@@ -1903,7 +1905,7 @@ const fileComplaint = async (req, res) => {
 
   try {
     // Validate student existence
-    const student = await Student.findOne({ studentId }).populate('roomBedNumber', 'roomNo itemName floor location');;
+    const student = await Student.findOne({ studentId }).populate('roomBedNumber', 'roomNo itemName floor location');
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -1951,6 +1953,7 @@ const fileComplaint = async (req, res) => {
     // Save complaint in database
     const newComplaint = new Complaint(complaintData);
     await newComplaint.save();
+    console.log("✅ Complaint saved:", newComplaint._id);
 
     // Prepare display type for clarity
     const displayType =
@@ -2016,7 +2019,7 @@ Your complaint has been filed successfully and assigned ticket ID: #${String(
 Complaint Details:
 - Subject: ${subject}
 - Type: ${displayType}${maintenanceDetails}
-- Status: In Progress
+- Status: Open Ticket
 - Filed Date: ${new Date().toLocaleDateString("en-IN")}
 ${
   attachments.length > 0
@@ -2053,7 +2056,8 @@ Thank you for bringing this to our attention.
     });
   } catch (err) {
     // Handle any server errors 
-    console.error("File complaint error:", err);
+    console.error("❌ File complaint error:", err);
+    console.error("❌ Error stack:", err.stack);
     return res
       .status(500)
       .json({ message: "Server error while filing complaint." });
@@ -2075,7 +2079,7 @@ const getStudentComplaints = async (req, res) => {
     }
 
     const complaints = await Complaint.find({ studentId: student._id })
-      .select('complaintType otherComplaintType subject description status filedDate attachments createdAt')
+      .select('complaintType otherComplaintType subject description status filedDate attachments createdAt adminNotes maintenanceItems')
       .sort({ filedDate: -1 });
 
     const formattedComplaints = complaints.map(complaint => ({
@@ -2088,6 +2092,8 @@ const getStudentComplaints = async (req, res) => {
       status: complaint.status,
       filedDate: complaint.filedDate,
       createdAt: complaint.createdAt,
+      adminNotes: complaint.adminNotes,
+      maintenanceItems: complaint.maintenanceItems || [],
       hasAttachments: complaint.attachments.length > 0,
       attachmentCount: complaint.attachments.length
     }));
@@ -2149,12 +2155,13 @@ const getComplaintHistory = async (req, res) => {
 
     // FIXED: Include 'attachments' and 'otherComplaintType' in the select
     const complaints = await Complaint.find({ studentId: student._id })
-      .select("complaintType otherComplaintType subject description filedDate status createdAt attachments")
+      .select("complaintType otherComplaintType subject description filedDate status createdAt attachments adminNotes maintenanceItems")
       .sort({ createdAt: -1 }); // Sort by newest first
 
     // FIXED: Format the response to include attachment information
     const formattedComplaints = complaints.map(complaint => ({
       _id: complaint._id,
+      ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
       complaintType: complaint.complaintType,
       otherComplaintType: complaint.otherComplaintType || '',
       subject: complaint.subject,
@@ -2162,6 +2169,8 @@ const getComplaintHistory = async (req, res) => {
       status: complaint.status || 'Pending',
       filedDate: complaint.filedDate,
       createdAt: complaint.createdAt,
+      adminNotes: complaint.adminNotes || "",
+      maintenanceItems: complaint.maintenanceItems || [],
       // FIXED: Add attachment information that frontend expects
       hasAttachments: complaint.attachments && complaint.attachments.length > 0,
       attachmentCount: complaint.attachments ? complaint.attachments.length : 0

@@ -5,7 +5,11 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "migrate:complaints": "node migrate_complaints.js",
+    "test:model": "node test_complaint_model.js",
+    "check:db": "node check_database.js",
+    "fix:all": "node fix_all.js"
   },
   "keywords": [],
   "author": "",
