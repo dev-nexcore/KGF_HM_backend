@@ -6,6 +6,7 @@ import { Parent } from "../../models/parent.model.js";
 import { Staff } from "../../models/staff.model.js";
 import { Admin } from "../../models/admin.model.js";
 import { Notice } from "../../models/notice.model.js";
+import { Inventory } from "../../models/inventory.model.js";
 import mongoose from 'mongoose';
 import sendEmail from '../../utils/sendEmail.js';
 import { sendBulkNotifications } from '../../utils/sendNotification.js';
@@ -343,6 +344,31 @@ export const updateRequisitionStatus = async (req, res) => {
         return res.status(200).json({
           success: true,
           message: "Notice approved and issued successfully"
+        });
+      } else if (requisitionType === 'inventory_replacement') {
+        const { itemId, reason } = data;
+        
+        // Update Inventory item status if needed
+        if (itemId && mongoose.Types.ObjectId.isValid(itemId)) {
+          const item = await Inventory.findById(itemId);
+          if (item) {
+            item.status = 'Damaged'; // Or mark as needing replacement
+            // You could also populate the replacementRequest field in Inventory model if you want
+            await item.save();
+          }
+        }
+
+        // Update requisition status
+        requisition.status = 'approved';
+        requisition.approvedBy = adminId;
+        requisition.approvedByName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || admin.email;
+        requisition.approvedAt = new Date();
+        if (notes) requisition.notes = notes;
+        await requisition.save();
+
+        return res.status(200).json({
+          success: true,
+          message: "Inventory replacement request approved"
         });
       }
       

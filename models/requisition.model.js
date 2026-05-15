@@ -4,7 +4,7 @@ const requisitionSchema = new mongoose.Schema(
   {
     requisitionType: {
       type: String,
-      enum: ["student", "parent", "worker", "staff", "notice"],
+      enum: ["student", "parent", "worker", "staff", "notice", "inventory_replacement"],
       required: true,
     },
     
@@ -37,6 +37,11 @@ const requisitionSchema = new mongoose.Schema(
         uploadedAt: { type: Date },
       },
       panCard: {
+        filename: { type: String },
+        path: { type: String },
+        uploadedAt: { type: Date },
+      },
+      photo: {
         filename: { type: String },
         path: { type: String },
         uploadedAt: { type: Date },

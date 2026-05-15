@@ -49,7 +49,8 @@ import {
   getStudentInvoicesForWarden,
   updateParentWarden,
   deleteParentWarden,
-  submitNoticeRequisition
+  submitNoticeRequisition,
+  submitInventoryReplacement
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -152,6 +153,7 @@ router.delete("/delete-parent/:id", verifyWardenToken, deleteParentWarden);
 // Requisitions
 router.get("/requisitions", verifyWardenToken, getWardenRequisitions);
 router.post("/submit-notice-requisition", verifyWardenToken, submitNoticeRequisition);
+router.post("/submit-inventory-replacement", verifyWardenToken, upload.fields([{ name: 'photo' }]), submitInventoryReplacement);
 
 
 export default router;
