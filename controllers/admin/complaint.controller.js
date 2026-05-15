@@ -43,7 +43,7 @@ const getAllComplaints = async (req, res) => {
 
     // Get complaints with student details
     const complaints = await Complaint.find(query)
-      .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
+      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber')
       .select('complaintType otherComplaintType subject description status filedDate createdAt updatedAt attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
@@ -91,10 +91,10 @@ const getAllComplaints = async (req, res) => {
           hasAttachments: complaint.attachments.length > 0,
           attachmentCount: complaint.attachments.length,
           raisedBy: complaint.studentId ? {
-            name: complaint.studentId.studentName,
+            name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
             studentId: complaint.studentId.studentId,
             email: complaint.studentId.email,
-            roomBedNumber: complaint.studentId.roomBedNumber
+            roomNumber: complaint.studentId.roomBedNumber // Note: this is an ID, might need further population if room number string is needed
           } : null
         };
       }),
@@ -120,7 +120,7 @@ const getOpenComplaints = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const openComplaints = await Complaint.find({ status: 'pending' })
-      .populate('studentId', 'studentName studentId email contactNumber roomNumber')
+      .populate('studentId', 'firstName lastName studentId email contactNumber')
       .select('complaintType otherComplaintType subject description status filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
@@ -148,10 +148,9 @@ const getOpenComplaints = async (req, res) => {
           hasAttachments: complaint.attachments.length > 0,
           attachmentCount: complaint.attachments.length,
           raisedBy: complaint.studentId ? {
-            name: complaint.studentId.studentName,
+            name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
             studentId: complaint.studentId.studentId,
-            email: complaint.studentId.email,
-            roomNumber: complaint.studentId.roomNumber
+            email: complaint.studentId.email
           } : null
         };
       }),
@@ -176,7 +175,7 @@ const getInProgressComplaints = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const inProgressComplaints = await Complaint.find({ status: 'in progress' })
-      .populate('studentId', 'studentName studentId email contactNumber roomNumber')
+      .populate('studentId', 'firstName lastName studentId email contactNumber')
       .select('complaintType otherComplaintType subject description status filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
@@ -204,10 +203,9 @@ const getInProgressComplaints = async (req, res) => {
           hasAttachments: complaint.attachments.length > 0,
           attachmentCount: complaint.attachments.length,
           raisedBy: complaint.studentId ? {
-            name: complaint.studentId.studentName,
+            name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
             studentId: complaint.studentId.studentId,
-            email: complaint.studentId.email,
-            roomNumber: complaint.studentId.roomNumber
+            email: complaint.studentId.email
           } : null
         };
       }),
@@ -232,7 +230,7 @@ const getResolvedComplaints = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const resolvedComplaints = await Complaint.find({ status: 'resolved' })
-      .populate('studentId', 'studentName studentId email contactNumber')
+      .populate('studentId', 'firstName lastName studentId email contactNumber')
       .select('complaintType subject description status filedDate updatedAt attachments')
       .sort({ updatedAt: -1 })
       .skip(skip)
@@ -254,7 +252,7 @@ const getResolvedComplaints = async (req, res) => {
         hasAttachments: complaint.attachments.length > 0,
         attachmentCount: complaint.attachments.length,
         raisedBy: complaint.studentId ? {
-          name: complaint.studentId.studentName,
+          name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
           studentId: complaint.studentId.studentId,
           email: complaint.studentId.email
         } : null
