@@ -29,23 +29,14 @@ const getTotalRevenue = async (req, res) => {
 const getPendingPayments = async (req, res) => {
   try {
     const pendingInvoices = await StudentInvoice.aggregate([
-      { $match: { status: 'pending' } },
+      { $match: { status: { $in: ['pending', 'overdue'] } } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    // Get pending salaries
-    const pendingSalaries = await StaffSalary.aggregate([
-      { $match: { status: 'pending' } },
-      { $group: { _id: null, total: { $sum: '$netSalary' } } }
-    ]);
-
-    const totalPending = (pendingInvoices[0]?.total || 0) + (pendingSalaries[0]?.total || 0);
-
     return res.json({
       message: "Pending payments fetched successfully",
-      pendingPayments: totalPending,
-      pendingInvoicesCount: await StudentInvoice.countDocuments({ status: 'pending' }),
-      pendingSalariesCount: await StaffSalary.countDocuments({ status: 'pending' })
+      pendingPayments: pendingInvoices[0]?.total || 0,
+      pendingInvoicesCount: await StudentInvoice.countDocuments({ status: { $in: ['pending', 'overdue'] } }),
     });
 
   } catch (err) {
@@ -68,20 +59,16 @@ const getFinancialSummary = async (req, res) => {
       { $group: { _id: null, total: { $sum: '$netSalary' } } }
     ]);
 
-    // Pending Invoices (Incoming)
+    // Pending Invoices (Incoming) - Now includes overdue
     const pendingInvoices = await StudentInvoice.aggregate([
-      { $match: { status: 'pending' } },
+      { $match: { status: { $in: ['pending', 'overdue'] } } },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]);
 
-    // Pending Salaries (Outgoing)
-    const pendingSalaries = await StaffSalary.aggregate([
-      { $match: { status: 'pending' } },
-      { $group: { _id: null, total: { $sum: '$netSalary' } } }
-    ]);
-
+    // Total Revenue (Collected)
     const totalRevenue = (revenueIn[0]?.total || 0);
-    const totalPending = (pendingInvoices[0]?.total || 0) + (pendingSalaries[0]?.total || 0);
+    // Total Pending (Receivable from students)
+    const totalPending = (pendingInvoices[0]?.total || 0);
 
     return res.json({
       message: "Financial summary fetched successfully",
@@ -89,8 +76,7 @@ const getFinancialSummary = async (req, res) => {
         totalRevenue,
         salariesPaid: salariesOut[0]?.total || 0,
         pendingPayments: totalPending,
-        pendingInvoices: pendingInvoices[0]?.total || 0,
-        pendingSalaries: pendingSalaries[0]?.total || 0
+        pendingInvoices: totalPending
       }
     });
 
@@ -139,17 +125,19 @@ const getTodaysCheckInOutStatus = async (req, res) => {
 
 const getBedOccupancyStatus = async (req, res) => {
   try {
-    // Get all students with a room number
-    const totalBeds = await Inventory.countDocuments({ itemName: { $regex: /^Bed/i } });
+    const bedCriteria = {
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS', 'Bed'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    };
 
-    // Get the number of students who have checked in
-   const occupiedBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });
-
-    const availableBeds = totalBeds - occupiedBeds;
+    const totalBeds = await Inventory.countDocuments(bedCriteria);
+    const occupiedBeds = await Inventory.countDocuments({ ...bedCriteria, status: 'In Use' });
+    const availableBeds = await Inventory.countDocuments({ ...bedCriteria, status: 'Available' });
 
     return res.json({
       totalBeds,
-
       occupiedBeds,
       availableBeds
     });

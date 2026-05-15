@@ -271,9 +271,9 @@ router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
 
 // ====================== WARDEN REQUISITION ROUTES ======================
-router.get('/requisitions/stats', getRequisitionStats);
-router.get('/requisitions/:id', getRequisitionById);
-router.get('/requisitions', getAllRequisitions);
+router.get('/requisitions/stats', verifyAdminToken, getRequisitionStats);
+router.get('/requisitions/:id', verifyAdminToken, getRequisitionById);
+router.get('/requisitions', verifyAdminToken, getAllRequisitions);
 router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus);
 
 // ====================== ATTENDANCE ROUTES ======================
@@ -310,12 +310,12 @@ router.delete('/inventory/delete-all', deleteAllInventory);
 router.delete('/inventory/:id', deleteInventoryItem);
 
 // *** NOTICE ROUTES ***
-router.post('/issue-notice', issueNotice);
-router.get('/notices', getAllNotices);
-router.get('/notices/:noticeId', getNoticeById);
-router.put('/notices/:noticeId', updateNotice);
-router.delete('/notices/:noticeId', deleteNotice);
-router.patch('/notices/:noticeId/read-status', updateNoticeReadStatus);
+router.post('/issue-notice', verifyAdminToken, issueNotice);
+router.get('/notices', verifyAdminToken, getAllNotices);
+router.get('/notices/:noticeId', verifyAdminToken, getNoticeById);
+router.put('/notices/:noticeId', verifyAdminToken, updateNotice);
+router.delete('/notices/:noticeId', verifyAdminToken, deleteNotice);
+router.patch('/notices/:noticeId/read-status', verifyAdminToken, updateNoticeReadStatus);
 
 // ====================== PUBLIC ROUTES ======================
 // Public inventory routes
