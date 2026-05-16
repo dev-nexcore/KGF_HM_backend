@@ -74,7 +74,7 @@ router.get('/punch-status', verifyWardenToken, checkPunchStatus);
 
 
 // warden Dashboard
-router.get("/warden-dashboard", getWardenDashboardStats);
+router.get("/warden-dashboard", verifyWardenToken, getWardenDashboardStats);
 
 
 // Bed allotments Management Page

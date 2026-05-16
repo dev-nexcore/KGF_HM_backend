@@ -23,6 +23,7 @@ import { Staff } from '../models/staff.model.js';
 import { Requisition } from '../models/requisition.model.js';
 import { Complaint } from '../models/complaint.model.js';
 import { StudentInvoice } from '../models/studentInvoice.model.js';
+import { AuditLog } from '../models/auditLog.model.js';
 
 // Nodemailer transporter
 const transporter = nodemailer.createTransport({
@@ -193,19 +194,70 @@ const getWardenDashboardStats = async (req, res) => {
       Inventory.countDocuments({ ...bedFilter, status: 'Available' }),
       Inventory.countDocuments({ ...bedFilter, status: 'Damaged' })
     ]);
+    
     const now = new Date();
-    const upcomingInspections = await Inspection.find({ datetime: { $gte: now }, status: "pending" }).sort({ datetime: 1 });
-    const pendingLeavesCount = await Leave.countDocuments({ status: "pending" });
-    const inProgressComplaintsCount = await Complaint.countDocuments({ status: "in progress" });
-    const pendingRequisitionsCount = await Requisition.countDocuments({ requestedBy: req.user.id, status: "pending" });
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [upcomingInspections, pendingLeavesCount, inProgressComplaintsCount, pendingRequisitionsCount] = await Promise.all([
+      Inspection.find({ datetime: { $gte: now }, status: "pending" }).sort({ datetime: 1 }),
+      Leave.countDocuments({ status: "pending" }),
+      Complaint.countDocuments({ status: "in progress" }),
+      Requisition.countDocuments({ requestedBy: req.user?.id, status: "pending" })
+    ]);
+
+    // Fetch Today's Check-ins and Check-outs
+    const studentsWithTodayAttendance = await Student.find({
+      "attendanceLog.checkInDate": { $gte: todayStart, $lte: todayEnd }
+    });
+
+    let checkIns = 0;
+    let checkOuts = 0;
+
+    studentsWithTodayAttendance.forEach(student => {
+      student.attendanceLog.forEach(log => {
+        if (log.checkInDate >= todayStart && log.checkInDate <= todayEnd) {
+          checkIns++;
+          if (log.checkOutDate && log.checkOutDate >= todayStart && log.checkOutDate <= todayEnd) {
+            checkOuts++;
+          }
+        }
+      });
+    });
+
+    // Fetch Recent Activities (last 10)
+    const recentActivities = await AuditLog.find()
+      .sort({ timestamp: -1 })
+      .limit(10)
+      .lean();
+
+    // Map AuditLog to expected format for frontend if needed
+    const mappedActivities = recentActivities.map(log => ({
+      description: log.description,
+      user: log.adminName || "System",
+      target: log.targetName || log.targetType,
+      timestamp: log.timestamp,
+      action: log.actionType
+    }));
 
     res.status(200).json({
       totalStudents, totalBeds, inUseBeds, availableBeds, damagedBeds,
-      upcomingInspectionCount: upcomingInspections.length, upcomingInspections,
-      pendingLeavesCount, inProgressComplaintsCount, pendingRequisitionsCount
+      upcomingInspectionCount: upcomingInspections.length, 
+      upcomingInspections,
+      pendingLeavesCount, 
+      inProgressComplaintsCount, 
+      pendingRequisitionsCount,
+      checkInOutData: {
+        checkIns,
+        checkOuts
+      },
+      recentActivities: mappedActivities
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("Dashboard Stats Error:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };
 
