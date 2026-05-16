@@ -304,7 +304,7 @@ router.get('/inventory/qr/:slug', getItemByQRSlug);
 
 // Parameterized inventory routes
 router.get('/inventory/:id', getInventoryItemById);
-router.put('/inventory/:id', updateInventoryItem);
+router.put('/inventory/:id', upload.single('receipt'), updateInventoryItem);
 router.put('/inventory/:id/receipt', upload.single('receipt'), updateInventoryReceipt);
 router.post('/inventory/:id/qr-code', generateQRCode);
 router.get('/inventory/:id/qr-code/download', downloadQRCode); 
