@@ -1219,7 +1219,8 @@ const registerStudent = async (req, res) => {
     emergencyContactNumber,
     hasCollegeId,
     isWorking,
-    roomType
+    roomType,
+    relation
   } = req.body;
 
   try {
@@ -1316,7 +1317,8 @@ const registerStudent = async (req, res) => {
       documents,
       hasCollegeId,
       isWorking,
-      roomType
+      roomType,
+      relation
     });
 
     await newStudent.save();
@@ -1729,7 +1731,7 @@ const updateStudent = async (req, res) => {
   const { studentId } = req.params;
   const {
     firstName, lastName, contactNumber, email, roomBedNumber,
-    emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType
+    emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType, relation
   } = req.body;
 
   try {
@@ -1743,7 +1745,7 @@ const updateStudent = async (req, res) => {
     // ✅ Build update object with text fields
     const updateData = {
       firstName, lastName, contactNumber, email, roomBedNumber,
-      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType
+      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType, relation
     };
 
     // ✅ Add document updates only if new files uploaded

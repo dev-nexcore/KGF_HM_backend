@@ -389,14 +389,24 @@ const getRecentInspections = async (req, res) => {
 
 const getFilteredInspections = async (req, res) => {
   try {
-    const { status, target } = req.query;
+    const { status, target, date } = req.query;
     const filter = {};
     if (status) filter.status = status;
     if (target) filter.target = target;
+    
+    if (date) {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+      filter.datetime = { $gte: startOfDay, $lte: endOfDay };
+    }
+
     const inspections = await Inspection.find(filter).sort({ datetime: -1 });
     res.status(200).json({ success: true, inspections });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error' });
+    console.error("Error in getFilteredInspections:", error);
+    res.status(500).json({ success: false, message: 'Error filtering inspections' });
   }
 };
 
@@ -420,8 +430,14 @@ const completeInspection = async (req, res) => {
 
 const getInspectionStats = async (req, res) => {
   try {
-    const stats = await Inspection.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]);
-    res.status(200).json({ success: true, stats });
+    const total = await Inspection.countDocuments();
+    const pending = await Inspection.countDocuments({ status: 'pending' });
+    const completed = await Inspection.countDocuments({ status: 'completed' });
+    
+    res.status(200).json({ 
+      success: true, 
+      stats: { total, pending, completed } 
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error' });
   }
@@ -462,20 +478,81 @@ const updateLeaveStatus = async (req, res) => {
 
 const getLeaveRequestStats = async (req, res) => {
   try {
-    const stats = await Leave.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]);
-    res.json({ stats });
+    const totalRequests = await Leave.countDocuments();
+    const pendingRequests = await Leave.countDocuments({ status: 'pending' });
+    const approvedRequests = await Leave.countDocuments({ status: 'approved' });
+    const rejectedRequests = await Leave.countDocuments({ status: 'rejected' });
+    
+    res.json({ 
+      totalRequests, 
+      pendingRequests, 
+      approvedRequests, 
+      rejectedRequests 
+    });
   } catch (error) {
+    console.error("Error in getLeaveRequestStats:", error);
     res.status(500).json({ message: 'Error' });
   }
 };
 
 const filterLeaveRequests = async (req, res) => {
   try {
-    const { status } = req.query;
-    const filter = status ? { status } : {};
-    const leaves = await Leave.find(filter).populate('studentId').sort({ appliedAt: -1 });
+    const { status, studentName, studentId, startDate, endDate } = req.query;
+    let query = {};
+
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // Improved date filtering: Find leaves active on the selected date
+    if (startDate || endDate) {
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        
+        // Match if the leave period overlaps with the filter range
+        query.$and = [
+          { startDate: { $lte: end } },
+          { endDate: { $gte: start } }
+        ];
+      } else if (startDate) {
+        query.startDate = { $gte: new Date(startDate) };
+      } else if (endDate) {
+        query.endDate = { $lte: new Date(endDate) };
+      }
+    }
+
+    // Improved student search (Name or ID)
+    if (studentName || studentId) {
+      const searchStr = (studentName || studentId).trim();
+      const searchTerms = searchStr.split(/\s+/);
+      
+      const students = await Student.find({
+        $or: [
+          { firstName: { $regex: searchStr, $options: 'i' } },
+          { lastName: { $regex: searchStr, $options: 'i' } },
+          { studentId: { $regex: searchStr, $options: 'i' } },
+          // Match combined first and last name if possible
+          { $and: searchTerms.length > 1 ? [
+            { firstName: { $regex: searchTerms[0], $options: 'i' } },
+            { lastName: { $regex: searchTerms[searchTerms.length - 1], $options: 'i' } }
+          ] : [{ _id: null }] }
+        ]
+      }).select('_id');
+
+      const studentIds = students.map(s => s._id);
+      query.studentId = { $in: studentIds };
+    }
+
+    const leaves = await Leave.find(query)
+      .populate('studentId')
+      .sort({ appliedAt: -1 });
+
     res.json(leaves);
   } catch (err) {
+    console.error("Error in filterLeaveRequests:", err);
     res.status(500).json({ message: 'Error' });
   }
 };
@@ -538,9 +615,29 @@ const deleteWarden = async (req, res) => {
 // <--------- Emergency Contacts ----------->
 const getEmergencyContacts = async (req, res) => {
   try {
-    const students = await Student.find({}, 'studentId firstName lastName emergencyContactName relation emergencyContactNumber');
-    res.status(200).json({ success: true, contacts: students });
+    const { studentName, studentId } = req.query;
+    let query = {};
+
+    if (studentName || studentId) {
+      const searchStr = studentName || studentId;
+      query.$or = [
+        { firstName: { $regex: searchStr, $options: 'i' } },
+        { lastName: { $regex: searchStr, $options: 'i' } },
+        { studentId: { $regex: searchStr, $options: 'i' } }
+      ];
+    }
+
+    const students = await Student.find(query, 'studentId firstName lastName emergencyContactName relation emergencyContactNumber');
+    
+    // Add studentName to each object
+    const contacts = students.map(s => ({
+      ...s._doc,
+      studentName: `${s.firstName} ${s.lastName}`
+    }));
+
+    res.status(200).json({ success: true, contacts });
   } catch (error) {
+    console.error("Error in getEmergencyContacts:", error);
     res.status(500).json({ success: false, message: "Error" });
   }
 };
@@ -690,10 +787,39 @@ const getAvailableBedsInventory = async (req, res) => {
 
 const getAvailableRoomsInventory = async (req, res) => {
   try {
-    const beds = await Inventory.find({ status: 'Available' });
-    const rooms = [...new Set(beds.map(b => b.roomNo))];
-    res.status(200).json({ success: true, availableRooms: rooms.map(r => ({ roomNo: r })) });
+    const allBedItems = await Inventory.find({
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
+
+    const roomStats = {};
+    allBedItems.forEach(bed => {
+      const roomKey = bed.roomNo;
+      if (roomKey) {
+        if (!roomStats[roomKey]) {
+          roomStats[roomKey] = {
+            _id: roomKey,
+            roomNo: roomKey,
+            floor: bed.floor,
+            totalBeds: 0,
+            availableBeds: 0
+          };
+        }
+        roomStats[roomKey].totalBeds += 1;
+        if (bed.status === 'Available') {
+          roomStats[roomKey].availableBeds += 1;
+        }
+      }
+    });
+
+    // Only return rooms that have available beds
+    const availableRooms = Object.values(roomStats).filter(r => r.availableBeds > 0);
+
+    res.status(200).json({ success: true, availableRooms });
   } catch (error) {
+    console.error("Error in getAvailableRoomsInventory:", error);
     res.status(500).json({ success: false, message: "Error" });
   }
 };
