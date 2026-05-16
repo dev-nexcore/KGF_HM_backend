@@ -55,6 +55,11 @@ const complaintSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    targetStatus: {
+      type: String,
+      enum: ["in progress", "resolved", "rejected", null],
+      default: null,
+    },
     // Attachments
     attachments: [
       {

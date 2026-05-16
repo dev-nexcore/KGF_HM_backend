@@ -44,7 +44,7 @@ const getAllComplaints = async (req, res) => {
     // Get complaints with student details
     const complaints = await Complaint.find(query)
       .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber')
-      .select('complaintType otherComplaintType subject description status filedDate createdAt updatedAt attachments')
+      .select('complaintType otherComplaintType subject description status targetStatus adminNotes filedDate createdAt updatedAt attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -90,6 +90,8 @@ const getAllComplaints = async (req, res) => {
           filedDate: complaint.filedDate,
           hasAttachments: complaint.attachments.length > 0,
           attachmentCount: complaint.attachments.length,
+          attachments: complaint.attachments || [],
+          targetStatus: complaint.targetStatus,
           raisedBy: complaint.studentId ? {
             name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
             studentId: complaint.studentId.studentId,
@@ -119,14 +121,24 @@ const getOpenComplaints = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    const openComplaints = await Complaint.find({ status: 'pending' })
+    const openComplaints = await Complaint.find({ 
+      $or: [
+        { status: 'pending' },
+        { status: 'pending_approval', targetStatus: 'in progress' }
+      ]
+    })
       .populate('studentId', 'firstName lastName studentId email contactNumber')
-      .select('complaintType otherComplaintType subject description status filedDate attachments')
+      .select('complaintType otherComplaintType subject description status targetStatus adminNotes filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalOpen = await Complaint.countDocuments({ status: 'pending' });
+    const totalOpen = await Complaint.countDocuments({ 
+      $or: [
+        { status: 'pending' },
+        { status: 'pending_approval', targetStatus: 'in progress' }
+      ]
+    });
 
     return res.json({
       message: "Open complaints fetched successfully",
@@ -147,6 +159,8 @@ const getOpenComplaints = async (req, res) => {
           filedDate: complaint.filedDate,
           hasAttachments: complaint.attachments.length > 0,
           attachmentCount: complaint.attachments.length,
+          attachments: complaint.attachments || [],
+          targetStatus: complaint.targetStatus,
           raisedBy: complaint.studentId ? {
             name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
             studentId: complaint.studentId.studentId,
@@ -176,7 +190,7 @@ const getInProgressComplaints = async (req, res) => {
 
     const inProgressComplaints = await Complaint.find({ status: 'in progress' })
       .populate('studentId', 'firstName lastName studentId email contactNumber')
-      .select('complaintType otherComplaintType subject description status filedDate attachments')
+      .select('complaintType otherComplaintType subject description status targetStatus adminNotes filedDate attachments')
       .sort({ filedDate: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -202,6 +216,8 @@ const getInProgressComplaints = async (req, res) => {
           filedDate: complaint.filedDate,
           hasAttachments: complaint.attachments.length > 0,
           attachmentCount: complaint.attachments.length,
+          attachments: complaint.attachments || [],
+          targetStatus: complaint.targetStatus,
           raisedBy: complaint.studentId ? {
             name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
             studentId: complaint.studentId.studentId,
@@ -229,14 +245,24 @@ const getResolvedComplaints = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    const resolvedComplaints = await Complaint.find({ status: { $in: ['resolved', 'pending_approval'] } })
+    const resolvedComplaints = await Complaint.find({ 
+      $or: [
+        { status: 'resolved' },
+        { status: 'pending_approval', targetStatus: { $in: ['resolved', 'rejected'] } }
+      ]
+    })
       .populate('studentId', 'firstName lastName studentId email contactNumber')
-      .select('complaintType subject description status filedDate updatedAt attachments')
+      .select('complaintType subject description status targetStatus adminNotes filedDate updatedAt attachments')
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalResolved = await Complaint.countDocuments({ status: { $in: ['resolved', 'pending_approval'] } });
+    const totalResolved = await Complaint.countDocuments({ 
+      $or: [
+        { status: 'resolved' },
+        { status: 'pending_approval', targetStatus: { $in: ['resolved', 'rejected'] } }
+      ]
+    });
 
     return res.json({
       message: "Resolved complaints fetched successfully",
@@ -323,7 +349,7 @@ const getRejectedComplaints = async (req, res) => {
 // Update complaint status (Approve/Resolve or Reject)
 const updateComplaintStatus = async (req, res) => {
   const { complaintId } = req.params;
-  const { status, adminNotes } = req.body; // status can be 'pending', 'in progress', or 'resolved'
+  const { status, adminNotes, targetStatus } = req.body; // status can be 'pending', 'in progress', or 'resolved'
 
   try {
     // Validate status
@@ -341,7 +367,10 @@ const updateComplaintStatus = async (req, res) => {
     // Update complaint status
     complaint.status = status;
     if (adminNotes) {
-      complaint.adminNotes = adminNotes; // You might want to add this field to your schema
+      complaint.adminNotes = adminNotes; 
+    }
+    if (targetStatus !== undefined) {
+      complaint.targetStatus = targetStatus;
     }
 
     await complaint.save();
@@ -431,7 +460,8 @@ If you have any questions, please contact the hostel administration.
         student: {
           studentName: student.studentName,
           studentId: student.studentId
-        }
+        },
+        targetStatus: complaint.targetStatus
       }
     });
 
@@ -473,7 +503,7 @@ const getComplaintStatistics = async (req, res) => {
     // Get recent complaints (last 5)
     const recentComplaints = await Complaint.find()
       .populate('studentId', 'studentName studentId')
-      .select('complaintType subject status filedDate attachments')
+      .select('complaintType subject description status targetStatus adminNotes filedDate attachments')
       .sort({ filedDate: -1 })
       .limit(5);
 
@@ -544,7 +574,8 @@ const getComplaintDetails = async (req, res) => {
           email: complaint.studentId.email,
           contactNumber: complaint.studentId.contactNumber,
           roomBedNumber: complaint.studentId.roomBedNumber
-        } : null
+        } : null,
+        targetStatus: complaint.targetStatus
       }
     });
 
