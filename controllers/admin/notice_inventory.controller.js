@@ -1303,7 +1303,12 @@ const getAvailableRooms = async (req, res) => {
 const updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
+
+    // If a file is uploaded, add its path to updateData
+    if (req.file) {
+      updateData.receiptUrl = `/uploads/receipts/${req.file.filename}`;
+    }
 
     // Check if barcode ID is being updated and if it already exists
     if (updateData.barcodeId) {
