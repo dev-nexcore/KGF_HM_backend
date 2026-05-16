@@ -57,17 +57,17 @@ const generateStudentInvoice = async (req, res) => {
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: 'Invoice Generated',
-      description: `Generated invoice ${invoiceNumber} for ${student.studentName} - ₹${amount}`,
+      description: `Generated invoice ${invoiceNumber} for ${student.firstName} ${student.lastName} - ₹${amount}`,
       targetType: 'Invoice',
       targetId: invoiceNumber,
-      targetName: `${student.studentName} - ${invoiceType}`
+      targetName: `${student.firstName} ${student.lastName} - ${invoiceType}`
     });
 
     return res.json({
       message: "Invoice generated successfully",
       invoice: {
         invoiceNumber,
-        studentName: student.studentName,
+        studentName: `${student.firstName} ${student.lastName}`,
         amount,
         dueDate,
         status: 'pending'
@@ -690,17 +690,17 @@ const initiateRefund = async (req, res) => {
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: 'Refund Initiated',
-      description: `Initiated refund ${refundId} for ${student.studentName} - ₹${amount}`,
+      description: `Initiated refund ${refundId} for ${student.firstName} ${student.lastName} - ₹${amount}`,
       targetType: 'Refund',
       targetId: refundId,
-      targetName: `${student.studentName} - ₹${amount}`
+      targetName: `${student.firstName} ${student.lastName} - ₹${amount}`
     });
 
     return res.json({
       message: "Refund initiated successfully",
       refund: {
         refundId,
-        studentName: student.studentName,
+        studentName: `${student.firstName} ${student.lastName}`,
         amount,
         status: 'pending'
       }
@@ -724,7 +724,7 @@ const getRefunds = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const refunds = await Refund.find(query)
-      .populate('studentId', 'studentName studentId')
+      .populate('studentId', 'firstName lastName studentId')
       .populate('processedBy', 'adminId')
       .sort({ requestDate: -1 })
       .skip(skip)
@@ -733,10 +733,11 @@ const getRefunds = async (req, res) => {
     // Filter by search if provided
     let filteredRefunds = refunds;
     if (search) {
-      filteredRefunds = refunds.filter(refund =>
-        refund.studentId?.studentName?.toLowerCase().includes(search.toLowerCase()) ||
-        refund.refundId.toLowerCase().includes(search.toLowerCase())
-      );
+      filteredRefunds = refunds.filter(refund => {
+        const studentName = refund.studentId ? `${refund.studentId.firstName} ${refund.studentId.lastName}` : '';
+        return studentName.toLowerCase().includes(search.toLowerCase()) ||
+               refund.refundId.toLowerCase().includes(search.toLowerCase());
+      });
     }
 
     const totalRefunds = await Refund.countDocuments(query);
@@ -747,7 +748,7 @@ const getRefunds = async (req, res) => {
         _id: refund._id,
         refundId: refund.refundId,
         date: refund.requestDate,
-        recipientName: refund.studentId?.studentName || 'Unknown',
+        recipientName: refund.studentId ? `${refund.studentId.firstName} ${refund.studentId.lastName}` : 'Unknown',
         amount: refund.amount,
         reason: refund.reason,
         status: refund.status,
@@ -778,7 +779,7 @@ const updateRefundStatus = async (req, res) => {
 
   try {
     const refund = await Refund.findById(refundId)
-      .populate('studentId', 'studentName studentId email');
+      .populate('studentId', 'firstName lastName studentId email');
 
     if (!refund) {
       return res.status(404).json({ message: "Refund not found" });

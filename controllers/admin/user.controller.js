@@ -1550,6 +1550,22 @@ Please log in at https://www.KGF-HM.com and change your password after first log
     });
     const emailSent = emailResult.success;
 
+    // Create audit log for warden registration
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.WARDEN_REGISTERED,
+      description: `Registered new warden: ${firstName} ${lastName} (ID: ${newWardenId})`,
+      targetType: 'Warden',
+      targetId: newWardenId,
+      targetName: `${firstName} ${lastName}`,
+      additionalData: {
+        email,
+        contactNumber,
+        salary
+      }
+    });
+
     return res.json({
       success: true,
       message: emailSent
@@ -1776,6 +1792,24 @@ const updateStudent = async (req, res) => {
     if (newBedId && newBedId !== "Not Assigned" && newBedId !== previousBedId) {
       await Inventory.findByIdAndUpdate(newBedId, { status: "In Use" });
     }
+
+    // Create audit log for the update
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.STUDENT_UPDATED,
+      description: `Updated student: ${firstName} ${lastName} (ID: ${studentId})`,
+      targetType: 'Student',
+      targetId: studentId,
+      targetName: `${firstName} ${lastName}`,
+      additionalData: {
+        previousBed: previousBedId,
+        newBed: newBedId,
+        email,
+        feeStatus,
+        isWorking
+      }
+    });
 
     return res.json({ message: 'Student updated successfully.', student: updatedStudent });
 

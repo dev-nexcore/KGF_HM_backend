@@ -125,7 +125,7 @@ const updateLeaveStatus = async (req, res) => {
     await leave.save();
 
     const student = leave.studentId;
-    const studentName = `${student.firstName} ${student.lastName}`; // Construct full name
+    const studentName = student ? `${student.firstName} ${student.lastName}` : 'Unknown Student'; // Construct full name
     const statusText = status === 'approved' ? 'APPROVED' : 'REJECTED';
     const statusEmoji = status === 'approved' ? '✅' : '❌';
 
@@ -163,6 +163,22 @@ ${status === 'approved' ?
     } catch (emailErr) {
       console.error("Email sending error:", emailErr);
     }
+
+    // Create audit log
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: status === 'approved' ? AuditActionTypes.LEAVE_APPROVED : AuditActionTypes.LEAVE_REJECTED,
+      description: `${status === 'approved' ? 'Approved' : 'Rejected'} leave request for ${studentName}`,
+      targetType: 'Leave',
+      targetId: leaveId,
+      targetName: `${studentName} - ${leave.leaveType}`,
+      additionalData: {
+        leaveType: leave.leaveType,
+        status,
+        adminComments
+      }
+    });
 
     return res.json({
       message: `Leave request ${status} successfully`,
@@ -215,10 +231,15 @@ const getLeaveStatistics = async (req, res) => {
 
     // Get recent leave requests (last 5)
     const recentLeaves = await Leave.find()
-      .populate('studentId', 'studentName studentId')
+      .populate('studentId', 'firstName lastName studentId')
       .select('leaveType startDate endDate status appliedAt')
       .sort({ appliedAt: -1 })
       .limit(5);
+
+    const formattedRecentLeaves = recentLeaves.map(leave => ({
+      ...leave.toObject(),
+      studentName: leave.studentId ? `${leave.studentId.firstName} ${leave.studentId.lastName}` : 'Unknown'
+    }));
 
     return res.json({
       message: "Leave statistics fetched successfully",
@@ -230,7 +251,7 @@ const getLeaveStatistics = async (req, res) => {
         total: totalPending + totalApproved + totalRejected
       },
       leaveTypeBreakdown: leaveTypeStats,
-      recentLeaves
+      recentLeaves: formattedRecentLeaves
     });
 
   } catch (err) {
@@ -245,9 +266,14 @@ const getStudentLeaveHistory = async (req, res) => {
 
   try {
     const leaves = await Leave.find({ studentId })
-      .populate('studentId', 'studentName studentId email')
+      .populate('studentId', 'firstName lastName studentId email')
       .select('leaveType startDate endDate reason status appliedAt processedAt adminComments')
       .sort({ appliedAt: -1 });
+
+    const formattedLeaves = leaves.map(leave => ({
+      ...leave.toObject(),
+      studentName: leave.studentId ? `${leave.studentId.firstName} ${leave.studentId.lastName}` : 'Unknown'
+    }));
 
     if (leaves.length === 0) {
       return res.json({
@@ -258,7 +284,7 @@ const getStudentLeaveHistory = async (req, res) => {
 
     return res.json({
       message: "Student leave history fetched successfully",
-      leaves
+      leaves: formattedLeaves
     });
 
   } catch (err) {
@@ -306,6 +332,21 @@ If you have any questions, please contact the hostel administration.
       text: emailBody
     });
 
+    // Create audit log
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.LEAVE_MESSAGE_SENT,
+      description: `Sent message to student ${student.firstName} ${student.lastName} regarding leave ${leave.leaveType}`,
+      targetType: 'Leave',
+      targetId: leaveId,
+      targetName: `${student.firstName} ${student.lastName}`,
+      additionalData: {
+        message,
+        subject
+      }
+    });
+
     return res.json({
       message: "Message sent successfully to student",
       sentTo: student.email
@@ -334,7 +375,7 @@ const bulkUpdateLeaveStatus = async (req, res) => {
     const leaves = await Leave.find({
       _id: { $in: leaveIds },
       status: 'pending'
-    }).populate('studentId', 'studentName studentId email');
+    }).populate('studentId', 'firstName lastName studentId email');
 
     if (leaves.length === 0) {
       return res.status(400).json({ message: "No pending leave requests found to update." });
@@ -360,7 +401,7 @@ const bulkUpdateLeaveStatus = async (req, res) => {
       const statusEmoji = status === 'approved' ? '✅' : '❌';
 
       const emailSubject = `Leave Request ${statusText} - ${leave.leaveType}`;
-      const emailBody = `Hello ${student.studentName},
+      const emailBody = `Hello ${student.firstName} ${student.lastName},
 
 ${statusEmoji} Your leave request has been ${statusText.toLowerCase()}.
 
@@ -408,6 +449,23 @@ ${status === 'approved' ?
     );
 
     await Promise.all(notifPromises);
+
+    // Create audit log for bulk update
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: status === 'approved' ? AuditActionTypes.LEAVE_APPROVED : AuditActionTypes.LEAVE_REJECTED,
+      description: `Bulk ${status} ${updateResult.modifiedCount} leave requests`,
+      targetType: 'Leave',
+      targetId: 'bulk_update',
+      targetName: `Bulk Update - ${updateResult.modifiedCount} leaves`,
+      additionalData: {
+        leaveIds,
+        status,
+        adminComments,
+        affectedCount: updateResult.modifiedCount
+      }
+    });
 
     return res.json({
       message: `${updateResult.modifiedCount} leave requests ${status} successfully`,

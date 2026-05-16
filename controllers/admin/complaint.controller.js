@@ -358,7 +358,7 @@ const updateComplaintStatus = async (req, res) => {
     }
 
     // Find the complaint
-    const complaint = await Complaint.findById(complaintId).populate('studentId', 'studentName studentId email');
+    const complaint = await Complaint.findById(complaintId).populate('studentId', 'firstName lastName studentId email');
 
     if (!complaint) {
       return res.status(404).json({ message: "Complaint not found." });
@@ -381,7 +381,7 @@ const updateComplaintStatus = async (req, res) => {
     const statusEmoji = status === 'in progress' ? '⚙️' : status === 'pending_approval' ? '⏳' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
 
     const emailSubject = `Complaint ${statusText} - ${complaint.subject}`;
-    const emailBody = `Hello ${student.studentName},
+    const emailBody = `Hello ${student.firstName} ${student.lastName},
 
 ${statusEmoji} Your complaint has been marked as ${statusText.toLowerCase()}.
 
@@ -416,14 +416,16 @@ If you have any questions, please contact the hostel administration.
       // Don't fail the entire operation if email fails
     }
 
+    const studentName = student ? `${student.firstName} ${student.lastName}` : 'Unknown Student';
+
     await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: status === 'resolved' ? AuditActionTypes.COMPLAINT_RESOLVED : AuditActionTypes.COMPLAINT_UPDATED,
-      description: `${status === 'resolved' ? 'Resolved' : status === 'pending_approval' ? 'Requested approval for' : 'Updated'} complaint: ${complaint.subject} (Student: ${student.studentName})`,
+      description: `${status === 'resolved' ? 'Resolved' : status === 'pending_approval' ? 'Requested approval for' : 'Updated'} complaint: ${complaint.subject} (Student: ${studentName})`,
       targetType: 'Complaint',
       targetId: complaintId,
-      targetName: `${complaint.subject} - ${student.studentName}`,
+      targetName: `${complaint.subject} - ${studentName}`,
       additionalData: {
         complaintType: complaint.complaintType,
         subject: complaint.subject,
@@ -458,7 +460,7 @@ If you have any questions, please contact the hostel administration.
         hasAttachments: complaint.attachments.length > 0,
         attachmentCount: complaint.attachments.length,
         student: {
-          studentName: student.studentName,
+          studentName: `${student.firstName} ${student.lastName}`,
           studentId: student.studentId
         },
         targetStatus: complaint.targetStatus
@@ -502,7 +504,7 @@ const getComplaintStatistics = async (req, res) => {
 
     // Get recent complaints (last 5)
     const recentComplaints = await Complaint.find()
-      .populate('studentId', 'studentName studentId')
+      .populate('studentId', 'firstName lastName studentId')
       .select('complaintType subject description status targetStatus adminNotes filedDate attachments')
       .sort({ filedDate: -1 })
       .limit(5);
@@ -526,7 +528,7 @@ const getComplaintStatistics = async (req, res) => {
         filedDate: complaint.filedDate,
         hasAttachments: complaint.attachments.length > 0,
         attachmentCount: complaint.attachments.length,
-        raisedBy: complaint.studentId ? complaint.studentId.studentName : 'Unknown'
+        raisedBy: complaint.studentId ? `${complaint.studentId.firstName} ${complaint.studentId.lastName}` : 'Unknown'
       }))
     });
 
@@ -542,7 +544,7 @@ const getComplaintDetails = async (req, res) => {
 
   try {
     const complaint = await Complaint.findById(complaintId)
-      .populate('studentId', 'studentName studentId email contactNumber roomBedNumber');
+      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber');
 
     if (!complaint) {
       return res.status(404).json({ message: "Complaint not found." });
@@ -569,7 +571,7 @@ const getComplaintDetails = async (req, res) => {
           uploadedAt: attachment.uploadedAt
         })),
         student: complaint.studentId ? {
-          name: complaint.studentId.studentName,
+          name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
           studentId: complaint.studentId.studentId,
           email: complaint.studentId.email,
           contactNumber: complaint.studentId.contactNumber,
@@ -655,7 +657,7 @@ const bulkUpdateComplaintStatus = async (req, res) => {
     // Find all complaints from the provided IDs
     const complaints = await Complaint.find({
       _id: { $in: complaintIds }
-    }).populate('studentId', 'studentName studentId email');
+    }).populate('studentId', 'firstName lastName studentId email');
 
     if (complaints.length === 0) {
       return res.status(400).json({ message: "No complaints found to update." });
@@ -679,7 +681,7 @@ const bulkUpdateComplaintStatus = async (req, res) => {
       const statusEmoji = status === 'in progress' ? '⚙️' : status === 'pending_approval' ? '⏳' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
 
       const emailSubject = `Complaint ${statusText} - ${complaint.subject}`;
-      const emailBody = `Hello ${student.studentName},
+      const emailBody = `Hello ${student.firstName} ${student.lastName},
 
 ${statusEmoji} Your complaint has been marked as ${statusText.toLowerCase()}.
 

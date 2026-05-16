@@ -197,6 +197,25 @@ const addInventoryItem = async (req, res) => {
     newItem.qrCodeUrl = `/qrcodes/${newItem._id}.png`;
     await newItem.save();
 
+    // Create audit log for inventory addition
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: AuditActionTypes.INVENTORY_ADDED,
+      description: `Added new inventory item: ${itemName} (Barcode: ${generatedBarcode})`,
+      targetType: 'Inventory',
+      targetId: newItem._id,
+      targetName: itemName,
+      additionalData: {
+        category,
+        location,
+        roomNo,
+        floor,
+        status,
+        purchaseCost
+      }
+    });
+
     return res.status(201).json({
       success: true,
       message: "Inventory item added successfully",
@@ -647,8 +666,23 @@ const generateStockReport = async (req, res) => {
     // Import Excel library at the top of your file
     // import ExcelJS from 'exceljs';
 
-    // Get all inventory items
-    const items = await Inventory.find({}).sort({ category: 1, itemName: 1 });
+    // Get filters from query params
+    const { category, status, search } = req.query;
+
+    // Build filter object
+    const filter = {};
+    if (category && category !== 'All Categories') filter.category = category;
+    if (status && status !== 'All Status') filter.status = status;
+    if (search) {
+      filter.$or = [
+        { itemName: { $regex: search, $options: 'i' } },
+        { barcodeId: { $regex: search, $options: 'i' } },
+        { location: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Get filtered inventory items
+    const items = await Inventory.find(filter).sort({ category: 1, itemName: 1 });
 
     // Create workbook and worksheet
     const workbook = new ExcelJS.Workbook();
@@ -1338,6 +1372,20 @@ const updateInventoryItem = async (req, res) => {
       });
     }
 
+    // Create audit log for inventory update
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: 'Inventory Updated',
+      description: `Updated inventory item: ${updatedItem.itemName} (Barcode: ${updatedItem.barcodeId})`,
+      targetType: 'Inventory',
+      targetId: id,
+      targetName: updatedItem.itemName,
+      additionalData: {
+        updatedFields: Object.keys(req.body)
+      }
+    });
+
     res.json({
       success: true,
       message: "Inventory item updated successfully",
@@ -1421,6 +1469,22 @@ const deleteInventoryItem = async (req, res) => {
     }
 
     await Inventory.findByIdAndDelete(id);
+
+    // Create audit log for inventory deletion
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: 'Inventory Deleted',
+      description: `Deleted inventory item: ${inventoryItem.itemName} (Barcode: ${inventoryItem.barcodeId})`,
+      targetType: 'Inventory',
+      targetId: id,
+      targetName: inventoryItem.itemName,
+      additionalData: {
+        itemName: inventoryItem.itemName,
+        barcodeId: inventoryItem.barcodeId,
+        category: inventoryItem.category
+      }
+    });
 
     res.status(200).json({
       success: true,

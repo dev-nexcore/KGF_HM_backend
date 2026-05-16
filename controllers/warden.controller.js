@@ -298,10 +298,46 @@ const getBedStatusOverview = async (req, res) => {
 // <----------- Student Management ----------->
 const getStudentListForWarden = async (req, res) => {
   try {
-    const students = await Student.find().populate('roomBedNumber');
-    res.status(200).json({ success: true, students });
+    const students = await Student.find().populate('roomBedNumber', 'itemName barcodeId floor roomNo');
+    
+    // Fetch all beds to calculate room capacities (room types)
+    const allBedItems = await Inventory.find({
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
+    const capacityMap = {};
+    allBedItems.forEach(bed => {
+      if (bed.roomNo) {
+        capacityMap[bed.roomNo] = (capacityMap[bed.roomNo] || 0) + 1;
+      }
+    });
+
+    // Fetch all pending invoices to calculate dues
+    const pendingInvoices = await StudentInvoice.find({ status: 'pending' });
+    const duesMap = {};
+    pendingInvoices.forEach(inv => {
+      const sId = inv.studentId.toString();
+      duesMap[sId] = (duesMap[sId] || 0) + inv.amount;
+    });
+
+    const transformedStudents = students.map((student) => {
+      // Infer roomType if not explicitly set but a room is assigned
+      const inferredRoomType = student.roomType || (student.roomBedNumber?.roomNo ? String(capacityMap[student.roomBedNumber.roomNo]) : "");
+
+      return {
+        ...student.toObject(),
+        id: student.studentId, // Ensure frontend compatibility
+        dues: duesMap[student._id.toString()] || 0,
+        roomType: inferredRoomType,
+      };
+    });
+
+    res.status(200).json({ success: true, students: transformedStudents });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error" });
+    console.error("Error fetching students for warden:", error);
+    res.status(500).json({ success: false, message: "Error fetching students." });
   }
 };
 
@@ -581,10 +617,46 @@ const getWardenRequisitions = async (req, res) => {
 
 const getAllInterns = async (req, res) => {
   try {
-    const interns = await Student.find({ isWorking: true });
-    res.status(200).json({ success: true, workers: interns });
+    const interns = await Student.find({ isWorking: true }).populate('roomBedNumber', 'itemName barcodeId floor roomNo');
+    
+    // Fetch all beds to calculate room capacities (room types)
+    const allBedItems = await Inventory.find({
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
+    const capacityMap = {};
+    allBedItems.forEach(bed => {
+      if (bed.roomNo) {
+        capacityMap[bed.roomNo] = (capacityMap[bed.roomNo] || 0) + 1;
+      }
+    });
+
+    // Fetch all pending invoices to calculate dues
+    const pendingInvoices = await StudentInvoice.find({ status: 'pending' });
+    const duesMap = {};
+    pendingInvoices.forEach(inv => {
+      const sId = inv.studentId.toString();
+      duesMap[sId] = (duesMap[sId] || 0) + inv.amount;
+    });
+
+    const transformedInterns = interns.map((student) => {
+      // Infer roomType if not explicitly set
+      const inferredRoomType = student.roomType || (student.roomBedNumber?.roomNo ? String(capacityMap[student.roomBedNumber.roomNo]) : "");
+
+      return {
+        ...student.toObject(),
+        id: student.studentId,
+        dues: duesMap[student._id.toString()] || 0,
+        roomType: inferredRoomType,
+      };
+    });
+
+    res.status(200).json({ success: true, workers: transformedInterns });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error" });
+    console.error("Error fetching workers for warden:", error);
+    res.status(500).json({ success: false, message: "Error fetching workers." });
   }
 };
 

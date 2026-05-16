@@ -230,16 +230,35 @@ const getAuditLogDetails = async (req, res) => {
 // Export audit logs to CSV (optional feature)
 const exportAuditLogs = async (req, res) => {
   try {
-    const { startDate, endDate, actionType } = req.query;
+    const { startDate, endDate, actionType, adminId, targetType, search } = req.query;
     
     let query = {};
+    
+    // Search in description, adminName, or targetName
+    if (search) {
+      query.$or = [
+        { description: { $regex: search, $options: 'i' } },
+        { adminName: { $regex: search, $options: 'i' } },
+        { targetName: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Date range filter
     if (startDate || endDate) {
       query.timestamp = {};
       if (startDate) query.timestamp.$gte = new Date(startDate);
       if (endDate) query.timestamp.$lte = new Date(endDate + 'T23:59:59.999Z');
     }
+
+    // Category filters
     if (actionType && actionType !== 'all') {
       query.actionType = actionType;
+    }
+    if (adminId && adminId !== 'all') {
+      query.adminId = adminId;
+    }
+    if (targetType && targetType !== 'all') {
+      query.targetType = targetType;
     }
 
     const logs = await AuditLog.find(query)

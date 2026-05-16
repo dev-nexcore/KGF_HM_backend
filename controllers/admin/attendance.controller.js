@@ -21,7 +21,7 @@ export const getAttendanceLogs = async (req, res) => {
     // Assuming students have studentId and staff might have a different identifier or we check the ref.
 
     const logs = await Attendance.find(query)
-      .populate('studentId', 'studentName studentId roomBedNumber')
+      .populate('studentId', 'firstName lastName studentId roomBedNumber')
       .sort({ timestamp: -1 });
 
     res.status(200).json({
