@@ -61,6 +61,7 @@ import {
   getOpenComplaints,
   getInProgressComplaints,
   getResolvedComplaints,
+  getRejectedComplaints,
   updateComplaintStatus,
   getComplaintStatistics,
   getComplaintDetails,
@@ -224,6 +225,7 @@ router.get('/complaints', getAllComplaints);
 router.get('/complaints/pending', getOpenComplaints);
 router.get('/complaints/inprogress', getInProgressComplaints);
 router.get('/complaints/resolved', getResolvedComplaints);
+router.get('/complaints/rejected', getRejectedComplaints);
 router.get('/complaints/statistics', getComplaintStatistics);
 router.get('/complaints/:complaintId', getComplaintDetails);
 router.get('/complaints/:complaintId/attachment/:attachmentId', getComplaintAttachment);

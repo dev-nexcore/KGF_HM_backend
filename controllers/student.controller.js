@@ -2118,14 +2118,34 @@ const getComplaintAttachment = async (req, res) => {
       return res.status(404).json({ message: "Complaint not found" });
     }
 
-    const attachment = complaint.attachments.id(attachmentId);
+    const attachment = complaint.attachments.find(a => a._id.toString() === attachmentId);
     if (!attachment) {
+      console.error(`Attachment ${attachmentId} not found in complaint ${complaintId}`);
       return res.status(404).json({ message: "Attachment not found" });
     }
 
-    // Check if file exists
+    // Robust file path resolution
     const fs = await import('fs');
-    if (!fs.existsSync(attachment.path)) {
+    const path = await import('path');
+    
+    const possiblePaths = [
+      attachment.path,
+      path.join(process.cwd(), attachment.path || ''),
+      path.join(process.cwd(), 'uploads', 'complaints', attachment.filename),
+      path.join(process.cwd(), 'uploads', attachment.filename),
+      path.join(process.cwd(), 'uploads', 'complaints', path.basename(attachment.path || ''))
+    ];
+
+    let filePath = null;
+    for (const p of possiblePaths) {
+      if (p && fs.existsSync(p)) {
+        filePath = p;
+        break;
+      }
+    }
+
+    if (!filePath) {
+      console.error(`Attachment file not found for complaint ${complaintId}. Checked paths:`, possiblePaths);
       return res.status(404).json({ message: "File not found on server" });
     }
 
@@ -2134,8 +2154,7 @@ const getComplaintAttachment = async (req, res) => {
     res.setHeader('Content-Disposition', `inline; filename="${attachment.originalName}"`);
 
     // Stream the file
-    const path = await import('path');
-    return res.sendFile(path.resolve(attachment.path));
+    return res.sendFile(path.resolve(filePath));
 
   } catch (err) {
     console.error("Get attachment error:", err);
@@ -2171,6 +2190,7 @@ const getComplaintHistory = async (req, res) => {
       createdAt: complaint.createdAt,
       adminNotes: complaint.adminNotes || "",
       maintenanceItems: complaint.maintenanceItems || [],
+      attachments: complaint.attachments || [],
       // FIXED: Add attachment information that frontend expects
       hasAttachments: complaint.attachments && complaint.attachments.length > 0,
       attachmentCount: complaint.attachments ? complaint.attachments.length : 0

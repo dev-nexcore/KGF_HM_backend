@@ -271,6 +271,55 @@ const getResolvedComplaints = async (req, res) => {
   }
 };
 
+// Get rejected complaints
+const getRejectedComplaints = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+
+    const rejectedComplaints = await Complaint.find({ status: 'rejected' })
+      .populate('studentId', 'firstName lastName studentId email contactNumber')
+      .select('complaintType subject description status filedDate updatedAt attachments adminNotes')
+      .sort({ updatedAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalRejected = await Complaint.countDocuments({ status: 'rejected' });
+
+    return res.json({
+      message: "Rejected complaints fetched successfully",
+      complaints: rejectedComplaints.map(complaint => ({
+        _id: complaint._id,
+        ticketId: `#${String(complaint._id).slice(-4).toUpperCase()}`,
+        subject: complaint.subject,
+        description: complaint.description,
+        complaintType: complaint.complaintType,
+        status: complaint.status,
+        filedDate: complaint.filedDate,
+        rejectedDate: complaint.updatedAt,
+        adminNotes: complaint.adminNotes,
+        hasAttachments: complaint.attachments.length > 0,
+        attachmentCount: complaint.attachments.length,
+        raisedBy: complaint.studentId ? {
+          name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
+          studentId: complaint.studentId.studentId,
+          email: complaint.studentId.email
+        } : null
+      })),
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalRejected / limit),
+        totalComplaints: totalRejected,
+        hasNextPage: page * limit < totalRejected,
+        hasPreviousPage: page > 1
+      }
+    });
+  } catch (err) {
+    console.error("Fetch rejected complaints error:", err);
+    return res.status(500).json({ message: "Server error while fetching rejected complaints." });
+  }
+};
+
 // Update complaint status (Approve/Resolve or Reject)
 const updateComplaintStatus = async (req, res) => {
   const { complaintId } = req.params;
@@ -515,14 +564,34 @@ const getComplaintAttachment = async (req, res) => {
       return res.status(404).json({ message: "Complaint not found" });
     }
 
-    const attachment = complaint.attachments.id(attachmentId);
+    const attachment = complaint.attachments.find(a => a._id.toString() === attachmentId);
     if (!attachment) {
+      console.error(`Attachment ${attachmentId} not found in complaint ${complaintId}`);
       return res.status(404).json({ message: "Attachment not found" });
     }
 
-    // Check if file exists
+    // Robust file path resolution
     const fs = await import('fs');
-    if (!fs.existsSync(attachment.path)) {
+    const path = await import('path');
+    
+    const possiblePaths = [
+      attachment.path,
+      path.join(process.cwd(), attachment.path),
+      path.join(process.cwd(), 'uploads', 'complaints', attachment.filename),
+      path.join(process.cwd(), 'uploads', attachment.filename),
+      path.join(process.cwd(), 'uploads', 'complaints', path.basename(attachment.path))
+    ];
+
+    let filePath = null;
+    for (const p of possiblePaths) {
+      if (p && fs.existsSync(p)) {
+        filePath = p;
+        break;
+      }
+    }
+
+    if (!filePath) {
+      console.error(`Attachment file not found for complaint ${complaintId}. Checked paths:`, possiblePaths);
       return res.status(404).json({ message: "File not found on server" });
     }
 
@@ -531,8 +600,7 @@ const getComplaintAttachment = async (req, res) => {
     res.setHeader('Content-Disposition', `inline; filename="${attachment.originalName}"`);
 
     // Stream the file
-    const path = await import('path');
-    return res.sendFile(path.resolve(attachment.path));
+    return res.sendFile(path.resolve(filePath));
 
   } catch (err) {
     console.error("Get attachment error:", err);
@@ -662,6 +730,7 @@ export {
   getOpenComplaints,
   getInProgressComplaints,
   getResolvedComplaints,
+  getRejectedComplaints,
   updateComplaintStatus,
   getComplaintStatistics,
   getComplaintDetails,
