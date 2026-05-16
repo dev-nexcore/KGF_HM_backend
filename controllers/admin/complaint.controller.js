@@ -229,14 +229,14 @@ const getResolvedComplaints = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    const resolvedComplaints = await Complaint.find({ status: 'resolved' })
+    const resolvedComplaints = await Complaint.find({ status: { $in: ['resolved', 'pending_approval'] } })
       .populate('studentId', 'firstName lastName studentId email contactNumber')
       .select('complaintType subject description status filedDate updatedAt attachments')
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalResolved = await Complaint.countDocuments({ status: 'resolved' });
+    const totalResolved = await Complaint.countDocuments({ status: { $in: ['resolved', 'pending_approval'] } });
 
     return res.json({
       message: "Resolved complaints fetched successfully",
@@ -327,8 +327,8 @@ const updateComplaintStatus = async (req, res) => {
 
   try {
     // Validate status
-    if (!['pending', 'in progress', 'resolved', 'rejected'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', 'resolved', or 'rejected'." });
+    if (!['pending', 'in progress', 'pending_approval', 'resolved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', 'pending_approval', 'resolved', or 'rejected'." });
     }
 
     // Find the complaint
@@ -348,8 +348,8 @@ const updateComplaintStatus = async (req, res) => {
 
     // Send email notification to student
     const student = complaint.studentId;
-    const statusText = status === 'in progress' ? 'INPROCESS TICKET' : status === 'resolved' ? 'RESOLVED SECTION' : status === 'rejected' ? 'REJECTED' : 'OPEN TICKET';
-    const statusEmoji = status === 'in progress' ? '⚙️' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
+    const statusText = status === 'in progress' ? 'INPROCESS TICKET' : status === 'pending_approval' ? 'PENDING ADMIN APPROVAL' : status === 'resolved' ? 'RESOLVED SECTION' : status === 'rejected' ? 'REJECTED' : 'OPEN TICKET';
+    const statusEmoji = status === 'in progress' ? '⚙️' : status === 'pending_approval' ? '⏳' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
 
     const emailSubject = `Complaint ${statusText} - ${complaint.subject}`;
     const emailBody = `Hello ${student.studentName},
@@ -391,7 +391,7 @@ If you have any questions, please contact the hostel administration.
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: status === 'resolved' ? AuditActionTypes.COMPLAINT_RESOLVED : AuditActionTypes.COMPLAINT_UPDATED,
-      description: `${status === 'resolved' ? 'Resolved' : 'Updated'} complaint: ${complaint.subject} (Student: ${student.studentName})`,
+      description: `${status === 'resolved' ? 'Resolved' : status === 'pending_approval' ? 'Requested approval for' : 'Updated'} complaint: ${complaint.subject} (Student: ${student.studentName})`,
       targetType: 'Complaint',
       targetId: complaintId,
       targetName: `${complaint.subject} - ${student.studentName}`,
@@ -613,8 +613,8 @@ const bulkUpdateComplaintStatus = async (req, res) => {
   const { complaintIds, status, adminNotes } = req.body;
 
   try {
-    if (!['pending', 'in progress', 'resolved', 'rejected'].includes(status)) {
-      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', 'resolved', or 'rejected'." });
+    if (!['pending', 'in progress', 'pending_approval', 'resolved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status. Must be 'pending', 'in progress', 'pending_approval', 'resolved', or 'rejected'." });
     }
 
     if (!Array.isArray(complaintIds) || complaintIds.length === 0) {
@@ -644,8 +644,8 @@ const bulkUpdateComplaintStatus = async (req, res) => {
     // Send emails to all affected students
     const emailPromises = complaints.map(async (complaint) => {
       const student = complaint.studentId;
-      const statusText = status === 'in progress' ? 'INPROCESS TICKET' : status === 'resolved' ? 'RESOLVED SECTION' : status === 'rejected' ? 'REJECTED' : 'OPEN TICKET';
-      const statusEmoji = status === 'in progress' ? '⚙️' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
+      const statusText = status === 'in progress' ? 'INPROCESS TICKET' : status === 'pending_approval' ? 'PENDING ADMIN APPROVAL' : status === 'resolved' ? 'RESOLVED SECTION' : status === 'rejected' ? 'REJECTED' : 'OPEN TICKET';
+      const statusEmoji = status === 'in progress' ? '⚙️' : status === 'pending_approval' ? '⏳' : status === 'resolved' ? '✅' : status === 'rejected' ? '❌' : '🟡';
 
       const emailSubject = `Complaint ${statusText} - ${complaint.subject}`;
       const emailBody = `Hello ${student.studentName},
