@@ -1701,25 +1701,25 @@ const issueNotice = async (req, res) => {
       });
     }
 
-    // ---------------- DATE PARSING (FIX) ----------------
+    // ---------------- DATE PARSING (FIXED) ----------------
     let parsedIssueDate;
 
-    // Case 1: ISO format (YYYY-MM-DD or full ISO)
-    if (!isNaN(Date.parse(issueDate))) {
-      parsedIssueDate = new Date(issueDate);
-    }
-    // Case 2: DD-MM-YYYY
-    else if (typeof issueDate === "string" && issueDate.includes("-")) {
-      const [dd, mm, yyyy] = issueDate.split("-");
-      parsedIssueDate = new Date(`${yyyy}-${mm}-${dd}`);
-    }
-
-    // Final safety check
-    if (!parsedIssueDate || isNaN(parsedIssueDate)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid issue date format"
-      });
+    if (typeof issueDate === "string") {
+      // Priority 1: Check if it matches YYYY-MM-DD (standard from modern browsers)
+      if (issueDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        parsedIssueDate = new Date(issueDate);
+      } 
+      // Priority 2: Check if it matches DD-MM-YYYY (traditional regional format)
+      else if (issueDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+        const [dd, mm, yyyy] = issueDate.split("-");
+        parsedIssueDate = new Date(`${yyyy}-${mm}-${dd}`);
+      }
+      // Priority 3: Try standard Date.parse as a fallback
+      else if (!isNaN(Date.parse(issueDate))) {
+        parsedIssueDate = new Date(issueDate);
+      }
+    } else if (issueDate instanceof Date) {
+      parsedIssueDate = issueDate;
     }
 
     // ---------------- CREATE NOTICE ----------------
