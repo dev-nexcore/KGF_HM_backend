@@ -214,6 +214,7 @@ const ensureUploadsDir = () => {
     "uploads/student-documents/",
     "uploads/parent-documents/",
     "uploads/bulk/",
+    "uploads/payment-screenshots/",
   ];
 
   dirs.forEach((dir) => {
@@ -507,4 +508,22 @@ const bulkStorage = multer.diskStorage({
 
 export const uploadBulk = multer({
   storage: bulkStorage,
+});
+
+/* =========================================================
+   PAYMENT SCREENSHOT UPLOAD
+========================================================= */
+const paymentScreenshotStorage = multer.diskStorage({
+  destination: "uploads/payment-screenshots/",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `payment_screenshot_${uniqueSuffix}${ext}`);
+  },
+});
+
+export const uploadPaymentScreenshot = multer({
+  storage: paymentScreenshotStorage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });

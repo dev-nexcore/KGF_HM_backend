@@ -1187,6 +1187,7 @@ const fees = async (req, res) => {
           paidDate: inv.paidDate,
           status: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
           type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          invoiceType: inv.invoiceType,   // raw enum value for frontend logic
           method: inv.paymentMethod || "N/A"
         }))
       }
@@ -1512,6 +1513,60 @@ const getStudentDocument = async (req, res) => {
   }
 };
 
+// Submit offline / QR Code / Cash payment details
+const submitPaymentDetails = async (req, res) => {
+  const { invoiceId, paymentMethod, transactionId, notes } = req.body;
+  const screenshotFile = req.file; // uploaded via multer
+
+  try {
+    if (!invoiceId) {
+      return res.status(400).json({ success: false, message: "Invoice ID is required" });
+    }
+
+    const invoice = await StudentInvoice.findById(invoiceId);
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    invoice.status = 'paid';
+    invoice.paidDate = new Date();
+    invoice.paymentMethod = paymentMethod === 'Cash' ? 'cash' : 'online';
+    invoice.transactionId = transactionId || `TXN-${Date.now()}`;
+
+    // Compose description: include notes and screenshot path
+    const parts = [];
+    if (invoice.description) parts.push(invoice.description);
+    if (notes) parts.push(`Parent Note: ${notes}`);
+    if (screenshotFile) parts.push(`Screenshot: ${screenshotFile.path}`);
+    invoice.description = parts.join(' | ');
+
+    await invoice.save();
+
+    const student = await Student.findById(invoice.studentId);
+    if (student) {
+      const pendingInvoices = await StudentInvoice.countDocuments({
+        studentId: student._id,
+        status: { $in: ['pending', 'overdue'] }
+      });
+      
+      if (pendingInvoices === 0) {
+        student.feeStatus = 'Paid';
+        await student.save();
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Payment details submitted successfully via ${paymentMethod}`,
+      screenshotUploaded: !!screenshotFile
+    });
+
+  } catch (err) {
+    console.error("Submit payment details error:", err);
+    return res.status(500).json({ success: false, message: "Error submitting payment details." });
+  }
+};
+
 export {
   sendLoginOTP,      // NEW: Added for OTP login
   login,             // UPDATED: Now uses OTP instead of password
@@ -1538,6 +1593,7 @@ export {
   createRazorpayOrder,
   verifyRazorpayPayment,
   getStudentDocument, // Added this
+  submitPaymentDetails, // Added for QR Code & Cash payments
 };
 
 
