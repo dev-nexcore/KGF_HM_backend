@@ -16,6 +16,7 @@ import {
   getComplaintHistory,
   applyForLeave,
   getLeaveHistory,
+  editLeave,
   requestRefund,
   getRefundHistory,
   getStudentProfile,
@@ -60,6 +61,7 @@ router.get('/inspectionSchedule', verifyStudentOrParentToken, getNextInspection)
 
 router.post("/leave", verifyStudentOrParentToken, applyForLeave);
 router.get("/leaves", verifyStudentOrParentToken, getLeaveHistory);
+router.put("/leave/:leaveId", verifyStudentOrParentToken, editLeave);
 
 router.get('/feeStatus', verifyStudentOrParentToken, getCurrentFeesStatus);
 

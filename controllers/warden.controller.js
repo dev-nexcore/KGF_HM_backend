@@ -455,7 +455,11 @@ const deleteInspection = async (req, res) => {
 // <--------- Leave Request Management ----------->
 const getAllLeaveRequests = async (req, res) => {
   try {
-    const leaves = await Leave.find().populate('studentId', 'firstName lastName studentId').sort({ appliedAt: -1 });
+    // Show leaves that are pending (awaiting parent) or parent_approved (awaiting warden)
+    const leaves = await Leave.find({ status: { $in: ['pending', 'parent_approved'] } })
+      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber')
+      .select('leaveType startDate endDate reason status appliedAt parentComment parentApprovalDate')
+      .sort({ appliedAt: -1 });
     res.json(leaves);
   } catch (err) {
     res.status(500).json({ message: 'Error' });
@@ -465,13 +469,36 @@ const getAllLeaveRequests = async (req, res) => {
 const updateLeaveStatus = async (req, res) => {
   try {
     const { leaveId } = req.params;
-    const { status } = req.body;
-    const leave = await Leave.findByIdAndUpdate(leaveId, { status }, { new: true }).populate('studentId');
-    if (leave) {
-      await sendEmail({ to: leave.studentId.email, subject: 'Leave Status', text: `Your leave is ${status}` });
+    const { status, wardenComments } = req.body;
+    
+    const leave = await Leave.findById(leaveId).populate('studentId');
+    
+    if (!leave) {
+      return res.status(404).json({ message: 'Leave not found' });
+    }
+    
+    // Only allow updating leaves that are pending or parent_approved
+    if (!['pending', 'parent_approved'].includes(leave.status)) {
+      return res.status(400).json({ message: 'Leave request has already been processed' });
+    }
+    
+    leave.status = status;
+    if (wardenComments) {
+      leave.adminComments = wardenComments; // Using adminComments field for warden comments too
+    }
+    leave.processedAt = new Date();
+    await leave.save();
+    
+    if (leave.studentId && leave.studentId.email) {
+      await sendEmail({ 
+        to: leave.studentId.email, 
+        subject: 'Leave Status Update', 
+        text: `Your leave request has been ${status} by the warden.${wardenComments ? `\n\nComments: ${wardenComments}` : ''}` 
+      });
     }
     res.json({ message: `Leave ${status}`, leave });
   } catch (err) {
+    console.error('Update leave status error:', err);
     res.status(500).json({ message: 'Error' });
   }
 };
@@ -479,7 +506,7 @@ const updateLeaveStatus = async (req, res) => {
 const getLeaveRequestStats = async (req, res) => {
   try {
     const totalRequests = await Leave.countDocuments();
-    const pendingRequests = await Leave.countDocuments({ status: 'pending' });
+    const pendingRequests = await Leave.countDocuments({ status: { $in: ['pending', 'parent_approved'] } }); // Show both as pending for warden
     const approvedRequests = await Leave.countDocuments({ status: 'approved' });
     const rejectedRequests = await Leave.countDocuments({ status: 'rejected' });
     

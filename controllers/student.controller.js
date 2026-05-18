@@ -2377,13 +2377,89 @@ const getLeaveHistory = async (req, res) => {
     }
 
     const leaves = await Leave.find({ studentId: student._id })
-      .select("leaveType startDate endDate reason status appliedAt")
+      .select("leaveType otherLeaveType startDate endDate reason status appliedAt")
       .sort({ appliedAt: -1 });
 
     return res.json({ leaves });
   } catch (err) {
     console.error("Fetch leave history error:", err);
     return res.status(500).json({ message: "Server error while fetching leave history." });
+  }
+};
+
+const editLeave = async (req, res) => {
+  const { leaveId } = req.params;
+  const { leaveType, otherLeaveType, startDate, endDate, reason } = req.body;
+  const studentId = req.studentId;
+
+  try {
+    const student = await Student.findOne({ studentId });
+    if (!student) {
+      return res.status(404).json({ message: "Student not found" });
+    }
+
+    // Find the leave and verify it belongs to this student
+    const leave = await Leave.findById(leaveId);
+    if (!leave) {
+      return res.status(404).json({ message: "Leave not found" });
+    }
+
+    if (leave.studentId.toString() !== student._id.toString()) {
+      return res.status(403).json({ message: "You can only edit your own leaves" });
+    }
+
+    // Update leave details and reset status to pending for parent approval
+    leave.leaveType = leaveType;
+    leave.otherLeaveType = leaveType === 'Others' ? otherLeaveType : '';
+    leave.startDate = startDate;
+    leave.endDate = endDate;
+    leave.reason = reason;
+    leave.status = 'pending'; // Reset to pending when edited
+    leave.appliedAt = Date.now(); // Update applied date
+    leave.parentComment = ''; // Clear previous parent comment
+    leave.adminComments = null; // Clear previous admin comments
+    leave.processedAt = null; // Clear processed date
+
+    await leave.save();
+
+    // Send email notification to parent (non-blocking)
+    try {
+      await transporter.sendMail({
+        from: `"Hostel Management" <${process.env.MAIL_USER}>`,
+        to: student.parentEmail,
+        subject: `Updated Leave Request from ${student.firstName} ${student.lastName}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+            <h2 style="color: #4F8CCF; text-align: center;">Updated Leave Request</h2>
+            <p>Dear Parent,</p>
+            <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: ${student.studentId}) has updated their leave request.</p>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <h3 style="color: #333; margin-top: 0;">Leave Details:</h3>
+              <p><strong>Leave Type:</strong> ${leaveType === 'Others' ? `Other (${otherLeaveType})` : leaveType}</p>
+              <p><strong>Start Date:</strong> ${new Date(startDate).toLocaleDateString()}</p>
+              <p><strong>End Date:</strong> ${new Date(endDate).toLocaleDateString()}</p>
+              <p><strong>Reason:</strong> ${reason}</p>
+            </div>
+            
+            <p>This updated leave request requires your approval again. Please log in to the parent portal to review and approve/reject this request.</p>
+            
+            <p style="margin-top: 30px;">Best regards,</p>
+            <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
+          </div>
+        `
+      });
+    } catch (emailError) {
+      console.error("Email notification failed during leave edit:", emailError.message);
+    }
+
+    return res.json({ 
+      message: "Leave updated successfully. Parent has been notified for re-approval.", 
+      leave 
+    });
+  } catch (err) {
+    console.error("Edit leave error:", err);
+    return res.status(500).json({ message: "Server error while editing leave." });
   }
 };
 
@@ -3158,6 +3234,7 @@ export {
   getComplaintHistory,
   applyForLeave,
   getLeaveHistory,
+  editLeave,
   requestRefund,
   getRefundHistory,
   getStudentProfile,
