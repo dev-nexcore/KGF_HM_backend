@@ -1808,6 +1808,25 @@ const checkInStudent = async (req, res) => {
     student.attendanceLog.push(newCheckIn);
     await student.save();
 
+    // Sync with Attendance collection for Admin dashboard
+    try {
+      await Attendance.create({
+        studentId: student._id,
+        direction: 'IN',
+        timestamp: newCheckIn.checkInDate,
+        deviceName: "Student App",
+        serialNumber: "APP-CHECKIN",
+        verificationType: "Selfie + Location",
+        employeeCode: student.studentId,
+        originalLog: {
+          selfie: selfieURL,
+          location: { lat, lng }
+        }
+      });
+    } catch (syncErr) {
+      console.error("❌ Attendance sync failed:", syncErr);
+    }
+
     const istTime = new Date(newCheckIn.checkInDate).toLocaleString("en-US", {
       timeZone: "Asia/Kolkata",
       hour12: true,
@@ -1863,6 +1882,25 @@ const checkOutStudent = async (req, res) => {
     latestEntry.checkOutSelfie = selfieURL;
     latestEntry.checkOutLocation = { lat, lng };
     await student.save();
+
+    // Sync with Attendance collection for Admin dashboard
+    try {
+      await Attendance.create({
+        studentId: student._id,
+        direction: 'OUT',
+        timestamp: latestEntry.checkOutDate,
+        deviceName: "Student App",
+        serialNumber: "APP-CHECKOUT",
+        verificationType: "Selfie + Location",
+        employeeCode: student.studentId,
+        originalLog: {
+          selfie: selfieURL,
+          location: { lat, lng }
+        }
+      });
+    } catch (syncErr) {
+      console.error("❌ Attendance sync failed:", syncErr);
+    }
 
     const istTime = new Date(latestEntry.checkOutDate).toLocaleString("en-US", {
       timeZone: "Asia/Kolkata",

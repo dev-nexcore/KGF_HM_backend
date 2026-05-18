@@ -1,8 +1,8 @@
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import fs from 'fs';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from "dotenv";
 dotenv.config();
-
 
 export const getDistanceKm = (lat1, lon1, lat2, lon2) => {
   const toRad = (x) => (x * Math.PI) / 180;
@@ -16,29 +16,25 @@ export const getDistanceKm = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const s3 = new S3Client({
-  region: "ap-southeast-1", // ✅ Must match your bucket's region
-  endpoint: "https://s3.ap-southeast-1.wasabisys.com", // ✅ Full regional endpoint
-  forcePathStyle: true, // ✅ Required for Wasabi
-  credentials: {
-    accessKeyId: process.env.WASABI_KEY,
-    secretAccessKey: process.env.WASABI_SECRET,
-  },
-});
-
-
 export const uploadSelfie = async (base64, fileName) => {
-  const buffer = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-  const key = `selfies/${fileName}`;
+  try {
+    // Ensure the uploads/selfies directory exists
+    const uploadDir = path.join(process.cwd(), 'uploads', 'selfies');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
 
-  const command = new PutObjectCommand({
-    Bucket: process.env.WASABI_BUCKET,
-    Key: key,
-    Body: buffer,
-    ContentType: 'image/jpeg',
-    ACL: 'public-read',
-  });
+    const buffer = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
+    const filePath = path.join(uploadDir, fileName);
 
-  await s3.send(command);
-  return `https://${process.env.WASABI_BUCKET}.s3.wasabisys.com/${key}`;
+    fs.writeFileSync(filePath, buffer);
+
+    // Construct the URL
+    // Use BACKEND_URL from .env or fallback to relative path
+    const backendUrl = process.env.BACKEND_URL || '';
+    return `${backendUrl}/uploads/selfies/${fileName}`;
+  } catch (err) {
+    console.error("❌ Local selfie upload failed:", err);
+    throw new Error("Failed to save selfie to server storage");
+  }
 };
