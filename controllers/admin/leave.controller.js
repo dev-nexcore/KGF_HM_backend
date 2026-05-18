@@ -21,9 +21,10 @@ const transporter = nodemailer.createTransport({
 
 const getPendingLeaveRequests = async (req, res) => {
   try {
-    const pendingLeaves = await Leave.find({ status: 'pending' })
-      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber') // Changed from 'studentName' to 'firstName lastName'
-      .select('leaveType startDate endDate reason status appliedAt')
+    // Show leaves that are pending (awaiting parent) or parent_approved (awaiting admin/warden)
+    const pendingLeaves = await Leave.find({ status: { $in: ['pending', 'parent_approved'] } })
+      .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber')
+      .select('leaveType startDate endDate reason status appliedAt parentComment parentApprovalDate')
       .sort({ appliedAt: -1 });
 
     return res.json({
@@ -112,7 +113,8 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(404).json({ message: "Leave request not found." });
     }
 
-    if (leave.status !== 'pending') {
+    // Only allow updating leaves that are pending or parent_approved
+    if (!['pending', 'parent_approved'].includes(leave.status)) {
       return res.status(400).json({ message: "Leave request has already been processed." });
     }
 
@@ -211,8 +213,8 @@ const getLeaveStatistics = async (req, res) => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-    // Get counts
-    const totalPending = await Leave.countDocuments({ status: 'pending' });
+    // Get counts - include both pending and parent_approved in pending count for admin view
+    const totalPending = await Leave.countDocuments({ status: { $in: ['pending', 'parent_approved'] } });
     const totalApproved = await Leave.countDocuments({ status: 'approved' });
     const totalRejected = await Leave.countDocuments({ status: 'rejected' });
     const thisMonthLeaves = await Leave.countDocuments({
@@ -371,10 +373,10 @@ const bulkUpdateLeaveStatus = async (req, res) => {
       return res.status(400).json({ message: "Please provide an array of leave IDs." });
     }
 
-    // Find all pending leaves from the provided IDs
+    // Find all pending or parent_approved leaves from the provided IDs
     const leaves = await Leave.find({
       _id: { $in: leaveIds },
-      status: 'pending'
+      status: { $in: ['pending', 'parent_approved'] }
     }).populate('studentId', 'firstName lastName studentId email');
 
     if (leaves.length === 0) {
@@ -385,7 +387,7 @@ const bulkUpdateLeaveStatus = async (req, res) => {
     const updateResult = await Leave.updateMany(
       {
         _id: { $in: leaves.map(l => l._id) },
-        status: 'pending'
+        status: { $in: ['pending', 'parent_approved'] }
       },
       {
         status,

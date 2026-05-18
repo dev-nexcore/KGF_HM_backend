@@ -1009,8 +1009,8 @@ const updateLeaveStatus = async (req, res) => {
       });
     }
 
-    // Update leave status
-    leave.status = status.toLowerCase();
+    // Update leave status - if parent approves, set to 'parent_approved', if rejects, set to 'rejected'
+    leave.status = status.toLowerCase() === 'approved' ? 'parent_approved' : 'rejected';
     leave.parentComment = parentComment || '';
     leave.parentApprovalDate = new Date();
     await leave.save();
