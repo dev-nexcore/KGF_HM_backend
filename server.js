@@ -10,6 +10,7 @@ import studentRoutes from "./routes/student.routes.js";
 import webhookRoutes from "./routes/webhook.routes.js";
 import staffRoutes from "./routes/staff.routes.js";
 import inquiryRoutes from "./routes/inquiry.routes.js";
+import startFeeReminderCron from "./cron/feeReminders.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -31,6 +32,9 @@ app.use('/public/receipts', express.static(path.join(process.cwd(), 'public/rece
 
 // ----- DB connection -----
 await connectDB();
+
+// ----- Start Cron Jobs -----
+startFeeReminderCron();
 
 // ----- CORS -----
   const corsOptions = {
