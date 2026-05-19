@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { verifyAdminToken } from '../middleware/auth.middleware.js';
 import { Inventory } from '../models/inventory.model.js';
-import { uploadStudentDocuments, uploadParentDocuments } from '../middleware/upload.js';
+import { uploadStudentDocuments, uploadParentDocuments, uploadPaymentScreenshot } from '../middleware/upload.js';
 import { uploadBulk } from "../middleware/upload.js";
 // Import mein add karo:
 import { getStudentDocument } from "../controllers/admin/user.controller.js";
@@ -84,7 +84,8 @@ import {
   getRefunds,
   updateRefundStatus,
   createRazorpayOrder,
-  verifyRazorpayPayment
+  verifyRazorpayPayment,
+  verifyInvoicePaymentOCR
 } from "../controllers/admin/financial.controller.js";
 
 import {
@@ -245,6 +246,7 @@ router.patch('/inspections/:inspectionId/status',verifyAdminToken, updateInspect
 router.post('/invoices/student', generateStudentInvoice);
 router.get('/invoices/student', getStudentInvoices);
 router.put('/invoices/student/:invoiceId/status', updateStudentInvoiceStatus);
+router.post('/invoices/student/:invoiceId/verify-ocr', verifyAdminToken, uploadPaymentScreenshot.single('screenshot'), verifyInvoicePaymentOCR);
 
 // Razorpay Payments
 router.post('/razorpay/create-order', createRazorpayOrder);

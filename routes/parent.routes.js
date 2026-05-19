@@ -1,5 +1,5 @@
 import express from 'express';
-import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile,getStudentProfile, uploadProfileImage, updateProfile, removeProfileImage, createRazorpayOrder, verifyRazorpayPayment, getStudentDocument, submitPaymentDetails } from '../controllers/parent.controller.js';
+import { sendLoginOTP,login, forgotPassword, verifyOtp, resetPassword, dashboard, attendance, leaveManagement, fees, notices,markNoticeAsRead,refreshAccessToken, updateLeaveStatus, getProfile,getStudentProfile, uploadProfileImage, updateProfile, removeProfileImage, createRazorpayOrder, verifyRazorpayPayment, getStudentDocument, submitPaymentDetails, extractUtrFromScreenshot } from '../controllers/parent.controller.js';
 import { authenticateParent,verifyStudentOrParentToken } from '../middleware/auth.middleware.js';
 import {uploadParent, uploadPaymentScreenshot} from '../middleware/upload.js';
 import { requestRefund, getRefundHistory } from '../controllers/parent.controller.js';
@@ -31,6 +31,7 @@ router.post('/refresh-token', refreshAccessToken);
 router.post('/create-razorpay-order', authenticateParent, createRazorpayOrder);
 router.post('/verify-razorpay-payment', authenticateParent, verifyRazorpayPayment);
 router.post('/submit-payment-details', authenticateParent, uploadPaymentScreenshot.single('screenshot'), submitPaymentDetails);
+router.post('/extract-utr', authenticateParent, uploadPaymentScreenshot.single('screenshot'), extractUtrFromScreenshot);
 
 //refund routes
 

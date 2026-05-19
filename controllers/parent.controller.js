@@ -17,6 +17,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import razorpay from '../config/razorpay.config.js';
 import { sendWhatsAppMessage } from "../utils/sendWhatsApp.js";
+import Tesseract from 'tesseract.js';
 
 
 
@@ -1185,7 +1186,7 @@ const fees = async (req, res) => {
           amount: inv.amount,
           dueDate: inv.dueDate,
           paidDate: inv.paidDate,
-          status: inv.status.charAt(0).toUpperCase() + inv.status.slice(1),
+          status: inv.status === 'pending_verification' ? 'Pending Verification' : (inv.status.charAt(0).toUpperCase() + inv.status.slice(1)),
           type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
           invoiceType: inv.invoiceType,   // raw enum value for frontend logic
           method: inv.paymentMethod || "N/A"
@@ -1528,10 +1529,28 @@ const submitPaymentDetails = async (req, res) => {
       return res.status(404).json({ success: false, message: "Invoice not found" });
     }
 
-    invoice.status = 'paid';
-    invoice.paidDate = new Date();
+    // Try OCR fallback if no transactionId was passed but screenshot is uploaded
+    let finalTransactionId = (transactionId || '').trim();
+    if (!finalTransactionId && screenshotFile) {
+      try {
+        console.log("Running fallback OCR in submitPaymentDetails:", screenshotFile.path);
+        const { data: { text } } = await Tesseract.recognize(screenshotFile.path, 'eng');
+        const cleanedText = text.replace(/[\s-]/g, '');
+        const match = cleanedText.match(/\b\d{12}\b/) || cleanedText.match(/\d{12}/);
+        if (match) {
+          finalTransactionId = match[0];
+          console.log("Fallback OCR UTR match:", finalTransactionId);
+        }
+      } catch (ocrErr) {
+        console.error("Fallback OCR failed:", ocrErr);
+      }
+    }
+
+    invoice.status = 'pending_verification';
+    invoice.paidDate = null;
     invoice.paymentMethod = paymentMethod === 'Cash' ? 'cash' : 'online';
-    invoice.transactionId = transactionId || `TXN-${Date.now()}`;
+    invoice.transactionId = finalTransactionId || `TXN-${Date.now()}`;
+    invoice.parentScreenshot = screenshotFile ? screenshotFile.path : null;
 
     // Compose description: include notes and screenshot path
     const parts = [];
@@ -1543,15 +1562,98 @@ const submitPaymentDetails = async (req, res) => {
     await invoice.save();
 
     const student = await Student.findById(invoice.studentId);
-    if (student) {
-      const pendingInvoices = await StudentInvoice.countDocuments({
-        studentId: student._id,
-        status: { $in: ['pending', 'overdue'] }
-      });
-      
-      if (pendingInvoices === 0) {
-        student.feeStatus = 'Paid';
-        await student.save();
+
+    // Send payment verification request to admin
+    if (screenshotFile) {
+      try {
+        const adminEmail = process.env.MAIL_USER;
+        
+        if (adminEmail) {
+          await transporter.sendMail({
+            from: `"Hostel Payment Verification" <${adminEmail}>`,
+            to: adminEmail,
+            subject: `[Verification Required] UPI Payment for Invoice ${invoice.invoiceNumber}`,
+            text: `Dear Admin,
+
+A payment verification request has been received.
+
+Payment Details:
+• Student Name: ${student ? `${student.firstName} ${student.lastName}` : 'N/A'}
+• Student ID: ${student ? student.studentId : 'N/A'}
+• Invoice Number: ${invoice.invoiceNumber}
+• Invoice Type: ${invoice.invoiceType}
+• Amount: ₹${invoice.amount}
+• Submitted Transaction ID / UTR: ${invoice.transactionId}
+• Payment Method: ${paymentMethod}
+• Parent Notes: ${notes || 'None'}
+
+Please find the payment screenshot attached.
+
+– KGF Hostel Management`,
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                <h2 style="color: #3E4B28; text-align: center; border-bottom: 2px solid #3E4B28; padding-bottom: 10px;">Payment Verification Request</h2>
+                
+                <p>Dear Admin,</p>
+                <p>A new payment verification request has been submitted by a parent. Please review the details below and verify with your bank records.</p>
+                
+                <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                  <h3 style="color: #555; margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 5px;">Payment Details</h3>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr>
+                      <td style="padding: 6px 0; color: #666; width: 40%;"><strong>Student Name:</strong></td>
+                      <td style="padding: 6px 0; color: #333;"><strong>${student ? `${student.firstName} ${student.lastName}` : 'N/A'}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Student ID:</strong></td>
+                      <td style="padding: 6px 0; color: #333;">${student ? student.studentId : 'N/A'}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Invoice Number:</strong></td>
+                      <td style="padding: 6px 0; color: #333;">${invoice.invoiceNumber}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Invoice Type:</strong></td>
+                      <td style="padding: 6px 0; color: #333; text-transform: capitalize;">${invoice.invoiceType.replace('_', ' ')}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Amount:</strong></td>
+                      <td style="padding: 6px 0; color: #3E4B28; font-size: 16px; font-weight: bold;">₹${invoice.amount.toLocaleString('en-IN')}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Transaction ID / UTR:</strong></td>
+                      <td style="padding: 6px 0; color: #c2410c; font-family: monospace; font-size: 15px; font-weight: bold;">${invoice.transactionId}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Payment Method:</strong></td>
+                      <td style="padding: 6px 0; color: #333;">${paymentMethod}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #666;"><strong>Parent Notes:</strong></td>
+                      <td style="padding: 6px 0; color: #333; font-style: italic;">${notes || 'None'}</td>
+                    </tr>
+                  </table>
+                </div>
+                
+                <div style="background-color: #fffbeb; padding: 12px; border-radius: 5px; border-left: 4px solid #d97706; margin-top: 15px; font-size: 13px;">
+                  <strong>Note:</strong> The payment screenshot uploaded by the parent is attached to this email.
+                </div>
+                
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
+                <p style="text-align: center; color: #666; font-size: 12px;">– KGF Hostel Management Division</p>
+              </div>
+            `,
+            attachments: [
+              {
+                filename: screenshotFile.originalname || 'payment_screenshot.jpg',
+                path: screenshotFile.path
+              }
+            ]
+          });
+          console.log("Payment verification request email sent to admin successfully.");
+        }
+      } catch (emailErr) {
+        console.error("Failed to send verification request email to admin:", emailErr);
       }
     }
 
@@ -1564,6 +1666,56 @@ const submitPaymentDetails = async (req, res) => {
   } catch (err) {
     console.error("Submit payment details error:", err);
     return res.status(500).json({ success: false, message: "Error submitting payment details." });
+  }
+};
+
+// Extract UPI UTR from payment screenshot using OCR (Tesseract)
+const extractUtrFromScreenshot = async (req, res) => {
+  const screenshotFile = req.file;
+
+  if (!screenshotFile) {
+    return res.status(400).json({ success: false, message: "No screenshot file uploaded" });
+  }
+
+  try {
+    console.log("Running OCR on payment screenshot for UTR and amount extraction:", screenshotFile.path);
+    const { data: { text } } = await Tesseract.recognize(screenshotFile.path, 'eng');
+    console.log("OCR Extracted Text:\n", text);
+
+    // Extract UTR (12-digit number)
+    const cleanedText = text.replace(/[\s-]/g, '');
+    const match = cleanedText.match(/\b\d{12}\b/) || cleanedText.match(/\d{12}/);
+    let utr = null;
+    if (match) {
+      utr = match[0];
+    }
+
+    // Extract potential payment amounts
+    const amounts = [];
+    const amountRegex = /(?:[₹\u20B9]|Rs\.?|INR)?\s*(\d{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+(?:\.\d{2})?)/gi;
+    let amtMatch;
+    while ((amtMatch = amountRegex.exec(text)) !== null) {
+      const numStr = amtMatch[1].replace(/,/g, '');
+      const val = parseFloat(numStr);
+      // Filter out numbers that are too large (like UTR) or too small (dates/days)
+      if (!isNaN(val) && val > 0 && val < 10000000 && val !== 12) {
+        amounts.push(val);
+      }
+    }
+    const uniqueAmounts = [...new Set(amounts)];
+
+    console.log("OCR parsed UTR:", utr);
+    console.log("OCR parsed potential amounts:", uniqueAmounts);
+
+    return res.json({
+      success: true,
+      utr,
+      amounts: uniqueAmounts,
+      message: "OCR processing completed"
+    });
+  } catch (err) {
+    console.error("OCR extraction controller error:", err);
+    return res.status(500).json({ success: false, message: "Error processing OCR on server" });
   }
 };
 
@@ -1594,6 +1746,7 @@ export {
   verifyRazorpayPayment,
   getStudentDocument, // Added this
   submitPaymentDetails, // Added for QR Code & Cash payments
+  extractUtrFromScreenshot, // Added for OCR screenshot parsing
 };
 
 

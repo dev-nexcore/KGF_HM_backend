@@ -2,6 +2,7 @@ import 'dotenv/config';
 import nodemailer from 'nodemailer';
 import { Student } from '../../models/student.model.js';
 import { Warden } from '../../models/warden.model.js';
+import Tesseract from 'tesseract.js';
 import { Staff } from '../../models/staff.model.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
@@ -127,11 +128,15 @@ const getStudentInvoices = async (req, res) => {
         studentName: invoice.studentId ? `${invoice.studentId.firstName} ${invoice.studentId.lastName}` : 'Unknown',
         roomNumber: invoice.studentId?.roomBedNumber ? `${invoice.studentId.roomBedNumber.roomNo}/${invoice.studentId.roomBedNumber.itemName}` : 'N/A',
         amount: invoice.amount,
+        paidAmount: invoice.paidAmount,
         dueDate: invoice.dueDate,
         status: invoice.status,
         invoiceType: invoice.invoiceType,
         paidDate: invoice.paidDate,
-        studentId: invoice.studentId?._id
+        studentId: invoice.studentId?._id,
+        transactionId: invoice.transactionId,
+        parentScreenshot: invoice.parentScreenshot,
+        adminScreenshot: invoice.adminScreenshot
       })),
       pagination: {
         currentPage: parseInt(page),
@@ -974,6 +979,103 @@ const verifyRazorpayPayment = async (req, res) => {
   }
 };
 
+const verifyInvoicePaymentOCR = async (req, res) => {
+  const { invoiceId } = req.params;
+  const screenshotFile = req.file;
+
+  if (!screenshotFile) {
+    return res.status(400).json({ success: false, message: "No verification screenshot uploaded" });
+  }
+
+  try {
+    const invoice = await StudentInvoice.findById(invoiceId).populate('studentId');
+    if (!invoice) {
+      return res.status(404).json({ success: false, message: "Invoice not found" });
+    }
+
+    if (!invoice.transactionId) {
+      return res.status(400).json({ success: false, message: "This invoice does not have a parent submitted Transaction ID / UTR to match against" });
+    }
+
+    console.log("Running OCR on admin verification screenshot:", screenshotFile.path);
+    const { data: { text } } = await Tesseract.recognize(screenshotFile.path, 'eng');
+    console.log("OCR Extracted Text from Admin Screenshot:\n", text);
+
+    // Extract UTR (12-digit number)
+    const cleanedText = text.replace(/[\s-]/g, '');
+    const match = cleanedText.match(/\b\d{12}\b/) || cleanedText.match(/\d{12}/);
+    let adminUtr = null;
+    if (match) {
+      adminUtr = match[0];
+    }
+
+    console.log("Admin parsed UTR:", adminUtr);
+    console.log("Parent submitted UTR:", invoice.transactionId);
+
+    if (!adminUtr) {
+      return res.status(400).json({
+        success: false,
+        message: "Could not detect a 12-digit UTR/Reference number from the uploaded screenshot. Please upload a clear image of the notification message."
+      });
+    }
+
+    // Standardize comparison (remove spaces/dashes if any)
+    const cleanParentUtr = invoice.transactionId.trim();
+    const cleanAdminUtr = adminUtr.trim();
+
+    if (cleanParentUtr !== cleanAdminUtr) {
+      return res.status(400).json({
+        success: false,
+        mismatch: true,
+        parentUtr: cleanParentUtr,
+        adminUtr: cleanAdminUtr,
+        message: `UTR Mismatch! Parent submitted: ${cleanParentUtr}, but Admin message contains: ${cleanAdminUtr}. Verification failed.`
+      });
+    }
+
+    // Match successful! Update invoice details and status to paid
+    invoice.status = 'paid';
+    invoice.paidDate = new Date();
+    invoice.adminScreenshot = screenshotFile.path;
+    invoice.paidAmount = invoice.amount;
+    await invoice.save();
+
+    // Check if student has any other pending invoices
+    const student = await Student.findById(invoice.studentId);
+    if (student) {
+      const pendingInvoices = await StudentInvoice.countDocuments({
+        studentId: student._id,
+        status: { $in: ['pending', 'overdue', 'pending_verification'] }
+      });
+      if (pendingInvoices === 0) {
+        student.feeStatus = 'Paid';
+        await student.save();
+      }
+    }
+
+    // Audit Log
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: 'Invoice Payment Verified (OCR)',
+      description: `Verified payment for invoice ${invoice.invoiceNumber}. UTR ${cleanParentUtr} matched successfully.`,
+      targetType: 'Invoice',
+      targetId: invoice.invoiceNumber,
+      targetName: student ? `${student.firstName} ${student.lastName}` : 'N/A'
+    });
+
+    return res.json({
+      success: true,
+      message: "Payment successfully verified and approved! UTR numbers matched.",
+      utr: cleanParentUtr
+    });
+
+  } catch (err) {
+    console.error("verifyInvoicePaymentOCR error:", err);
+    return res.status(500).json({ success: false, message: "Error verifying payment OCR." });
+  }
+};
+
 export {
   generateStudentInvoice,
   getStudentInvoices,
@@ -989,5 +1091,6 @@ export {
   getRefunds,
   updateRefundStatus,
   createRazorpayOrder,
-  verifyRazorpayPayment
+  verifyRazorpayPayment,
+  verifyInvoicePaymentOCR
 }

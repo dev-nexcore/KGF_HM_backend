@@ -25,7 +25,7 @@ const studentInvoiceSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['paid', 'pending', 'overdue'],
+    enum: ['paid', 'pending', 'overdue', 'pending_verification'],
     default: 'pending'
   },
   paymentMethod: {
@@ -52,6 +52,14 @@ const studentInvoiceSchema = new mongoose.Schema({
   },
   // Payment gateway fields
   transactionId: {
+    type: String,
+    default: null
+  },
+  parentScreenshot: {
+    type: String,
+    default: null
+  },
+  adminScreenshot: {
     type: String,
     default: null
   },
