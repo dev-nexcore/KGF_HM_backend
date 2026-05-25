@@ -88,8 +88,8 @@ const getAllComplaints = async (req, res) => {
           displayType: displayType,
           status: complaint.status,
           filedDate: complaint.filedDate,
-          hasAttachments: (complaint.attachments?.length || 0) > 0,
-          attachmentCount: (complaint.attachments?.length || 0),
+          hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+          attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
           attachments: complaint.attachments || [],
           targetStatus: complaint.targetStatus,
           raisedBy: complaint.studentId ? {
@@ -157,8 +157,8 @@ const getOpenComplaints = async (req, res) => {
           displayType: displayType,
           status: complaint.status,
           filedDate: complaint.filedDate,
-          hasAttachments: (complaint.attachments?.length || 0) > 0,
-          attachmentCount: (complaint.attachments?.length || 0),
+          hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+          attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
           attachments: complaint.attachments || [],
           targetStatus: complaint.targetStatus,
           raisedBy: complaint.studentId ? {
@@ -214,8 +214,8 @@ const getInProgressComplaints = async (req, res) => {
           displayType: displayType,
           status: complaint.status,
           filedDate: complaint.filedDate,
-          hasAttachments: (complaint.attachments?.length || 0) > 0,
-          attachmentCount: (complaint.attachments?.length || 0),
+          hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+          attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
           attachments: complaint.attachments || [],
           targetStatus: complaint.targetStatus,
           raisedBy: complaint.studentId ? {
@@ -275,8 +275,8 @@ const getResolvedComplaints = async (req, res) => {
         status: complaint.status,
         filedDate: complaint.filedDate,
         resolvedDate: complaint.updatedAt,
-        hasAttachments: (complaint.attachments?.length || 0) > 0,
-        attachmentCount: (complaint.attachments?.length || 0),
+        hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+        attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
         raisedBy: complaint.studentId ? {
           name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
           studentId: complaint.studentId.studentId,
@@ -324,8 +324,8 @@ const getRejectedComplaints = async (req, res) => {
         filedDate: complaint.filedDate,
         rejectedDate: complaint.updatedAt,
         adminNotes: complaint.adminNotes,
-        hasAttachments: (complaint.attachments?.length || 0) > 0,
-        attachmentCount: (complaint.attachments?.length || 0),
+        hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+        attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
         raisedBy: complaint.studentId ? {
           name: `${complaint.studentId.firstName} ${complaint.studentId.lastName}`,
           studentId: complaint.studentId.studentId,
@@ -391,7 +391,7 @@ Complaint Details:
 • Type: ${complaint.complaintType}
 • Status: ${statusText}
 • Filed Date: ${new Date(complaint.filedDate).toLocaleDateString("en-IN")}
-${(complaint.attachments?.length || 0) > 0 ? `• Attachments: ${(complaint.attachments?.length || 0)} file(s)` : ''}
+${(complaint.attachments ? complaint.attachments.length : 0) > 0 ? `• Attachments: ${(complaint.attachments ? complaint.attachments.length : 0)} file(s)` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
 ${status === 'resolved' ?
@@ -430,8 +430,8 @@ If you have any questions, please contact the hostel administration.
         complaintType: complaint.complaintType,
         subject: complaint.subject,
         adminNotes,
-        hasAttachments: (complaint.attachments?.length || 0) > 0,
-        attachmentCount: (complaint.attachments?.length || 0)
+        hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+        attachmentCount: (complaint.attachments ? complaint.attachments.length : 0)
       }
     });
 
@@ -457,8 +457,8 @@ If you have any questions, please contact the hostel administration.
         status: complaint.status,
         filedDate: complaint.filedDate,
         updatedAt: new Date(),
-        hasAttachments: (complaint.attachments?.length || 0) > 0,
-        attachmentCount: (complaint.attachments?.length || 0),
+        hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+        attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
         student: {
           studentName: `${student.firstName} ${student.lastName}`,
           studentId: student.studentId
@@ -526,8 +526,8 @@ const getComplaintStatistics = async (req, res) => {
         complaintType: complaint.complaintType,
         status: complaint.status,
         filedDate: complaint.filedDate,
-        hasAttachments: (complaint.attachments?.length || 0) > 0,
-        attachmentCount: (complaint.attachments?.length || 0),
+        hasAttachments: (complaint.attachments ? complaint.attachments.length : 0) > 0,
+        attachmentCount: (complaint.attachments ? complaint.attachments.length : 0),
         raisedBy: complaint.studentId ? `${complaint.studentId.firstName} ${complaint.studentId.lastName}` : 'Unknown'
       }))
     });
@@ -690,7 +690,7 @@ Complaint Details:
 • Subject: ${complaint.subject}
 • Type: ${complaint.complaintType}
 • Status: ${statusText}
-${complaint.attachments && (complaint.attachments?.length || 0) > 0 ? `• Attachments: ${(complaint.attachments?.length || 0)} file(s)` : ''}
+${complaint.attachments && (complaint.attachments ? complaint.attachments.length : 0) > 0 ? `• Attachments: ${(complaint.attachments ? complaint.attachments.length : 0)} file(s)` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
 Filed Date: ${new Date(complaint.filedDate).toLocaleDateString("en-IN")}
