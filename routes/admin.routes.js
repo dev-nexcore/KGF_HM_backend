@@ -35,6 +35,7 @@ import {
 
   deleteParent,
   updateParent,
+  registerStaff,
 } from "../controllers/admin/user.controller.js";
 
 import {
@@ -174,6 +175,7 @@ router.post(
   registerParent
 );
 router.post('/register-warden', registerWarden);
+router.post('/register-staff', registerStaff);
 router.get('/students', getAllStudents);
 router.get('/parents', getAllParents);
 router.get('/wardens', getAllWardens);

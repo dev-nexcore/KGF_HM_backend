@@ -862,14 +862,69 @@ const attendance = async (req, res) => {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Process attendance log
-    const attendanceLog = student.attendanceLog || [];
+    // Fetch from global Attendance collection
+    let logs = await Attendance.find({ studentId: student._id }).sort({ timestamp: 1 });
+    
+    // Deduplicate logs within the same minute
+    logs = logs.filter((log, index, self) => 
+      index === self.findIndex(l => 
+        l.direction === log.direction && 
+        new Date(l.timestamp).getMinutes() === new Date(log.timestamp).getMinutes() &&
+        new Date(l.timestamp).getHours() === new Date(log.timestamp).getHours() &&
+        new Date(l.timestamp).getDate() === new Date(log.timestamp).getDate() &&
+        new Date(l.timestamp).getMonth() === new Date(log.timestamp).getMonth()
+      )
+    );
+    
     const presentDates = new Set();
+    const processedLog = [];
+    let currentRecord = null;
 
-    attendanceLog.forEach(entry => {
-      const entryDate = new Date(entry.checkInDate);
-      presentDates.add(entryDate.toDateString());
+    logs.forEach(log => {
+      if (log.direction === 'IN') {
+        presentDates.add(new Date(log.timestamp).toDateString());
+        
+        if (currentRecord) processedLog.push(currentRecord);
+        currentRecord = {
+          date: log.timestamp,
+          checkIn: log.timestamp,
+          checkOut: null,
+          status: "Present"
+        };
+      } else if (log.direction === 'OUT') {
+        if (currentRecord) {
+          currentRecord.checkOut = log.timestamp;
+          processedLog.push(currentRecord);
+          currentRecord = null;
+        } else {
+          // OUT without IN
+          processedLog.push({
+            date: log.timestamp,
+            checkIn: log.timestamp,
+            checkOut: log.timestamp,
+            status: "Present"
+          });
+        }
+      }
     });
+    
+    if (currentRecord) {
+      processedLog.push(currentRecord);
+    }
+
+    // Fallback to legacy log if no records
+    if (presentDates.size === 0 && student.attendanceLog) {
+      student.attendanceLog.forEach(entry => {
+        const entryDate = new Date(entry.checkInDate);
+        presentDates.add(entryDate.toDateString());
+        processedLog.push({
+          date: entry.checkInDate,
+          checkIn: entry.checkInDate,
+          checkOut: entry.checkOutDate,
+          status: "Present"
+        });
+      });
+    }
 
     const presentDays = presentDates.size;
     const absentDays = Math.max(0, totalSchoolDays - presentDays);
@@ -907,12 +962,7 @@ const attendance = async (req, res) => {
         isPresentToday,
         lastAbsence: lastAbsenceDate || "No recent absences"
       },
-      attendanceLog: attendanceLog.map(entry => ({
-        date: entry.checkInDate,
-        checkIn: entry.checkInDate,
-        checkOut: entry.checkOutDate,
-        status: "Present"
-      }))
+      attendanceLog: processedLog
     };
 
     return res.json(attendanceData);

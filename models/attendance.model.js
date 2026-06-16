@@ -13,6 +13,12 @@ const attendanceSchema = new mongoose.Schema({
     required: false,
     index: true
   },
+  wardenId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Warden',
+    required: false,
+    index: true
+  },
   direction: {
     type: String,
     enum: ['IN', 'OUT'],

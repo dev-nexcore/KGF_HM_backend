@@ -796,8 +796,47 @@
 //   }
 // };
 
-// // const getAllStudents = async (req, res) => {
-// //   try {
+// const getAllStudents = async (req, res) => {
+//   try {
+
+const registerStaff = async (req, res) => {
+  const { firstName, lastName, email, contactNumber, designation, shiftStart, shiftEnd, salary } = req.body;
+
+  try {
+    const existingStaff = await Staff.findOne({ email });
+    if (existingStaff) {
+      return res.status(409).json({ success: false, message: "Staff already exists with this email." });
+    }
+
+    const count = await Staff.countDocuments();
+    const paddedNumber = String(count + 1).padStart(3, '0');
+    const staffId = `STF${paddedNumber}`;
+    const password = `${firstName.toLowerCase().replace(/\s+/g, '')}${staffId}`;
+
+    const newStaff = new Staff({
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      designation,
+      shiftStart,
+      shiftEnd,
+      salary,
+      staffId,
+      password
+    });
+
+    await newStaff.save();
+
+    return res.json({
+      success: true,
+      message: "Staff registered successfully."
+    });
+  } catch (error) {
+    console.error("Error registering staff directly by admin:", error);
+    return res.status(500).json({ success: false, message: "Error registering staff." });
+  }
+};
 // //     // Get all students with selected fields
 // //     const students = await Student.find({})
 // //       .select('-password') // Exclude password from response
@@ -2034,10 +2073,12 @@ const updateParent = async (req, res) => {
   }
 };
 
+
 export {
   registerStudent,
   registerParent,
   registerWarden,
+  registerStaff,
   getAllWardens,
   getAllStudents,
   getAllParents,

@@ -524,10 +524,9 @@ const getStaffSalaries = async (req, res) => {
       message: "Staff salaries fetched successfully",
       salaries: salaries.map(salary => ({
         _id: salary._id,
-        staffName: salary.staffId ? `${salary.staffId.firstName} ${salary.staffId.lastName}` : "Deleted Staff",
-        role: 'Warden', // You can add role field to Warden model later
         staffName: salary.staffId ? `${salary.staffId.firstName} ${salary.staffId.lastName}` : 'Unknown Staff',
         role: salary.staffId?.designation || 'Warden', 
+        employeeId: salary.staffId?.wardenId || salary.staffId?.staffId || 'N/A',
         month: salary.month,
         year: salary.year,
         basicSalary: salary.basicSalary,

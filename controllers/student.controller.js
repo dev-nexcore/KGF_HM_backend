@@ -2747,24 +2747,37 @@ const getStudentProfile = async (req, res) => {
     const barcodeId = inventoryData.barcodeId || "N/A";
     const floor = inventoryData.floor || "N/A";
 
-    const lastLog = student.attendanceLog.at(-1);
+    // Use Attendance collection as primary source of truth since biometric/admin logs go there
+    const latestAttendance = await Attendance.findOne({ studentId: student._id }).sort({ timestamp: -1 });
+    
+    // Define lastLog here so it's accessible globally in this function
+    const lastLog = student.attendanceLog && student.attendanceLog.length > 0 ? student.attendanceLog.at(-1) : null;
 
     let checkStatus = "Pending Check-in";
     let checkTime = "--:--:--";
 
-    if (lastLog) {
-      if (!lastLog.checkOutDate) {
-        checkStatus = "Checked In";
-        checkTime = new Date(lastLog.checkInDate).toLocaleTimeString("en-IN", {
-          timeZone: "Asia/Kolkata",
-          hour12: false,
-        });
-      } else {
-        checkStatus = "Checked Out";
-        checkTime = new Date(lastLog.checkOutDate).toLocaleTimeString("en-IN", {
-          timeZone: "Asia/Kolkata",
-          hour12: false,
-        });
+    if (latestAttendance) {
+      checkStatus = latestAttendance.direction === 'IN' ? "Checked In" : "Checked Out";
+      checkTime = new Date(latestAttendance.timestamp).toLocaleTimeString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour12: false,
+      });
+    } else {
+      // Fallback to legacy attendanceLog
+      if (lastLog) {
+        if (!lastLog.checkOutDate) {
+          checkStatus = "Checked In";
+          checkTime = new Date(lastLog.checkInDate).toLocaleTimeString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          });
+        } else {
+          checkStatus = "Checked Out";
+          checkTime = new Date(lastLog.checkOutDate).toLocaleTimeString("en-IN", {
+            timeZone: "Asia/Kolkata",
+            hour12: false,
+          });
+        }
       }
     }
 
@@ -2966,8 +2979,68 @@ const getAttendanceLog = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Return the attendance log
-    const attendanceLog = student.attendanceLog || [];
+    // Fetch from global Attendance collection
+    let logs = await Attendance.find({ studentId: student._id }).sort({ timestamp: 1 });
+    
+    // Deduplicate logs within the same minute
+    logs = logs.filter((log, index, self) => 
+      index === self.findIndex(l => 
+        l.direction === log.direction && 
+        new Date(l.timestamp).getMinutes() === new Date(log.timestamp).getMinutes() &&
+        new Date(l.timestamp).getHours() === new Date(log.timestamp).getHours() &&
+        new Date(l.timestamp).getDate() === new Date(log.timestamp).getDate() &&
+        new Date(l.timestamp).getMonth() === new Date(log.timestamp).getMonth()
+      )
+    );
+    
+    let attendanceLog = [];
+    let currentRecord = null;
+
+    logs.forEach(log => {
+      if (log.direction === 'IN') {
+        if (currentRecord) attendanceLog.push(currentRecord);
+        currentRecord = {
+          checkInDate: log.timestamp,
+          checkInLocation: log.originalLog?.location || { lat: 0, lng: 0 },
+          checkInDevice: log.deviceName || 'Biometric Device',
+          checkInVerification: log.verificationType || 'Biometric',
+          checkOutDate: null,
+          checkOutLocation: null,
+          checkOutDevice: null,
+          checkOutVerification: null
+        };
+      } else if (log.direction === 'OUT') {
+        if (currentRecord) {
+          currentRecord.checkOutDate = log.timestamp;
+          currentRecord.checkOutLocation = log.originalLog?.location || { lat: 0, lng: 0 };
+          currentRecord.checkOutDevice = log.deviceName || 'Biometric Device';
+          currentRecord.checkOutVerification = log.verificationType || 'Biometric';
+          attendanceLog.push(currentRecord);
+          currentRecord = null;
+        } else {
+          // If we see OUT without an IN
+          attendanceLog.push({
+            checkInDate: log.timestamp, 
+            checkInLocation: log.originalLog?.location || { lat: 0, lng: 0 },
+            checkInDevice: log.deviceName || 'Biometric Device',
+            checkInVerification: log.verificationType || 'Biometric',
+            checkOutDate: log.timestamp,
+            checkOutLocation: log.originalLog?.location || { lat: 0, lng: 0 },
+            checkOutDevice: log.deviceName || 'Biometric Device',
+            checkOutVerification: log.verificationType || 'Biometric'
+          });
+        }
+      }
+    });
+    
+    if (currentRecord) {
+      attendanceLog.push(currentRecord);
+    }
+    
+    // Fallback to legacy if no new records
+    if (attendanceLog.length === 0) {
+      attendanceLog = student.attendanceLog || [];
+    }
 
     return res.json({
       studentId: student.studentId,

@@ -16,7 +16,6 @@ const router = express.Router();
 // Register
 router.post(
   "/register-staff",
-  verifyWardenToken,
   registerStaff
 );
 

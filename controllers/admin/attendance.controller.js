@@ -1,6 +1,7 @@
 import Attendance from "../../models/attendance.model.js";
 import { Student } from "../../models/student.model.js";
 import { Staff } from "../../models/staff.model.js";
+import { Warden } from "../../models/warden.model.js";
 import { syncAttendanceLogs } from "../../utils/esslService.js";
 
 // Get attendance logs with filters
@@ -45,10 +46,12 @@ export const getAttendanceLogs = async (req, res) => {
             // Find student or staff to get the ObjectId
             const student = await Student.findOne({ studentId: log.employeeCode });
             const staff = await Staff.findOne({ staffId: log.employeeCode });
+            const warden = await Warden.findOne({ wardenId: log.employeeCode });
             
             const newAttendance = new Attendance({
               studentId: student ? student._id : null,
               staffId: staff ? staff._id : null,
+              wardenId: warden ? warden._id : null,
               employeeCode: log.employeeCode,
               direction: log.direction,
               timestamp: log.timestamp,
@@ -82,6 +85,10 @@ export const getAttendanceLogs = async (req, res) => {
         path: 'staffId',
         select: 'firstName lastName staffId designation'
       })
+      .populate({
+        path: 'wardenId',
+        select: 'firstName lastName wardenId designation'
+      })
       .sort({ timestamp: -1 });
 
     // Filter results if search is provided
@@ -91,9 +98,10 @@ export const getAttendanceLogs = async (req, res) => {
       filteredLogs = logs.filter(log => {
         const student = log.studentId;
         const staff = log.staffId;
-        const name = student ? `${student.firstName} ${student.lastName}` : (staff ? `${staff.firstName} ${staff.lastName}` : "");
-        const id = student?.studentId || staff?.staffId || "";
-        const room = student?.roomBedNumber?.roomNo || staff?.designation || "";
+        const warden = log.wardenId;
+        const name = student ? `${student.firstName} ${student.lastName}` : (staff ? `${staff.firstName} ${staff.lastName}` : (warden ? `${warden.firstName} ${warden.lastName}` : ""));
+        const id = student?.studentId || staff?.staffId || warden?.wardenId || "";
+        const room = student?.roomBedNumber?.roomNo || staff?.designation || warden?.designation || "";
         return name.toLowerCase().includes(s) || id.toLowerCase().includes(s) || room.toLowerCase().includes(s);
       });
     }
@@ -144,6 +152,13 @@ export const getAttendanceStats = async (req, res) => {
       staffId: { $in: staffIds }
     });
 
+    const wardens = await Warden.find({}, '_id');
+    const wardenIds = wardens.map(w => w._id);
+    const presentWardens = await Attendance.distinct('wardenId', {
+      timestamp: { $gte: startOfDay, $lte: endOfDay },
+      wardenId: { $in: wardenIds }
+    });
+
     res.status(200).json({
       success: true,
       stats: {
@@ -158,9 +173,9 @@ export const getAttendanceStats = async (req, res) => {
           absentToday: workerIds.length - presentWorkers.length
         },
         staffStats: {
-          totalStaff: staffIds.length,
-          presentToday: presentStaff.length,
-          absentToday: staffIds.length - presentStaff.length
+          totalStaff: staffIds.length + wardenIds.length,
+          presentToday: presentStaff.length + presentWardens.length,
+          absentToday: (staffIds.length + wardenIds.length) - (presentStaff.length + presentWardens.length)
         }
       }
     });
