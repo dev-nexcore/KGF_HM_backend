@@ -20,6 +20,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { Complaint } from '../models/complaint.model.js';
 import { AuditLog } from '../models/auditLog.model.js';
+import { addEmployeeToBiometric } from "../utils/esslService.js";
 import { createAuditLog, AuditActionTypes } from '../utils/auditLogger.js';
 import { StudentInvoice } from '../models/studentInvoice.model.js';
 import { ManagementInvoice } from '../models/managementInvoice.model.js';
@@ -2803,6 +2804,19 @@ const approveRequisition = async (req, res) => {
     requisition.approvedByName = `${admin.firstName || ''} ${admin.lastName || ''}`.trim() || admin.email;
     requisition.approvedAt = new Date();
     await requisition.save();
+
+    // Add Staff/Worker to Biometric Device
+    if (requisitionType === 'worker' || requisitionType === 'staff') {
+      try {
+        await addEmployeeToBiometric({
+          staffId: entityId,
+          firstName: data.firstName,
+          lastName: data.lastName
+        });
+      } catch (bioError) {
+        console.error("Biometric addition failed:", bioError);
+      }
+    }
     
     // Send credentials email
     try {

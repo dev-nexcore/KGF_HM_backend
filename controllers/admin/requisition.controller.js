@@ -10,6 +10,7 @@ import { Inventory } from "../../models/inventory.model.js";
 import mongoose from 'mongoose';
 import sendEmail from '../../utils/sendEmail.js';
 import { sendBulkNotifications } from '../../utils/sendNotification.js';
+import { addEmployeeToBiometric } from '../../utils/esslService.js';
 
 // Get all requisitions with optional filters
 export const getAllRequisitions = async (req, res) => {
@@ -217,6 +218,17 @@ export const updateRequisitionStatus = async (req, res) => {
         });
         await createdEntity.save();
         entityId = nextId;
+
+        // Sync Staff to Biometric Device
+        try {
+          await addEmployeeToBiometric({
+            staffId: entityId,
+            firstName: data.firstName,
+            lastName: data.lastName
+          });
+        } catch (bioError) {
+          console.error("Biometric addition failed for staff:", bioError);
+        }
 
       } else if (requisitionType === 'parent') {
         const student = await Student.findOne({ studentId: data.studentId });

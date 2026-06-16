@@ -1,10 +1,3 @@
-// import 'dotenv/config';
-// import nodemailer from 'nodemailer';
-// import { Student } from '../../models/student.model.js';
-// import { Parent } from '../../models/parent.model.js';
-// import { Warden } from '../../models/warden.model.js';
-// import { Inventory } from '../../models/inventory.model.js';
-// import fs from 'fs';
 
 // import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
@@ -1199,6 +1192,7 @@ import path from 'path'; // ✅ ADD THIS — getStudentDocument ke liye zaroori 
 
 import sendEmail from '../../utils/sendEmail.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
+import { addEmployeeToBiometric } from '../../utils/esslService.js';
 
 // Removed local transporter - using centralized sendEmail utility instead
 
@@ -1325,6 +1319,13 @@ const registerStudent = async (req, res) => {
 
     if (roomBedNumber && roomBedNumber !== "Not Assigned") {
       await Inventory.findByIdAndUpdate(roomBedNumber, { status: "In Use" }, { new: true });
+    }
+
+    // Call eSSL Biometric Integration
+    try {
+      await addEmployeeToBiometric({ studentId, firstName, lastName });
+    } catch (biometricErr) {
+      console.error("Biometric registration error:", biometricErr);
     }
 
     // Send email using centralized utility
@@ -1533,6 +1534,13 @@ const registerWarden = async (req, res) => {
 
     const newWarden = new Warden({ firstName, lastName, email, wardenId: newWardenId, contactNumber, salary, password: wardenPassword });
     await newWarden.save();
+
+    // Add Warden to Biometric Device
+    await addEmployeeToBiometric({
+      wardenId: newWardenId,
+      firstName,
+      lastName
+    });
 
     // Send email using centralized utility
     const emailResult = await sendEmail({
