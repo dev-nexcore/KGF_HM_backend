@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { Complaint } from '../models/complaint.model.js';
 import { AuditLog } from '../models/auditLog.model.js';
-import { addEmployeeToBiometric } from "../utils/esslService.js";
+import { emitAddEmployee } from "../socketManager.js";
 import { createAuditLog, AuditActionTypes } from '../utils/auditLogger.js';
 import { StudentInvoice } from '../models/studentInvoice.model.js';
 import { ManagementInvoice } from '../models/managementInvoice.model.js';
@@ -2808,7 +2808,7 @@ const approveRequisition = async (req, res) => {
     // Add Staff/Worker to Biometric Device
     if (requisitionType === 'worker' || requisitionType === 'staff') {
       try {
-        await addEmployeeToBiometric({
+        emitAddEmployee({
           staffId: entityId,
           firstName: data.firstName,
           lastName: data.lastName

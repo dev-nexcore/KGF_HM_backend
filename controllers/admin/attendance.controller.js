@@ -2,7 +2,7 @@ import Attendance from "../../models/attendance.model.js";
 import { Student } from "../../models/student.model.js";
 import { Staff } from "../../models/staff.model.js";
 import { Warden } from "../../models/warden.model.js";
-import { syncAttendanceLogs } from "../../utils/esslService.js";
+import { getAgentStatus } from "../../socketManager.js";
 
 // Get attendance logs with filters
 export const getAttendanceLogs = async (req, res) => {
@@ -23,54 +23,7 @@ export const getAttendanceLogs = async (req, res) => {
       };
     }
 
-    // --- eSSL Biometric Sync ---
-    try {
-      const today = new Date();
-      const past30Days = new Date(today);
-      past30Days.setDate(today.getDate() - 30);
-      
-      const syncStart = past30Days.toISOString().split('T')[0];
-      const syncEnd = today.toISOString().split('T')[0];
-      
-      const syncResult = await syncAttendanceLogs(syncStart, syncEnd);
-      if (syncResult.success && syncResult.logs && syncResult.logs.length > 0) {
-        console.log(`Biometric logs fetched: ${syncResult.logs.length}`);
-        for (const log of syncResult.logs) {
-          // Check for existing log to prevent duplicates
-          const existingLog = await Attendance.findOne({
-            employeeCode: log.employeeCode,
-            timestamp: log.timestamp
-          });
-
-          if (!existingLog) {
-            // Find student or staff to get the ObjectId
-            const student = await Student.findOne({ studentId: log.employeeCode });
-            const staff = await Staff.findOne({ staffId: log.employeeCode });
-            const warden = await Warden.findOne({ wardenId: log.employeeCode });
-            
-            const newAttendance = new Attendance({
-              studentId: student ? student._id : null,
-              staffId: staff ? staff._id : null,
-              wardenId: warden ? warden._id : null,
-              employeeCode: log.employeeCode,
-              direction: log.direction,
-              timestamp: log.timestamp,
-              deviceName: log.deviceName,
-              serialNumber: log.serialNumber,
-              verificationType: log.verificationType,
-              originalLog: { syncedFrom: "eSSL Biometric", ...log }
-            });
-            await newAttendance.save();
-            console.log("Saved new attendance log for:", log.employeeCode);
-          } else {
-            console.log("Skipped saving: Log already exists for", log.employeeCode);
-          }
-        }
-      }
-    } catch (syncError) {
-      console.error("Error syncing attendance from biometric:", syncError);
-    }
-    // --- End eSSL Biometric Sync ---
+    // Logs are now synced via Biometric Agent WebSocket (SYNC_LOGS event)
 
     const logs = await Attendance.find(query)
       .populate({
@@ -216,6 +169,22 @@ export const markManualAttendance = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error marking manual attendance",
+      error: error.message
+    });
+  }
+};
+
+// Check Biometric Device Status
+export const getBiometricDeviceStatus = async (req, res) => {
+  try {
+    // If we're using the Local Agent with WebSocket, return the agent's status
+    const agentStatus = getAgentStatus();
+    res.status(200).json(agentStatus);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      status: 'Offline',
+      message: "Error checking biometric status",
       error: error.message
     });
   }

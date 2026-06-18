@@ -1231,7 +1231,7 @@ import path from 'path'; // ✅ ADD THIS — getStudentDocument ke liye zaroori 
 
 import sendEmail from '../../utils/sendEmail.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
-import { addEmployeeToBiometric } from '../../utils/esslService.js';
+import { emitAddEmployee } from '../../socketManager.js';
 
 // Removed local transporter - using centralized sendEmail utility instead
 
@@ -1362,7 +1362,7 @@ const registerStudent = async (req, res) => {
 
     // Call eSSL Biometric Integration
     try {
-      await addEmployeeToBiometric({ studentId, firstName, lastName });
+      emitAddEmployee({ studentId, firstName, lastName });
     } catch (biometricErr) {
       console.error("Biometric registration error:", biometricErr);
     }
@@ -1575,8 +1575,8 @@ const registerWarden = async (req, res) => {
     await newWarden.save();
 
     // Add Warden to Biometric Device
-    await addEmployeeToBiometric({
-      wardenId: newWardenId,
+    emitAddEmployee({
+      staffId: newWardenId,
       firstName,
       lastName
     });

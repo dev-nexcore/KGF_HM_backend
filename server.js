@@ -14,6 +14,8 @@ import startFeeReminderCron from "./cron/feeReminders.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
+import http from "http";
+import { initSocket } from "./socketManager.js";
 
 dotenv.config();
 
@@ -104,7 +106,12 @@ app.use((req, res) => {
 
 // ----- Start server -----
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+// Initialize Socket.io
+initSocket(server);
+
+server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📍 Health check: http://localhost:${PORT}`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);

@@ -10,7 +10,7 @@ import { Inventory } from "../../models/inventory.model.js";
 import mongoose from 'mongoose';
 import sendEmail from '../../utils/sendEmail.js';
 import { sendBulkNotifications } from '../../utils/sendNotification.js';
-import { addEmployeeToBiometric } from '../../utils/esslService.js';
+import { emitAddEmployee } from '../../socketManager.js';
 
 // Get all requisitions with optional filters
 export const getAllRequisitions = async (req, res) => {
@@ -221,8 +221,8 @@ export const updateRequisitionStatus = async (req, res) => {
 
         // Sync Staff to Biometric Device
         try {
-          await addEmployeeToBiometric({
-            staffId: entityId,
+          emitAddEmployee({
+            staffId: nextId,
             firstName: data.firstName,
             lastName: data.lastName
           });

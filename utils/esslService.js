@@ -163,3 +163,29 @@ export const syncAttendanceLogs = async (fromDate, toDate) => {
     return { success: false, error: error.message, logs: [] };
   }
 };
+
+/**
+ * Checks the status of the eSSL biometric device.
+ * 
+ * @returns {Promise<Object>} Response object indicating if device is online
+ */
+export const checkBiometricStatus = async () => {
+  const baseUrl = process.env.ESSL_BASE_URL;
+  if (!baseUrl) {
+    return { success: false, status: 'Not Configured', message: "eSSL configuration missing" };
+  }
+
+  try {
+    // A simple GET request to check if the device responds.
+    // Even if it returns a 401 or 405, it means the device is reachable and online.
+    await axios.get(baseUrl, { timeout: 5000 });
+    return { success: true, status: 'Online' };
+  } catch (error) {
+    if (error.response) {
+      // Received a response from the device (e.g. 401 Unauthorized), so it's online
+      return { success: true, status: 'Online' };
+    }
+    // Network error, timeout, or connection refused
+    return { success: false, status: 'Offline', error: error.message };
+  }
+};

@@ -145,7 +145,8 @@ import {
 import {
   getAttendanceLogs,
   getAttendanceStats,
-  markManualAttendance
+  markManualAttendance,
+  getBiometricDeviceStatus
 } from "../controllers/admin/attendance.controller.js";
 
 import {
@@ -291,6 +292,7 @@ router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus
 router.get('/attendance/logs', getAttendanceLogs);
 router.get('/attendance/stats', getAttendanceStats);
 router.post('/attendance/manual', verifyAdminToken, markManualAttendance);
+router.get('/attendance/biometric-status', getBiometricDeviceStatus);
 
 // ====================== HOLIDAY ROUTES ======================
 router.get('/holidays', getHolidays);
