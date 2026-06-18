@@ -365,7 +365,11 @@ const generateStaffSalary = async (req, res) => {
     paymentMethod = 'bank_transfer',
     bankName = '',
     accountNumber = '',
-    ifscCode = ''
+    ifscCode = '',
+    totalDays,
+    attendanceDays,
+    paidHolidays,
+    unpaidLeaves
   } = req.body;
 
   try {
@@ -427,6 +431,10 @@ const generateStaffSalary = async (req, res) => {
       bankName,
       accountNumber,
       ifscCode,
+      totalDays: Number(totalDays) || 0,
+      attendanceDays: Number(attendanceDays) || 0,
+      paidHolidays: Number(paidHolidays) || 0,
+      unpaidLeaves: Number(unpaidLeaves) || 0,
       processedBy: req.admin?._id
     });
 

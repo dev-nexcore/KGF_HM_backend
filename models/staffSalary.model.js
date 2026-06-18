@@ -44,6 +44,22 @@ const staffSalarySchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  totalDays: {
+    type: Number,
+    default: 0
+  },
+  attendanceDays: {
+    type: Number,
+    default: 0
+  },
+  paidHolidays: {
+    type: Number,
+    default: 0
+  },
+  unpaidLeaves: {
+    type: Number,
+    default: 0
+  },
   netSalary: {
     type: Number,
     required: true

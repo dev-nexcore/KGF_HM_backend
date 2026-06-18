@@ -148,6 +148,11 @@ import {
   markManualAttendance
 } from "../controllers/admin/attendance.controller.js";
 
+import {
+  getHolidays,
+  addHoliday,
+  deleteHoliday
+} from "../controllers/admin/holiday.controller.js";
 
 const router = Router();
 
@@ -286,6 +291,11 @@ router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus
 router.get('/attendance/logs', getAttendanceLogs);
 router.get('/attendance/stats', getAttendanceStats);
 router.post('/attendance/manual', verifyAdminToken, markManualAttendance);
+
+// ====================== HOLIDAY ROUTES ======================
+router.get('/holidays', getHolidays);
+router.post('/holidays', verifyAdminToken, addHoliday);
+router.delete('/holidays/:id', verifyAdminToken, deleteHoliday);
 
 
 // ====================== CONTENT MANAGEMENT ROUTES ======================

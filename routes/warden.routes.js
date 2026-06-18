@@ -54,6 +54,7 @@ import {
 } from "../controllers/warden.controller.js";
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
+import { getAttendanceLogs, getAttendanceStats } from "../controllers/admin/attendance.controller.js";
 
 const router = express.Router();
 
@@ -71,7 +72,9 @@ router.post('/attendance/punch-out', verifyWardenToken,  punchOutWarden);
 router.get('/attendance/log', verifyWardenToken, getAttendanceLog);
 router.get('/punch-status', verifyWardenToken, checkPunchStatus);
 
-
+// Warden Attendance Monitoring (For Students & Staff)
+router.get('/attendance-monitoring/logs', verifyWardenToken, getAttendanceLogs);
+router.get('/attendance-monitoring/stats', verifyWardenToken, getAttendanceStats);
 
 // warden Dashboard
 router.get("/warden-dashboard", verifyWardenToken, getWardenDashboardStats);
