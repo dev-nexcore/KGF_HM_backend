@@ -18,6 +18,7 @@ import QRcode from 'qrcode';
 import {nanoid} from 'nanoid';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import Attendance from '../models/attendance.model.js';
 import { Complaint } from '../models/complaint.model.js';
 import { AuditLog } from '../models/auditLog.model.js';
 import { emitAddEmployee } from "../socketManager.js";
@@ -1224,21 +1225,19 @@ const getTodaysCheckInOutStatus = async (req, res) => {
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const checkInsCount = await Student.aggregate([
-      { $unwind: "$attendanceLog" },
-      { $match: { "attendanceLog.checkInDate": { $gte: startOfDay, $lte: endOfDay } } },
-      { $count: "count" }
-    ]);
+    const checkIns = await Attendance.countDocuments({
+      direction: 'IN',
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    });
 
-    const checkOutsCount = await Student.aggregate([
-      { $unwind: "$attendanceLog" },
-      { $match: { "attendanceLog.checkOutDate": { $gte: startOfDay, $lte: endOfDay } } },
-      { $count: "count" }
-    ]);
+    const checkOuts = await Attendance.countDocuments({
+      direction: 'OUT',
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    });
 
     return res.json({
-      checkIns: checkInsCount[0]?.count || 0,
-      checkOuts: checkOutsCount[0]?.count || 0
+      checkIns,
+      checkOuts
     });
   } catch (err) {
     console.error("Error fetching today's check-in/check-out data:", err);

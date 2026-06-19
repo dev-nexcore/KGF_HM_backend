@@ -2,7 +2,7 @@ import Attendance from "../../models/attendance.model.js";
 import { Student } from "../../models/student.model.js";
 import { Staff } from "../../models/staff.model.js";
 import { Warden } from "../../models/warden.model.js";
-import { getAgentStatus } from "../../socketManager.js";
+import { getAgentStatus, emitNewAttendance } from "../../socketManager.js";
 
 // Get attendance logs with filters
 export const getAttendanceLogs = async (req, res) => {
@@ -159,6 +159,9 @@ export const markManualAttendance = async (req, res) => {
     });
 
     await newEntry.save();
+
+    // Broadcast to real-time clients
+    emitNewAttendance(1);
 
     res.status(201).json({
       success: true,

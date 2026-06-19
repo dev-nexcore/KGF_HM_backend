@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { Student } from '../models/student.model.js';
 import Attendance from '../models/attendance.model.js';
 import { sendNotification } from '../utils/sendNotification.js';
+import { emitNewAttendance } from '../socketManager.js';
 
 const decryptData = (encryptedData) => {
   try {
@@ -63,6 +64,9 @@ export const handleAttendanceWebhook = async (req, res) => {
     });
 
     await attendance.save();
+
+    // Emit real-time socket event to the dashboard
+    emitNewAttendance(1);
 
     // Send notification to parent
     if (student.parentId) {

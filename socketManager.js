@@ -5,6 +5,7 @@ import { Staff } from "./models/staff.model.js";
 import { Warden } from "./models/warden.model.js";
 
 let io;
+let adminNamespace;
 let agentStatus = 'Offline';
 let lastHeartbeat = null;
 let agentSocketId = null;
@@ -18,6 +19,14 @@ export const initSocket = (server) => {
       origin: "*", // Or specific origins
       methods: ["GET", "POST"]
     }
+  });
+
+  adminNamespace = io.of('/admin');
+  adminNamespace.on('connection', (socket) => {
+    console.log(`📡 Admin connected: ${socket.id}`);
+    socket.on('disconnect', () => {
+      console.log(`🔌 Admin disconnected: ${socket.id}`);
+    });
   });
 
   io.use((socket, next) => {
@@ -44,36 +53,67 @@ export const initSocket = (server) => {
 
     socket.on('SYNC_LOGS', async (logs, callback) => {
       try {
-        let insertedCount = 0;
-        for (const log of logs) {
-          const timestampDate = new Date(log.timestamp);
-          const existingLog = await Attendance.findOne({
-            employeeCode: log.employeeCode,
-            timestamp: timestampDate
-          });
-
-          if (!existingLog) {
-            const student = await Student.findOne({ studentId: log.employeeCode });
-            const staff = await Staff.findOne({ staffId: log.employeeCode });
-            const warden = await Warden.findOne({ wardenId: log.employeeCode });
-
-            const newAttendance = new Attendance({
-              studentId: student ? student._id : null,
-              staffId: staff ? staff._id : null,
-              wardenId: warden ? warden._id : null,
-              employeeCode: log.employeeCode,
-              direction: log.direction,
-              timestamp: timestampDate,
-              deviceName: log.deviceName || "Biometric Device",
-              serialNumber: log.serialNumber || "N/A",
-              verificationType: log.verificationType || "Biometric",
-              originalLog: { syncedFrom: "Agent", ...log }
-            });
-            await newAttendance.save();
-            insertedCount++;
-          }
+        if (!logs || logs.length === 0) {
+          if (callback) callback({ success: true, inserted: 0 });
+          return;
         }
+
+        // Extract unique employee codes
+        const employeeCodes = [...new Set(logs.map(l => l.employeeCode))];
+        
+        // Parallel fetch for associated records
+        const [students, staffs, wardens] = await Promise.all([
+          Student.find({ studentId: { $in: employeeCodes } }, '_id studentId').lean(),
+          Staff.find({ staffId: { $in: employeeCodes } }, '_id staffId').lean(),
+          Warden.find({ wardenId: { $in: employeeCodes } }, '_id wardenId').lean()
+        ]);
+
+        const studentMap = new Map(students.map(s => [s.studentId, s._id]));
+        const staffMap = new Map(staffs.map(s => [s.staffId, s._id]));
+        const wardenMap = new Map(wardens.map(w => [w.wardenId, w._id]));
+
+        // Build bulk write operations
+        const bulkOps = logs.map(log => {
+          const timestampDate = new Date(log.timestamp);
+          const studentId = studentMap.get(log.employeeCode) || null;
+          const staffId = staffMap.get(log.employeeCode) || null;
+          const wardenId = wardenMap.get(log.employeeCode) || null;
+
+          return {
+            updateOne: {
+              filter: { 
+                employeeCode: log.employeeCode, 
+                timestamp: timestampDate 
+              },
+              update: {
+                $setOnInsert: {
+                  studentId: studentId,
+                  staffId: staffId,
+                  wardenId: wardenId,
+                  employeeCode: log.employeeCode,
+                  direction: log.direction,
+                  timestamp: timestampDate,
+                  deviceName: log.deviceName || "Biometric Device",
+                  serialNumber: log.serialNumber || "N/A",
+                  verificationType: log.verificationType || "Biometric",
+                  originalLog: { syncedFrom: "Agent", ...log }
+                }
+              },
+              upsert: true
+            }
+          };
+        });
+
+        const result = await Attendance.bulkWrite(bulkOps);
+        const insertedCount = result.upsertedCount;
+        
         console.log(`✅ Synced ${insertedCount} new logs from Local Agent.`);
+        
+        // Broadcast to admin dashboard
+        if (insertedCount > 0) {
+          adminNamespace.emit('NEW_ATTENDANCE', { count: insertedCount });
+        }
+        
         if (callback) callback({ success: true, inserted: insertedCount });
       } catch (error) {
         console.error("Error processing agent logs:", error);
@@ -107,6 +147,14 @@ export const getAgentStatus = () => {
 export const emitAddEmployee = (employeeData) => {
   if (io && agentStatus === 'Online') {
     io.emit('ADD_EMPLOYEE', employeeData);
+    return true;
+  }
+  return false;
+};
+
+export const emitNewAttendance = (count = 1) => {
+  if (adminNamespace) {
+    adminNamespace.emit('NEW_ATTENDANCE', { count });
     return true;
   }
   return false;

@@ -6,6 +6,7 @@ import { StaffSalary } from '../../models/staffSalary.model.js';
 import { Warden } from '../../models/warden.model.js';
 import { Leave } from '../../models/leave.model.js';
 import { Complaint } from '../../models/complaint.model.js';
+import Attendance from '../../models/attendance.model.js';
 
 
 const getTotalRevenue = async (req, res) => {
@@ -92,25 +93,14 @@ const getTodaysCheckInOutStatus = async (req, res) => {
     const startOfDay = new Date(today.setHours(0, 0, 0, 0));
     const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
-    // Get all students
-    const students = await Student.find({}, { attendanceLog: 1 });
+    const checkIns = await Attendance.countDocuments({
+      direction: 'IN',
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
+    });
 
-    let checkIns = 0;
-    let checkOuts = 0;
-
-    students.forEach((student) => {
-      student.attendanceLog?.forEach((entry) => {
-        const checkIn = entry.checkInDate ? new Date(entry.checkInDate) : null;
-        const checkOut = entry.checkOutDate ? new Date(entry.checkOutDate) : null;
-
-        if (checkIn && checkIn >= startOfDay && checkIn <= endOfDay) {
-          checkIns++;
-        }
-
-        if (checkOut && checkOut >= startOfDay && checkOut <= endOfDay) {
-          checkOuts++;
-        }
-      });
+    const checkOuts = await Attendance.countDocuments({
+      direction: 'OUT',
+      timestamp: { $gte: startOfDay, $lte: endOfDay }
     });
 
     return res.json({
