@@ -1268,25 +1268,19 @@ const registerStudent = async (req, res) => {
     }
 
     const generateStudentId = async () => {
-      const count = await Student.countDocuments();
-      const paddedNumber = String(count + 1).padStart(3, "0");
       const prefix = (isWorking === 'true' || isWorking === true) ? "STUW" : "STU";
-      const studentId = `${prefix}-${paddedNumber}`;
-      const existingStudent = await Student.findOne({ studentId });
-
-      if (existingStudent) {
-        const allStudents = await Student.find({}, { studentId: 1 }).sort({ studentId: -1 });
-        let maxNumber = 0;
-        allStudents.forEach((student) => {
-          const match = student.studentId.match(/(?:STU|STUW)-(\d+)/);
-          if (match) {
-            const number = parseInt(match[1]);
-            if (number > maxNumber) maxNumber = number;
-          }
-        });
-        return `${prefix}-${String(maxNumber + 1).padStart(3, "0")}`;
-      }
-      return studentId;
+      const studentsWithPrefix = await Student.find({ studentId: new RegExp(`^${prefix}-`) }, { studentId: 1 });
+      
+      let maxNumber = 0;
+      studentsWithPrefix.forEach((student) => {
+        const match = student.studentId.match(new RegExp(`^${prefix}-(\\d+)`));
+        if (match) {
+          const number = parseInt(match[1], 10);
+          if (number > maxNumber) maxNumber = number;
+        }
+      });
+      
+      return `${prefix}-${String(maxNumber + 1).padStart(3, "0")}`;
     };
 
     const studentId = await generateStudentId();
@@ -1343,7 +1337,7 @@ const registerStudent = async (req, res) => {
       roomBedNumber,
       email,
       admissionDate,
-      feeStatus,
+      feeStatus: feeStatus || "Unpaid",
       emergencyContactName,
       emergencyContactNumber,
       password,
@@ -1707,7 +1701,8 @@ const getStudentsWithoutParents = async (req, res) => {
     const studentIdsWithParents = studentsWithParents.map(parent => parent.studentId);
 
     const studentsWithoutParents = await Student.find({
-      studentId: { $nin: studentIdsWithParents }
+      studentId: { $nin: studentIdsWithParents },
+      isWorking: { $ne: true }
     }).select('studentId firstName lastName');
 
     res.status(200).json({ success: true, students: studentsWithoutParents });
@@ -1792,7 +1787,7 @@ const updateStudent = async (req, res) => {
     // ✅ Build update object with text fields
     const updateData = {
       firstName, lastName, contactNumber, email, roomBedNumber,
-      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus, hasCollegeId, isWorking, roomType, relation
+      emergencyContactNumber, admissionDate, emergencyContactName, feeStatus: feeStatus || "Unpaid", hasCollegeId, isWorking, roomType, relation
     };
 
     // ✅ Add document updates only if new files uploaded

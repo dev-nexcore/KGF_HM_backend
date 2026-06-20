@@ -7,6 +7,7 @@ import { Warden } from '../../models/warden.model.js';
 import { Leave } from '../../models/leave.model.js';
 import { Complaint } from '../../models/complaint.model.js';
 import Attendance from '../../models/attendance.model.js';
+import { Parent } from '../../models/parent.model.js';
 
 
 const getTotalRevenue = async (req, res) => {
@@ -138,7 +139,9 @@ const getBedOccupancyStatus = async (req, res) => {
 };
 const getQuickStats = async (req, res) => {
   try {
-    const totalStudents = await Student.countDocuments();
+    const totalStudents = await Student.countDocuments({ isWorking: { $ne: true } });
+    const totalWorkers = await Student.countDocuments({ isWorking: true });
+    const totalParents = await Parent.countDocuments();
 
     const totalRooms = await Inventory.countDocuments({
       itemName: { $regex: /^Room/i }
@@ -153,6 +156,8 @@ const getQuickStats = async (req, res) => {
 
     return res.json({
       totalStudents,
+      totalWorkers,
+      totalParents,
       totalRooms,
       activeStaff,
       pendingTasks: pendingLeaves + pendingComplaints,

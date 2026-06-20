@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'path';
 import { Admin } from '../../models/admin.model.js';
 import { Otp } from '../../models/otp.model.js';
 import jwt from 'jsonwebtoken';
@@ -154,14 +155,46 @@ const sendLoginOTP = async (req, res) => {
     try {
       await sendEmail({
         to: admin.email,
-        subject: 'Admin Login OTP',
-        text: `Hello Admin,
+        subject: 'KGF Boys Hostel - Admin Login OTP',
+        useKGFLayout: true,
+        html: `
+              <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Hostel Admin Access</p>
+              <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Welcome, Admin</h2>
+              
+              <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+                A request to log in to the <strong>KGF Boys Hostel</strong> admin panel was received. Use the credentials below to proceed with your login.
+              </p>
 
-Your OTP for admin panel login is: ${otp}
+              <!-- Credentials Box -->
+              <div style="border: 1px solid #e2e8f0; border-left: 4px solid #00a651; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+                <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Login Credentials</p>
+                
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Email</td>
+                    <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; word-break: break-all;"><a href="mailto:${admin.email}" style="color: #0066cc; text-decoration: none;">${admin.email}</a></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%;">Temporary OTP</td>
+                    <td style="padding: 15px 0 0; font-size: 22px; font-weight: 700; color: #0066cc; text-align: right; letter-spacing: 2px; width: 60%;">${otp}</td>
+                  </tr>
+                </table>
+              </div>
 
-This OTP is valid for 5 minutes.
+              <!-- Action Required Box -->
+              <div style="background-color: #e6f6ec; border: 1px solid #b3e3c5; border-radius: 6px; padding: 16px; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 13px; color: #007a3c; line-height: 1.5;">
+                  <strong>Action required:</strong> This is a temporary OTP required for login. It is valid for exactly <strong>5 minutes</strong>. Please enter it in the admin portal to continue.
+                </p>
+              </div>
 
-– Hostel Management System`
+              <!-- Security Reminder Box -->
+              <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 16px;">
+                <p style="margin: 0; font-size: 13px; color: #92400e; line-height: 1.5;">
+                  <strong>Security reminder:</strong> Keep your credentials confidential. If you did not expect this login attempt, please secure your account immediately.
+                </p>
+              </div>
+        `
       });
     } catch (mailError) {
       console.error("Email sending error:", mailError);

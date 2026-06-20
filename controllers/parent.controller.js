@@ -89,15 +89,8 @@ const sendLoginOTP = async (req, res) => {
     await sendEmail({
       to: parent.email,
       subject: 'Your Parent Login OTP',
-      text: `Hello ${parent.firstName},
-
-Your OTP for parent panel login is: ${otp}
-
-This OTP is valid for 5 minutes only.
-
-If you didn't request this OTP, please ignore this email.
-
-– Hostel Admin`
+      useKGFLayout: true,
+      text: `Hello ${parent.firstName},\n\nYour OTP for parent panel login is: <strong>${otp}</strong>\n\nThis OTP is valid for 5 minutes only.\n\nIf you didn't request this OTP, please ignore this email.\n\n– Hostel Admin`
     });
 
     // 📱 Send OTP via WhatsApp
@@ -344,7 +337,8 @@ const forgotPassword = async (req, res) => {
     await sendEmail({
       to: email,
       subject: "Parent Password Reset OTP",
-      text: `Dear ${parent.firstName} ${parent.lastName},\n\nYour OTP for password reset is ${otp}. It expires in 10 minutes.\n\n– Hostel Admin`,
+      useKGFLayout: true,
+      text: `Dear ${parent.firstName} ${parent.lastName},\n\nYour OTP for password reset is <strong>${otp}</strong>. It expires in 10 minutes.\n\n– Hostel Admin`,
     });
 
     return res.json({ message: "OTP sent" });

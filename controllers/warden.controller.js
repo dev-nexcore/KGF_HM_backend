@@ -787,7 +787,10 @@ const getAllInterns = async (req, res) => {
 const getStudentsWithoutParents = async (req, res) => {
   try {
     const parents = await Parent.find().select('studentId');
-    const students = await Student.find({ studentId: { $nin: parents.map(p => p.studentId) } });
+    const students = await Student.find({ 
+      studentId: { $nin: parents.map(p => p.studentId) },
+      isWorking: { $ne: true }
+    });
     res.status(200).json({ success: true, students });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
