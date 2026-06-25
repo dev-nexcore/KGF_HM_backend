@@ -29,8 +29,12 @@ const leaveSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'parent_approved', 'approved', 'rejected'],
+    enum: ['pending', 'parent_approved', 'parent_rejected', 'warden_approved', 'warden_rejected', 'approved', 'rejected'],
     default: 'pending',
+  },
+  wardenComments: {
+    type: String,
+    default: null,
   },
   adminComments: {
     type: String,

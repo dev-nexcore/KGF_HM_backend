@@ -53,13 +53,67 @@ const sendLoginOTP = async (req, res) => {
     if (warden.contactNumber) {
       await sendWhatsAppMessage(warden.contactNumber, `Hello ${warden.firstName},\n\nYour OTP for warden panel login is: *${otp}*\n\nValid for 5 minutes.\n\n– Hostel Management System`);
     }
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: warden.email,
-      subject: 'Warden Login OTP',
-      text: `Hello ${warden.firstName} ${warden.lastName},\n\nYour OTP for warden panel login is: ${otp}\n\nThis OTP is valid for 5 minutes only.\n\n– Hostel Admin`
+    
+    // 📧 Send OTP via Email
+    try {
+      await sendEmail({
+        to: warden.email,
+        subject: 'KGF Boys Hostel - Warden Login OTP',
+        useKGFLayout: true,
+        html: `
+              <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Hostel Warden Access</p>
+              <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Welcome, ${warden.firstName}</h2>
+              
+              <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+                A request to log in to the <strong>KGF Boys Hostel</strong> warden portal was received. Use the credentials below to proceed with your login.
+              </p>
+
+              <!-- Credentials Box -->
+              <div style="border: 1px solid #e2e8f0; border-left: 4px solid #00a651; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+                <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Login Credentials</p>
+                
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Email</td>
+                    <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; word-break: break-all;"><a href="mailto:${warden.email}" style="color: #0066cc; text-decoration: none;">${warden.email}</a></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%;">Temporary OTP</td>
+                    <td style="padding: 15px 0 0; font-size: 22px; font-weight: 700; color: #0066cc; text-align: right; letter-spacing: 2px; width: 60%;">${otp}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Action Required Box -->
+              <div style="background-color: #e6f6ec; border: 1px solid #b3e3c5; border-radius: 6px; padding: 16px; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 13px; color: #007a3c; line-height: 1.5;">
+                  <strong>Action required:</strong> This is a temporary OTP required for login. It is valid for exactly <strong>5 minutes</strong>. Please enter it in the warden portal to continue.
+                </p>
+              </div>
+
+              <!-- Security Reminder Box -->
+              <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 16px;">
+                <p style="margin: 0; font-size: 13px; color: #92400e; line-height: 1.5;">
+                  <strong>Security reminder:</strong> Keep your credentials confidential. If you did not expect this login attempt, please secure your account immediately.
+                </p>
+              </div>
+        `
+      });
+    } catch (mailError) {
+      console.error("Email sending error:", mailError);
+    }
+    
+    // Create masked email (e.g. jo***@gmail.com)
+    const [name, domain] = warden.email.split('@');
+    const maskedEmail = name.length > 2 
+      ? name.substring(0, 2) + '*'.repeat(name.length - 2) + '@' + domain
+      : name + '@' + domain;
+
+    return res.json({ 
+      message: 'OTP sent successfully', 
+      contactNumber: warden.contactNumber ? warden.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3') : null,
+      email: maskedEmail
     });
-    return res.json({ message: 'OTP sent successfully', contactNumber: warden.contactNumber.replace(/(\d{2})(\d+)(\d{4})/, '$1****$3') });
   } catch (err) {
     console.error("Error sending OTP:", err);
     return res.status(500).json({ message: "Error sending OTP" });
@@ -67,11 +121,31 @@ const sendLoginOTP = async (req, res) => {
 };
 
 const login = async (req, res) => {
-  const { wardenId } = req.body;
-  if (!wardenId) return res.status(400).json({ message: "Warden ID is required" });
+  const { wardenId, otp } = req.body;
+  if (!wardenId || !otp) return res.status(400).json({ message: "Warden ID and OTP are required" });
   try {
     const warden = await Warden.findOne({ wardenId });
     if (!warden) return res.status(401).json({ message: "Invalid Warden ID" });
+
+    // Check OTP
+    const otpRecord = await Otp.findOne({
+      email: warden.email,
+      code: otp,
+      purpose: 'warden_login'
+    });
+
+    if (!otpRecord) {
+      return res.status(401).json({ message: "Invalid OTP" });
+    }
+
+    if (new Date() > otpRecord.expires) {
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(401).json({ message: "OTP has expired. Please request a new OTP." });
+    }
+
+    // OTP is valid
+    await Otp.deleteOne({ _id: otpRecord._id });
+
     const token = jwt.sign({ id: warden._id, wardenId: warden.wardenId, role: "warden" }, process.env.JWT_SECRET, { expiresIn: "1d" });
     return res.status(200).json({
       message: "Login successful",
@@ -458,7 +532,7 @@ const getAllLeaveRequests = async (req, res) => {
     // Show leaves that are pending (awaiting parent) or parent_approved (awaiting warden)
     const leaves = await Leave.find({ status: { $in: ['pending', 'parent_approved'] } })
       .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber')
-      .select('leaveType startDate endDate reason status appliedAt parentComment parentApprovalDate')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt parentComment parentApprovalDate')
       .sort({ appliedAt: -1 });
     res.json(leaves);
   } catch (err) {
@@ -482,18 +556,64 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(400).json({ message: 'Leave request has already been processed' });
     }
     
-    leave.status = status;
+    // Translate frontend 'approved'/'rejected' to 'warden_approved'/'warden_rejected'
+    const newStatus = status === 'approved' ? 'warden_approved' : (status === 'rejected' ? 'warden_rejected' : status);
+    leave.status = newStatus;
+
     if (wardenComments) {
-      leave.adminComments = wardenComments; // Using adminComments field for warden comments too
+      leave.wardenComments = wardenComments;
     }
+    
     leave.processedAt = new Date();
     await leave.save();
     
     if (leave.studentId && leave.studentId.email) {
+      const formattedStartDate = new Date(leave.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      const formattedEndDate = new Date(leave.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      
       await sendEmail({ 
         to: leave.studentId.email, 
-        subject: 'Leave Status Update', 
-        text: `Your leave request has been ${status} by the warden.${wardenComments ? `\n\nComments: ${wardenComments}` : ''}` 
+        subject: 'KGF Boys Hostel - Leave Status Update', 
+        useKGFLayout: true,
+        html: `
+          <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Leave Application Status</p>
+          <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Update from Warden</h2>
+          
+          <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+            Dear <strong>${leave.studentId.firstName}</strong>,<br/>
+            Your leave application for <strong>${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</strong> has been reviewed by the warden (<strong style="color: ${status === 'approved' ? '#16a34a' : '#dc2626'}">${status.toUpperCase()}</strong>) and is now pending final approval by the Hostel Admin.
+          </p>
+
+          <div style="border: 1px solid #e2e8f0; border-left: 4px solid ${status === 'approved' ? '#16a34a' : '#dc2626'}; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+            <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Application Details</p>
+            
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Leave Type</td>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Start Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedStartDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">End Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedEndDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Warden Status</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: ${status === 'approved' ? '#16a34a' : '#dc2626'}; text-transform: capitalize;">${status} (Pending Admin)</td>
+              </tr>
+              ${wardenComments ? `
+              <tr>
+                <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%; vertical-align: top;">Warden Comments</td>
+                <td style="padding: 15px 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${wardenComments}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+          <p style="margin: 0; font-size: 15px; color: #475569;">You can view the full details in your student portal.</p>
+        `
       });
     }
     res.json({ message: `Leave ${status}`, leave });
@@ -507,8 +627,8 @@ const getLeaveRequestStats = async (req, res) => {
   try {
     const totalRequests = await Leave.countDocuments();
     const pendingRequests = await Leave.countDocuments({ status: { $in: ['pending', 'parent_approved'] } }); // Show both as pending for warden
-    const approvedRequests = await Leave.countDocuments({ status: 'approved' });
-    const rejectedRequests = await Leave.countDocuments({ status: 'rejected' });
+    const approvedRequests = await Leave.countDocuments({ status: { $in: ['approved', 'warden_approved'] } });
+    const rejectedRequests = await Leave.countDocuments({ status: { $in: ['rejected', 'warden_rejected'] } });
     
     res.json({ 
       totalRequests, 

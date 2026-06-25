@@ -1416,19 +1416,53 @@ const generateRefreshToken = async student => {
     );
 
     // Email
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: student.email,
-      subject: "Your Student Login OTP",
-      text: `Hello ${student.firstName},
+    try {
+      await sendEmail({
+        to: student.email,
+        subject: 'KGF Boys Hostel - Student Login OTP',
+        useKGFLayout: true,
+        html: `
+              <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Hostel Student Access</p>
+              <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Welcome, ${student.firstName}</h2>
+              
+              <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+                A request to log in to the <strong>KGF Boys Hostel</strong> student portal was received. Use the credentials below to proceed with your login.
+              </p>
 
-Your OTP for student login is: ${otp}.
-It is valid for 5 minutes only.
+              <!-- Credentials Box -->
+              <div style="border: 1px solid #e2e8f0; border-left: 4px solid #00a651; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+                <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Login Credentials</p>
+                
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Email</td>
+                    <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; word-break: break-all;"><a href="mailto:${student.email}" style="color: #0066cc; text-decoration: none;">${student.email}</a></td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%;">Temporary OTP</td>
+                    <td style="padding: 15px 0 0; font-size: 22px; font-weight: 700; color: #0066cc; text-align: right; letter-spacing: 2px; width: 60%;">${otp}</td>
+                  </tr>
+                </table>
+              </div>
 
-If you didn't request this OTP, please ignore this email.
+              <!-- Action Required Box -->
+              <div style="background-color: #e6f6ec; border: 1px solid #b3e3c5; border-radius: 6px; padding: 16px; margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 13px; color: #007a3c; line-height: 1.5;">
+                  <strong>Action required:</strong> This is a temporary OTP required for login. It is valid for exactly <strong>5 minutes</strong>. Please enter it in the student portal to continue.
+                </p>
+              </div>
 
-– Hostel Admin`,
-    });
+              <!-- Security Reminder Box -->
+              <div style="background-color: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 16px;">
+                <p style="margin: 0; font-size: 13px; color: #92400e; line-height: 1.5;">
+                  <strong>Security reminder:</strong> Keep your credentials confidential. If you did not expect this login attempt, please secure your account immediately.
+                </p>
+              </div>
+        `
+      });
+    } catch (mailError) {
+      console.error("Email sending error:", mailError);
+    }
 
     // WhatsApp
     if (student.contactNumber) {
@@ -1453,68 +1487,29 @@ If you didn't request this OTP, please ignore this email.
 
 
 
-//  const login = async (req, res) => {
-//   const { studentId, otp } = req.body;
+ const login = async (req, res) => {
+  const { studentId, otp } = req.body;
 
-//   if (!studentId || !otp) return res.status(400).json({ message: "Student ID and OTP are required" });
-
-//   try {
-//     const student = await Student.findOne({ studentId });
-//     if (!student) return res.status(401).json({ message: "Invalid Student ID" });
-
-//     const otpRecord = await Otp.findOne({ email: student.email, code: otp, purpose: "login" });
-//     if (!otpRecord) return res.status(401).json({ message: "Invalid OTP" });
-//     if (new Date() > otpRecord.expires) {
-//       await Otp.deleteOne({ _id: otpRecord._id });
-//       return res.status(401).json({ message: "OTP expired. Request a new one." });
-//     }
-
-//     await Otp.deleteOne({ _id: otpRecord._id });
-
-//     const token = generateToken(student);
-//     const refreshToken = await generateRefreshToken(student);
-
-//     return res.json({
-//       message: "Login successful",
-//       token,
-//       refreshToken,
-//       student: {
-//         _id: student._id,
-//         studentId: student.studentId,
-//         email: student.email,
-//         firstName: student.firstName,
-//         lastName: student.lastName,
-//         contactNumber: student.contactNumber,
-//       },
-//     });
-//   } catch (err) {
-//     console.error("Student login error:", err);
-//     return res.status(500).json({ message: "Server error during login" });
-//   }
-// };
-
-// -------------------- FORGOT PASSWORD --------------------
- 
-const login = async (req, res) => {
-  const { studentId } = req.body;
-
-  if (!studentId) {
-    return res.status(400).json({ message: "Student ID is required" });
-  }
+  if (!studentId || !otp) return res.status(400).json({ message: "Student ID and OTP are required" });
 
   try {
-    // Find student
     const student = await Student.findOne({ studentId });
-    if (!student) {
-      return res.status(401).json({ message: "Invalid Student ID" });
+    if (!student) return res.status(401).json({ message: "Invalid Student ID" });
+
+    const otpRecord = await Otp.findOne({ email: student.email, code: otp, purpose: "login" });
+    if (!otpRecord) return res.status(401).json({ message: "Invalid OTP" });
+    if (new Date() > otpRecord.expires) {
+      await Otp.deleteOne({ _id: otpRecord._id });
+      return res.status(401).json({ message: "OTP expired. Request a new one." });
     }
 
-    // 🚀 Direct login (OTP removed)
+    await Otp.deleteOne({ _id: otpRecord._id });
+
     const token = generateToken(student);
     const refreshToken = await generateRefreshToken(student);
 
     return res.json({
-      message: "Login successful (OTP disabled)",
+      message: "Login successful",
       token,
       refreshToken,
       student: {
@@ -1526,7 +1521,6 @@ const login = async (req, res) => {
         contactNumber: student.contactNumber,
       },
     });
-
   } catch (err) {
     console.error("Student login error:", err);
     return res.status(500).json({ message: "Server error during login" });
@@ -2246,12 +2240,45 @@ const getComplaintHistory = async (req, res) => {
 
 
 const applyForLeave = async (req, res) => {
-  const { studentId, leaveType, startDate, endDate, reason } = req.body;
+  const { studentId, leaveType, otherLeaveType, startDate, endDate, reason } = req.body;
 
   try {
+    // 1. Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Normalize to midnight for accurate comparison
+    start.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (start < today) {
+      return res.status(400).json({ message: "Start date cannot be in the past." });
+    }
+
+    // Reset hours for end date comparison
+    start.setHours(0,0,0,0);
+    end.setHours(0,0,0,0);
+    if (end < start) {
+      return res.status(400).json({ message: "End date cannot be before start date." });
+    }
+
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
+    }
+
+    // 2. Check for overlapping leaves
+    const overlappingLeave = await Leave.findOne({
+      studentId: student._id,
+      status: { $ne: 'rejected' }, // Check pending or approved leaves
+      $or: [
+        { startDate: { $lte: endDate }, endDate: { $gte: startDate } }
+      ]
+    });
+
+    if (overlappingLeave) {
+      return res.status(400).json({ message: "You already have a leave request for this date range." });
     }
 
     // Find the parent associated with this student
@@ -2263,6 +2290,7 @@ const applyForLeave = async (req, res) => {
     const newLeave = new Leave({
       studentId: student._id,
       leaveType,
+      otherLeaveType: leaveType === 'Others' ? otherLeaveType : '',
       startDate,
       endDate,
       reason,
@@ -2290,65 +2318,59 @@ const applyForLeave = async (req, res) => {
     const durationMs = new Date(endDate) - new Date(startDate);
     const durationDays = Math.ceil(durationMs / (1000 * 60 * 60 * 24));
 
-    // Send email to admin (existing functionality)
     try {
-      await transporter.sendMail({
-        from: `<${student.email}>`,
-        to: process.env.MAIL_USER,
-        subject: `Leave Application: ${leaveType} from ${student.firstName}`,
-        text: `${newLeave.reason}`,
-      });
-
       // Send email to parent with leave details and link
-      await transporter.sendMail({
-        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+      await sendEmail({
         to: parent.email,
-        subject: `Leave Application from ${student.firstName} ${student.lastName}`,
-        text: `Dear ${parent.firstName} ${parent.lastName},
-
-Your child ${student.firstName} ${student.lastName} (Student ID: ${student.studentId}) has submitted a leave application.
-
-Leave Details:
-• Leave Type: ${leaveType}
-• From Date: ${formattedStartDate}
-• To Date: ${formattedEndDate}
-• Duration: ${durationDays} day${durationDays !== 1 ? 's' : ''}
-• Reason: ${reason}
-• Status: Pending Approval
-
-Please review this leave application by visiting the Parent Portal:
-👉 https://kgf-hm-parent.nexcoreallaince.com/dashboard/Leave
-
-You can view all leave applications and their current status in the Leave Management section.
-
-If you have any questions or concerns, please contact the hostel administration.
-
-– Hostel Admin`,
+        subject: `KGF Boys Hostel - Leave Application from ${student.firstName} ${student.lastName}`,
+        useKGFLayout: true,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-            <h2 style="color: #333; text-align: center;">Leave Application Notification</h2>
-            <p>Dear <strong>${parent.firstName} ${parent.lastName}</strong>,</p>
-            <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has submitted a leave application.</p>
-            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <h3 style="color: #555; margin-top: 0;">Leave Details:</h3>
-              <ul style="list-style: none; padding: 0;">
-                <li style="margin: 8px 0;"><strong>Leave Type:</strong> ${leaveType}</li>
-                <li style="margin: 8px 0;"><strong>From Date:</strong> ${formattedStartDate}</li>
-                <li style="margin: 8px 0;"><strong>To Date:</strong> ${formattedEndDate}</li>
-                <li style="margin: 8px 0;"><strong>Duration:</strong> ${durationDays} day${durationDays !== 1 ? 's' : ''}</li>
-                <li style="margin: 8px 0;"><strong>Reason:</strong> ${reason}</li>
-                <li style="margin: 8px 0;"><strong>Status:</strong> <span style="color: orange;">Pending Approval</span></li>
-              </ul>
-            </div>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="https://kokanglobal.org/parent/Leave?fromEmail=true" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                View Leave Application
-              </a>
-            </div>
-            <p>You can view all leave applications and their current status in the Parent Portal.</p>
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #ddd;">
-            <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
+          <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Leave Application Approval Required</p>
+          <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Action Required: Leave Request</h2>
+          
+          <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+            Dear <strong>${parent.firstName} ${parent.lastName}</strong>,<br/>
+            Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has submitted a leave application that requires your approval.
+          </p>
+
+          <div style="border: 1px solid #e2e8f0; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+            <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Leave Details</p>
+            
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Leave Type</td>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leaveType === 'Others' && otherLeaveType ? `Others (${otherLeaveType})` : leaveType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Start Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedStartDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">End Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedEndDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Duration</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${durationDays} day${durationDays !== 1 ? 's' : ''}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Current Status</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: #f59e0b;">Pending Approval</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%; vertical-align: top;">Reason</td>
+                <td style="padding: 15px 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${reason}</td>
+              </tr>
+            </table>
           </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://kgf-hm-parent.nexcoreallaince.com/dashboard/Leave" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+              Review Application in Portal
+            </a>
+          </div>
+          
+          <p style="margin: 0; font-size: 15px; color: #475569;">You can view and approve or reject this leave application by logging into the Parent Portal.</p>
         `
       });
     } catch (emailError) {
@@ -2393,9 +2415,49 @@ const editLeave = async (req, res) => {
   const studentId = req.studentId;
 
   try {
+    // 1. Validate dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Normalize to midnight for accurate comparison
+    start.setHours(0, 0, 0, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (start < today) {
+      return res.status(400).json({ message: "Start date cannot be in the past." });
+    }
+
+    // Reset hours for end date comparison
+    start.setHours(0,0,0,0);
+    end.setHours(0,0,0,0);
+    if (end < start) {
+      return res.status(400).json({ message: "End date cannot be before start date." });
+    }
+
     const student = await Student.findOne({ studentId });
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
+    }
+
+    // 2. Check for overlapping leaves
+    const overlappingLeave = await Leave.findOne({
+      _id: { $ne: leaveId },
+      studentId: student._id,
+      status: { $ne: 'rejected' }, // Check pending or approved leaves
+      $or: [
+        { startDate: { $lte: endDate }, endDate: { $gte: startDate } }
+      ]
+    });
+
+    if (overlappingLeave) {
+      return res.status(400).json({ message: "You already have a leave request for this date range." });
+    }
+
+    // Find the parent associated with this student
+    const parent = await Parent.findOne({ studentId: student.studentId });
+    if (!parent) {
+      return res.status(404).json({ message: "Parent not found for this student" });
     }
 
     // Find the leave and verify it belongs to this student
@@ -2424,29 +2486,53 @@ const editLeave = async (req, res) => {
 
     // Send email notification to parent (non-blocking)
     try {
-      await transporter.sendMail({
-        from: `"Hostel Management" <${process.env.MAIL_USER}>`,
-        to: student.parentEmail,
-        subject: `Updated Leave Request from ${student.firstName} ${student.lastName}`,
+      await sendEmail({
+        to: parent.email,
+        subject: `KGF Boys Hostel - Updated Leave Request from ${student.firstName} ${student.lastName}`,
+        useKGFLayout: true,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h2 style="color: #4F8CCF; text-align: center;">Updated Leave Request</h2>
-            <p>Dear Parent,</p>
-            <p>Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: ${student.studentId}) has updated their leave request.</p>
+          <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Leave Application Updated</p>
+          <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Action Required: Updated Request</h2>
+          
+          <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+            Dear Parent,<br/>
+            Your child <strong>${student.firstName} ${student.lastName}</strong> (Student ID: <strong>${student.studentId}</strong>) has updated their leave request.
+          </p>
+
+          <div style="border: 1px solid #e2e8f0; border-left: 4px solid #3b82f6; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+            <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Updated Details</p>
             
-            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <h3 style="color: #333; margin-top: 0;">Leave Details:</h3>
-              <p><strong>Leave Type:</strong> ${leaveType === 'Others' ? `Other (${otherLeaveType})` : leaveType}</p>
-              <p><strong>Start Date:</strong> ${new Date(startDate).toLocaleDateString()}</p>
-              <p><strong>End Date:</strong> ${new Date(endDate).toLocaleDateString()}</p>
-              <p><strong>Reason:</strong> ${reason}</p>
-            </div>
-            
-            <p>This updated leave request requires your approval again. Please log in to the parent portal to review and approve/reject this request.</p>
-            
-            <p style="margin-top: 30px;">Best regards,</p>
-            <p style="text-align: center; color: #666; font-size: 12px;">– Hostel Admin</p>
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Leave Type</td>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leaveType === 'Others' ? `Other (${otherLeaveType})` : leaveType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Start Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${new Date(startDate).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">End Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${new Date(endDate).toLocaleDateString()}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Current Status</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: #f59e0b;">Pending Approval</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%; vertical-align: top;">Reason</td>
+                <td style="padding: 15px 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${reason}</td>
+              </tr>
+            </table>
           </div>
+
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="https://kgf-hm-parent.nexcoreallaince.com/dashboard/Leave" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+              Review Application in Portal
+            </a>
+          </div>
+          
+          <p style="margin: 0; font-size: 15px; color: #475569;">This updated leave request requires your approval again. Please log in to the parent portal to review and approve/reject this request.</p>
         `
       });
     } catch (emailError) {

@@ -69,6 +69,11 @@ export const generateEmailLayout = (title, content) => {
   `;
 };
 
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const originalSendMail = transporter.sendMail.bind(transporter);
 
 transporter.sendMail = async (mailOptions) => {
@@ -88,7 +93,7 @@ transporter.sendMail = async (mailOptions) => {
         
         const defaultAttachments = [{
           filename: 'logo.png',
-          path: path.join(process.cwd(), 'assets', 'logo.png'),
+          path: path.join(__dirname, '..', 'assets', 'logo.png'),
           cid: 'kgflogo'
         }];
         mailOptions.attachments = mailOptions.attachments ? [...defaultAttachments, ...mailOptions.attachments] : defaultAttachments;

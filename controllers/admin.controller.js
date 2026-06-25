@@ -1430,7 +1430,7 @@ const getPendingLeaveRequests = async (req, res) => {
   try {
     const pendingLeaves = await Leave.find({ status: 'pending' })
       .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
-      .select('leaveType startDate endDate reason status appliedAt')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt')
       .sort({ appliedAt: -1 });
 
     return res.json({ 
@@ -1458,7 +1458,7 @@ const getAllLeaveRequests = async (req, res) => {
 
     const leaves = await Leave.find(query)
       .populate('studentId', 'studentName studentId email contactNumber roomBedNumber')
-      .select('leaveType startDate endDate reason status appliedAt processedAt adminComments')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt processedAt adminComments')
       .sort({ appliedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -1644,7 +1644,7 @@ const getLeaveStatistics = async (req, res) => {
     // Get recent leave requests (last 5)
     const recentLeaves = await Leave.find()
       .populate('studentId', 'studentName studentId')
-      .select('leaveType startDate endDate status appliedAt')
+      .select('leaveType otherLeaveType startDate endDate status appliedAt')
       .sort({ appliedAt: -1 })
       .limit(5);
 
@@ -1674,7 +1674,7 @@ const getStudentLeaveHistory = async (req, res) => {
   try {
     const leaves = await Leave.find({ studentId })
       .populate('studentId', 'studentName studentId email')
-      .select('leaveType startDate endDate reason status appliedAt processedAt adminComments')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt processedAt adminComments')
       .sort({ appliedAt: -1 });
 
     if (leaves.length === 0) {

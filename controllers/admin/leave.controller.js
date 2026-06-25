@@ -21,10 +21,10 @@ const transporter = nodemailer.createTransport({
 
 const getPendingLeaveRequests = async (req, res) => {
   try {
-    // Show leaves that are pending (awaiting parent) or parent_approved (awaiting admin/warden)
-    const pendingLeaves = await Leave.find({ status: { $in: ['pending', 'parent_approved'] } })
+    // Show leaves that are pending (awaiting parent), parent_approved, warden_approved, or warden_rejected (awaiting admin)
+    const pendingLeaves = await Leave.find({ status: { $in: ['pending', 'parent_approved', 'warden_approved', 'warden_rejected'] } })
       .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber')
-      .select('leaveType startDate endDate reason status appliedAt parentComment parentApprovalDate')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt parentComment parentApprovalDate wardenComments adminComments')
       .sort({ appliedAt: -1 });
 
     return res.json({
@@ -43,7 +43,9 @@ const getAllLeaveRequests = async (req, res) => {
     const { status, page = 1, limit = 10 } = req.query;
 
     let query = {};
-    if (status && status !== 'all') {
+    if (status === 'pending') {
+      query.status = { $in: ['pending', 'parent_approved', 'warden_approved', 'warden_rejected'] };
+    } else if (status && status !== 'all') {
       query.status = status;
     }
 
@@ -51,7 +53,7 @@ const getAllLeaveRequests = async (req, res) => {
 
     const leaves = await Leave.find(query)
       .populate('studentId', 'firstName lastName studentId email contactNumber roomBedNumber') // Changed from 'studentName' to 'firstName lastName'
-      .select('leaveType startDate endDate reason status appliedAt processedAt adminComments')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt processedAt adminComments wardenComments')
       .sort({ appliedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -75,7 +77,11 @@ const getAllLeaveRequests = async (req, res) => {
     };
 
     statusCounts.forEach(item => {
-      counts[item._id] = item.count;
+      if (['pending', 'parent_approved', 'warden_approved', 'warden_rejected'].includes(item._id)) {
+        counts.pending += item.count;
+      } else {
+        counts[item._id] = (counts[item._id] || 0) + item.count;
+      }
     });
 
     return res.json({
@@ -113,8 +119,8 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(404).json({ message: "Leave request not found." });
     }
 
-    // Only allow updating leaves that are pending or parent_approved
-    if (!['pending', 'parent_approved'].includes(leave.status)) {
+    // Only allow updating leaves that are pending, parent_approved, warden_approved, or warden_rejected
+    if (!['pending', 'parent_approved', 'warden_approved', 'warden_rejected'].includes(leave.status)) {
       return res.status(400).json({ message: "Leave request has already been processed." });
     }
 
@@ -129,37 +135,61 @@ const updateLeaveStatus = async (req, res) => {
     const student = leave.studentId;
     const studentName = student ? `${student.firstName} ${student.lastName}` : 'Unknown Student'; // Construct full name
     const statusText = status === 'approved' ? 'APPROVED' : 'REJECTED';
-    const statusEmoji = status === 'approved' ? '✅' : '❌';
-
     const emailSubject = `Leave Request ${statusText} - ${leave.leaveType}`;
-    const emailBody = `Hello ${studentName},
-
-${statusEmoji} Your leave request has been ${statusText.toLowerCase()}.
-
-Leave Details:
-• Type: ${leave.leaveType}
-• From: ${new Date(leave.startDate).toLocaleDateString("en-IN")}
-• To: ${new Date(leave.endDate).toLocaleDateString("en-IN")}
-• Reason: ${leave.reason}
-• Status: ${statusText}
-${adminComments ? `• Admin Comments: ${adminComments}` : ''}
-
-Applied on: ${new Date(leave.appliedAt).toLocaleDateString("en-IN")}
-Processed on: ${new Date().toLocaleDateString("en-IN")}
-
-${status === 'approved' ?
-        'Please ensure you follow all hostel guidelines during your leave period.' :
-        'If you have any questions regarding this decision, please contact the hostel administration.'}
-
-– Hostel Admin`;
-
     // Send email notification
     try {
-      await transporter.sendMail({
-        from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-        to: student.email,
-        subject: emailSubject,
-        text: emailBody
+      const formattedStartDate = new Date(leave.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      const formattedEndDate = new Date(leave.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      
+      const { default: sendEmail } = await import('../../utils/sendEmail.js');
+
+      await sendEmail({ 
+        to: student.email, 
+        subject: emailSubject, 
+        useKGFLayout: true,
+        html: `
+          <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Leave Application Status</p>
+          <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Update from Hostel Admin</h2>
+          
+          <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+            Dear <strong>${studentName}</strong>,<br/>
+            Your leave application for <strong>${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</strong> has been <strong style="color: ${status === 'approved' ? '#16a34a' : '#dc2626'}">${statusText}</strong> by the hostel administration.
+          </p>
+
+          <div style="border: 1px solid #e2e8f0; border-left: 4px solid ${status === 'approved' ? '#16a34a' : '#dc2626'}; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+            <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Application Details</p>
+            
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Leave Type</td>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Start Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedStartDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">End Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedEndDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Reason</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.reason}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Current Status</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: ${status === 'approved' ? '#16a34a' : '#dc2626'}; text-transform: capitalize;">${statusText}</td>
+              </tr>
+              ${adminComments ? `
+              <tr>
+                <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%; vertical-align: top;">Admin Comments</td>
+                <td style="padding: 15px 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${adminComments}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+          <p style="margin: 0; font-size: 15px; color: #475569;">${status === 'approved' ? 'Please ensure you follow all hostel guidelines during your leave period.' : 'If you have any questions regarding this decision, please contact the hostel administration.'}</p>
+        `
       });
       console.log(`📤 Leave ${status} notification sent to ${student.email}`);
     } catch (emailErr) {
@@ -213,8 +243,8 @@ const getLeaveStatistics = async (req, res) => {
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
-    // Get counts - include both pending and parent_approved in pending count for admin view
-    const totalPending = await Leave.countDocuments({ status: { $in: ['pending', 'parent_approved'] } });
+    // Get counts - include all pending stages
+    const totalPending = await Leave.countDocuments({ status: { $in: ['pending', 'parent_approved', 'warden_approved', 'warden_rejected'] } });
     const totalApproved = await Leave.countDocuments({ status: 'approved' });
     const totalRejected = await Leave.countDocuments({ status: 'rejected' });
     const thisMonthLeaves = await Leave.countDocuments({
@@ -234,7 +264,7 @@ const getLeaveStatistics = async (req, res) => {
     // Get recent leave requests (last 5)
     const recentLeaves = await Leave.find()
       .populate('studentId', 'firstName lastName studentId')
-      .select('leaveType startDate endDate status appliedAt')
+      .select('leaveType otherLeaveType startDate endDate status appliedAt')
       .sort({ appliedAt: -1 })
       .limit(5);
 
@@ -269,7 +299,7 @@ const getStudentLeaveHistory = async (req, res) => {
   try {
     const leaves = await Leave.find({ studentId })
       .populate('studentId', 'firstName lastName studentId email')
-      .select('leaveType startDate endDate reason status appliedAt processedAt adminComments')
+      .select('leaveType otherLeaveType startDate endDate reason status appliedAt processedAt adminComments')
       .sort({ appliedAt: -1 });
 
     const formattedLeaves = leaves.map(leave => ({
@@ -308,30 +338,56 @@ const sendLeaveMessage = async (req, res) => {
     }
 
     const student = leave.studentId;
-    const emailSubject = subject || `Regarding Your Leave Request - ${leave.leaveType}`;
+    const emailSubject = subject || `Regarding Your Leave Request - ${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}`;
 
-    const emailBody = `Hello ${student.firstName} ${student.lastName },
+    const formattedStartDate = new Date(leave.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+    const formattedEndDate = new Date(leave.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+    const formattedAppliedAt = new Date(leave.appliedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
 
-${message}
-
-Leave Request Details:
-• Type: ${leave.leaveType}
-• From: ${new Date(leave.startDate).toLocaleDateString("en-IN")}
-• To: ${new Date(leave.endDate).toLocaleDateString("en-IN")}
-• Status: ${leave.status.toUpperCase()}
-
-Applied on: ${new Date(leave.appliedAt).toLocaleDateString("en-IN")}
-
-If you have any questions, please contact the hostel administration.
-
-– Hostel Admin`;
+    const { default: sendEmail } = await import('../../utils/sendEmail.js');
 
     // Send email
-    await transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+    await sendEmail({
       to: student.email,
       subject: emailSubject,
-      text: emailBody
+      useKGFLayout: true,
+      html: `
+        <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Message regarding Leave Request</p>
+        <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Update from Hostel Admin</h2>
+        
+        <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+          Dear <strong>${student.firstName} ${student.lastName}</strong>,<br/><br/>
+          ${message}
+        </p>
+
+        <div style="border: 1px solid #e2e8f0; border-left: 4px solid #0ea5e9; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+          <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Application Details</p>
+          
+          <table width="100%" border="0" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Leave Type</td>
+              <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</td>
+            </tr>
+            <tr>
+              <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Start Date</td>
+              <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedStartDate}</td>
+            </tr>
+            <tr>
+              <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">End Date</td>
+              <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedEndDate}</td>
+            </tr>
+            <tr>
+              <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Current Status</td>
+              <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.status.toUpperCase()}</td>
+            </tr>
+            <tr>
+              <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%; vertical-align: top;">Applied On</td>
+              <td style="padding: 15px 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedAppliedAt}</td>
+            </tr>
+          </table>
+        </div>
+        <p style="margin: 0; font-size: 15px; color: #475569;">If you have any questions, please contact the hostel administration.</p>
+      `
     });
 
     // Create audit log
@@ -373,10 +429,10 @@ const bulkUpdateLeaveStatus = async (req, res) => {
       return res.status(400).json({ message: "Please provide an array of leave IDs." });
     }
 
-    // Find all pending or parent_approved leaves from the provided IDs
+    // Find all pending leaves from the provided IDs
     const leaves = await Leave.find({
       _id: { $in: leaveIds },
-      status: { $in: ['pending', 'parent_approved'] }
+      status: { $in: ['pending', 'parent_approved', 'warden_approved', 'warden_rejected'] }
     }).populate('studentId', 'firstName lastName studentId email');
 
     if (leaves.length === 0) {
@@ -387,7 +443,7 @@ const bulkUpdateLeaveStatus = async (req, res) => {
     const updateResult = await Leave.updateMany(
       {
         _id: { $in: leaves.map(l => l._id) },
-        status: { $in: ['pending', 'parent_approved'] }
+        status: { $in: ['pending', 'parent_approved', 'warden_approved', 'warden_rejected'] }
       },
       {
         status,
@@ -403,34 +459,59 @@ const bulkUpdateLeaveStatus = async (req, res) => {
       const statusEmoji = status === 'approved' ? '✅' : '❌';
 
       const emailSubject = `Leave Request ${statusText} - ${leave.leaveType}`;
-      const emailBody = `Hello ${student.firstName} ${student.lastName},
-
-${statusEmoji} Your leave request has been ${statusText.toLowerCase()}.
-
-Leave Details:
-• Type: ${leave.leaveType}
-• From: ${new Date(leave.startDate).toLocaleDateString("en-IN")}
-• To: ${new Date(leave.endDate).toLocaleDateString("en-IN")}
-• Reason: ${leave.reason}
-• Status: ${statusText}
-${adminComments ? `• Admin Comments: ${adminComments}` : ''}
-
-Applied on: ${new Date(leave.appliedAt).toLocaleDateString("en-IN")}
-Processed on: ${new Date().toLocaleDateString("en-IN")}
-
-${status === 'approved' ?
-          'Please ensure you follow all hostel guidelines during your leave period.' :
-          'If you have any questions regarding this decision, please contact the hostel administration.'}
-
-– Hostel Admin`;
+      const formattedStartDate = new Date(leave.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      const formattedEndDate = new Date(leave.endDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      const { default: sendEmail } = await import('../../utils/sendEmail.js');
 
       try {
-        await transporter.sendMail({
-          from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
+        await sendEmail({
           to: student.email,
-          subject: emailSubject,
-          text: emailBody
-        });
+        subject: emailSubject,
+        useKGFLayout: true,
+        html: `
+          <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Leave Application Status</p>
+          <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">Update from Hostel Admin</h2>
+          
+          <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+            Dear <strong>${student.firstName} ${student.lastName}</strong>,<br/>
+            Your leave application for <strong>${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</strong> has been <strong style="color: ${status === 'approved' ? '#16a34a' : '#dc2626'}">${statusText}</strong> by the hostel administration.
+          </p>
+
+          <div style="border: 1px solid #e2e8f0; border-left: 4px solid ${status === 'approved' ? '#16a34a' : '#dc2626'}; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+            <p style="margin: 0 0 20px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Application Details</p>
+            
+            <table width="100%" border="0" cellspacing="0" cellpadding="0">
+              <tr>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Leave Type</td>
+                <td style="padding: 0 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Start Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedStartDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">End Date</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${formattedEndDate}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Reason</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${leave.reason}</td>
+              </tr>
+              <tr>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Current Status</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: ${status === 'approved' ? '#16a34a' : '#dc2626'}; text-transform: capitalize;">${statusText}</td>
+              </tr>
+              ${adminComments ? `
+              <tr>
+                <td style="padding: 15px 0 0; font-size: 14px; color: #64748b; width: 40%; vertical-align: top;">Admin Comments</td>
+                <td style="padding: 15px 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${adminComments}</td>
+              </tr>
+              ` : ''}
+            </table>
+          </div>
+          <p style="margin: 0; font-size: 15px; color: #475569;">${status === 'approved' ? 'Please ensure you follow all hostel guidelines during your leave period.' : 'If you have any questions regarding this decision, please contact the hostel administration.'}</p>
+        `
+      });
       } catch (emailErr) {
         console.error(`Email sending error for ${student.email}:`, emailErr);
       }
