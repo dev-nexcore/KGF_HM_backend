@@ -11,6 +11,7 @@ import webhookRoutes from "./routes/webhook.routes.js";
 import staffRoutes from "./routes/staff.routes.js";
 import inquiryRoutes from "./routes/inquiry.routes.js";
 import startFeeReminderCron from "./cron/feeReminders.js";
+import startNoticeSchedulerCron from "./cron/noticeScheduler.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -37,6 +38,7 @@ await connectDB();
 
 // ----- Start Cron Jobs -----
 startFeeReminderCron();
+startNoticeSchedulerCron();
 
 // ----- CORS -----
   const corsOptions = {

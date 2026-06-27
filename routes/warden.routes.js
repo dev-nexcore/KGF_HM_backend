@@ -55,6 +55,16 @@ import {
 import { upload } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
 import { getAttendanceLogs, getAttendanceStats } from "../controllers/admin/attendance.controller.js";
+import {
+  issueNotice,
+  getAllNotices,
+  updateNotice,
+  deleteNotice,
+  getNoticeTemplates,
+  createNoticeTemplate,
+  updateNoticeTemplate,
+  deleteNoticeTemplate
+} from "../controllers/admin/notice_inventory.controller.js";
 
 const router = express.Router();
 
@@ -158,6 +168,16 @@ router.get("/requisitions", verifyWardenToken, getWardenRequisitions);
 router.post("/submit-notice-requisition", verifyWardenToken, submitNoticeRequisition);
 router.post("/submit-inventory-replacement", verifyWardenToken, upload.fields([{ name: 'photo' }]), submitInventoryReplacement);
 
+
+// Notices Management for Warden
+router.get("/notices", verifyWardenToken, getAllNotices);
+router.get("/notice-templates", verifyWardenToken, getNoticeTemplates);
+router.post("/notice-templates", verifyWardenToken, createNoticeTemplate);
+router.put("/notice-templates/:id", verifyWardenToken, updateNoticeTemplate);
+router.delete("/notice-templates/:id", verifyWardenToken, deleteNoticeTemplate);
+router.post("/issue-notice", verifyWardenToken, issueNotice);
+router.put("/notices/:noticeId", verifyWardenToken, updateNotice);
+router.delete("/notices/:noticeId", verifyWardenToken, deleteNotice);
 
 export default router;
 

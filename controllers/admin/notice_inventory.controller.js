@@ -10,9 +10,11 @@ import { Student } from '../../models/student.model.js';
 import { Parent } from '../../models/parent.model.js';
 
 import { Warden } from '../../models/warden.model.js';
+import { Staff } from '../../models/staff.model.js';
 import { Notice } from '../../models/notice.model.js';
 import { Inventory } from '../../models/inventory.model.js';
-
+import { Requisition } from '../../models/requisition.model.js';
+import { NoticeTemplate } from '../../models/noticeTemplate.model.js';
 
 import path from 'path';
 import multer from 'multer';
@@ -1757,6 +1759,7 @@ const issueNotice = async (req, res) => {
     title,
     message,
     issueDate,
+    expiryDate,
     recipientType,
     individualRecipient
   } = req.body;
@@ -1791,15 +1794,34 @@ const issueNotice = async (req, res) => {
       parsedIssueDate = issueDate;
     }
 
+    let parsedExpiryDate = null;
+    if (typeof expiryDate === "string" && expiryDate.trim() !== "") {
+      parsedExpiryDate = new Date(expiryDate.split("-").reverse().join("-"));
+      if (isNaN(parsedExpiryDate.getTime())) {
+        parsedExpiryDate = null;
+      }
+    }
+
+    const now = new Date();
+    const isWarden = !!req.warden;
+    // If parsedIssueDate is today or in the past, issue immediately (unless warden)
+    const isIssued = isWarden ? false : parsedIssueDate <= now;
+
     // ---------------- CREATE NOTICE ----------------
     const notice = await Notice.create({
       template,
       title,
       message,
       issueDate: parsedIssueDate,
+      expiryDate: parsedExpiryDate,
+      isIssued,
       recipientType,
       individualRecipient,
-      createdBy: req.admin?._id
+      createdBy: req.admin?._id || req.warden?._id,
+      creatorName: isWarden ? (`${req.warden?.firstName || ''} ${req.warden?.lastName || ''}`.trim() || 'Warden') : 'Admin',
+      status: isWarden ? 'Pending Approval' : 'Active',
+      pendingAction: isWarden ? 'Create' : 'None',
+      pendingActionBy: isWarden ? (`${req.warden?.firstName || ''} ${req.warden?.lastName || ''}`.trim() || 'Warden') : ''
     });
 
     // ---------------- EMAIL CONTENT ----------------
@@ -1809,13 +1831,25 @@ const issueNotice = async (req, res) => {
       timeZone: "Asia/Kolkata"
     });
 
-    const emailBody = `
-${message}
+    const emailHtml = `
+      <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Hostel Notice</p>
+      <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">${title}</h2>
+      
+      <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+        Dear Resident/Staff,<br/><br/>
+        <span style="white-space: pre-wrap;">${message}</span>
+      </p>
 
-Issued on: ${istDateTime}
-
-– Hostel Admin
-`;
+      <div style="border: 1px solid #e2e8f0; border-left: 4px solid #0066cc; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+        <table width="100%" border="0" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="padding: 0 0 0; font-size: 14px; color: #64748b; width: 40%;">Issued On</td>
+            <td style="padding: 0 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${istDateTime}</td>
+          </tr>
+        </table>
+      </div>
+      <p style="margin: 0; font-size: 15px; color: #475569;">Please ensure you follow all hostel guidelines. If you have any questions, please contact the hostel administration.</p>
+    `;
 
     // ---------------- RECIPIENT LOGIC ----------------
     let recipients = [];
@@ -1825,18 +1859,20 @@ Issued on: ${istDateTime}
       const students = await Student.find({}, "_id email");
       const parents = await Parent.find({}, "email");
       const wardens = await Warden.find({}, "email");
+      const staffList = await Staff.find({}, "email");
 
       studentRecipients = students;
 
       recipients = [
         ...students.map(s => s.email),
         ...parents.map(p => p.email),
-        ...wardens.map(w => w.email)
+        ...wardens.map(w => w.email),
+        ...staffList.map(s => s.email)
       ].filter(Boolean);
 
     } else if (recipientType === "Student") {
       if (!individualRecipient) {
-        const students = await Student.find({}, "_id email");
+        const students = await Student.find({ studentId: { $not: /^STUW/ } }, "_id email");
         studentRecipients = students;
         recipients = students.map(s => s.email).filter(Boolean);
       } else {
@@ -1865,57 +1901,58 @@ Issued on: ${istDateTime}
         const warden = await Warden.findOne({ wardenId: individualRecipient });
         if (warden?.email) recipients.push(warden.email);
       }
+    } else if (recipientType === "Worker") {
+      if (!individualRecipient) {
+        const staffList = await Student.find({ studentId: { $regex: /^STUW/ } }, "_id email");
+        studentRecipients = staffList;
+        recipients = staffList.map(s => s.email).filter(Boolean);
+      } else {
+        const staff = await Student.findOne({ studentId: individualRecipient }, "_id email");
+        if (staff?.email) recipients.push(staff.email);
+        if (staff) studentRecipients.push(staff);
+      }
     }
 
-    if (recipients.length === 0) {
+    if (recipients.length === 0 && !isWarden) {
       return res.status(400).json({
         success: false,
         message: "No recipients found to send notice."
       });
     }
 
-    // ---------------- SEND EMAILS ----------------
-    // for (const email of recipients) {
-    //   try {
-    //     const result = await transporter.sendMail({
-    //       from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-    //       to: email,
-    //       subject,
-    //       text: emailBody
-    //     });
-    //     console.log(`📤 Email sent to ${email} | MessageId: ${result.messageId}`);
-    //   } catch (emailError) {
-    //     console.error(`Failed to send email to ${email}:`, emailError);
-    //   }
-    // }
-await Promise.all(
-  recipients.map(email =>
-    transporter.sendMail({
-      from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
-      to: email,
-      subject,
-      text: emailBody
-    })
-  )
-);
-    // ---------------- PUSH NOTIFICATIONS ----------------
-    if (studentRecipients.length > 0) {
-      try {
-        await sendBulkNotifications(
-          studentRecipients,
-          `New notice: ${title}`,
-          "notice",
-          "/notices"
-        );
-      } catch (notificationError) {
-        console.error("Failed to send push notifications:", notificationError);
+    if (isIssued && !isWarden) {
+      // ---------------- SEND EMAILS ----------------
+      const { default: sendEmail } = await import('../../utils/sendEmail.js');
+      await Promise.all(
+        recipients.map(email =>
+          sendEmail({
+            to: email,
+            subject,
+            html: emailHtml,
+            useKGFLayout: true
+          }).catch(err => console.error(`Failed to send notice email to ${email}:`, err))
+        )
+      );
+      
+      // ---------------- PUSH NOTIFICATIONS ----------------
+      if (studentRecipients.length > 0) {
+        try {
+          await sendBulkNotifications(
+            studentRecipients,
+            `New notice: ${title}`,
+            "notice",
+            "/notices"
+          );
+        } catch (notificationError) {
+          console.error("Failed to send push notifications:", notificationError);
+        }
       }
     }
 
     // ---------------- AUDIT LOG ----------------
     await createAuditLog({
-      adminId: req.admin?._id,
-      adminName: req.admin?.adminId || "System",
+      adminId: req.admin?._id || req.warden?._id,
+      adminName: req.admin?.adminId || req.warden?.wardenId || "System",
       actionType: AuditActionTypes.NOTICE_ISSUED,
       description: `Issued notice: ${title} to ${recipientType}`,
       targetType: "Notice",
@@ -1931,7 +1968,7 @@ await Promise.all(
     // ---------------- RESPONSE ----------------
     return res.status(201).json({
       success: true,
-      message: "Notice issued and emailed successfully",
+      message: isWarden ? "Notice submitted for Admin approval" : "Notice issued and emailed successfully",
       notice: {
         id: notice._id,
         title: notice.title,
@@ -1964,15 +2001,30 @@ const getAllNotices = async (req, res) => {
       page = 1,
       limit = 50,
       sortBy = 'createdAt',
-      sortOrder = 'desc'
+      sortOrder = 'desc',
+      search
     } = req.query;
 
     // Build filter
     const filter = {};
     if (status && status !== 'All') {
-      filter.status = status;
+      if (status === 'Scheduled') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        filter.issueDate = { $gt: today };
+      } else {
+        filter.status = status;
+      }
     }
     if (recipientType) filter.recipientType = recipientType;
+
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } },
+        { individualRecipient: { $regex: search, $options: 'i' } }
+      ];
+    }
 
     // Build sort
     const sort = {};
@@ -1995,19 +2047,46 @@ const getAllNotices = async (req, res) => {
     const transformedNotices = notices.map(notice => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      let calculatedStatus = notice.status || 'Active';
+      if (calculatedStatus === 'Active' && notice.issueDate) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const iDate = new Date(notice.issueDate);
+        iDate.setHours(0, 0, 0, 0);
+        if (iDate.getTime() > today.getTime()) {
+          calculatedStatus = 'Scheduled';
+        }
+      }
+
+      // Overlay pendingData if it exists
+      const displayTitle = (notice.pendingAction === 'Edit' && notice.pendingData?.title) ? notice.pendingData.title : notice.title;
+      const displayMessage = (notice.pendingAction === 'Edit' && notice.pendingData?.message) ? notice.pendingData.message : notice.message;
+      const displayTemplate = (notice.pendingAction === 'Edit' && notice.pendingData?.template) ? notice.pendingData.template : (notice.template || '');
+      const displayRecipientType = (notice.pendingAction === 'Edit' && notice.pendingData?.recipientType) ? notice.pendingData.recipientType : notice.recipientType;
+      const displayIndividualRecipient = (notice.pendingAction === 'Edit' && notice.pendingData?.individualRecipient) ? notice.pendingData.individualRecipient : (notice.individualRecipient || '');
+      const displayIssueDate = (notice.pendingAction === 'Edit' && notice.pendingData?.issueDate) ? new Date(notice.pendingData.issueDate) : notice.issueDate;
+      const displayExpiryDate = (notice.pendingAction === 'Edit' && notice.pendingData?.expiryDate !== undefined) ? (notice.pendingData.expiryDate ? new Date(notice.pendingData.expiryDate) : null) : notice.expiryDate;
 
       return {
         id: notice._id.toString(),
-        title: notice.title,
-        message: notice.message,
-        template: notice.template || '',
-        recipient: notice.recipientType === 'All' ? 'All (Students & Warden)' : notice.recipientType,
-        individualRecipient: notice.individualRecipient || '',
-        date: notice.issueDate.toLocaleDateString('en-GB'),
-        issueDate: notice.issueDate,
-        status: notice.status || 'Active',
+        title: displayTitle,
+        message: displayMessage,
+        template: displayTemplate,
+        recipient: displayRecipientType === 'All' ? 'All Users' : (displayIndividualRecipient ? `${displayRecipientType} (${displayIndividualRecipient})` : `${displayRecipientType}s`),
+        recipientType: displayRecipientType,
+        individualRecipient: displayIndividualRecipient,
+        date: displayIssueDate.toLocaleDateString('en-GB'),
+        issueDate: displayIssueDate,
+        expiryDate: displayExpiryDate ? displayExpiryDate.toLocaleDateString('en-GB') : '',
+        rawExpiryDate: displayExpiryDate,
+        status: calculatedStatus,
         readStatus: notice.readStatus || 'Unread',
         createdBy: notice.createdBy,
+        creatorName: notice.creatorName || '',
+        pendingAction: notice.pendingAction || 'None',
+        pendingActionBy: notice.pendingActionBy || '',
+        rejectionReason: notice.rejectionReason || '',
         createdAt: notice.createdAt,
         updatedAt: notice.updatedAt
       };
@@ -2060,6 +2139,7 @@ const getNoticeById = async (req, res) => {
         recipientType: notice.recipientType,
         individualRecipient: notice.individualRecipient,
         issueDate: notice.issueDate,
+        expiryDate: notice.expiryDate,
         readStatus: notice.readStatus,
         readBy: notice.readBy,
         createdBy: notice.createdBy,
@@ -2084,6 +2164,7 @@ const updateNotice = async (req, res) => {
     title,
     message,
     issueDate,
+    expiryDate,
     recipientType,
     individualRecipient,
     readStatus
@@ -2105,22 +2186,168 @@ const updateNotice = async (req, res) => {
     if (title !== undefined) updateData.title = title;
     if (message !== undefined) updateData.message = message;
     if (issueDate !== undefined) updateData.issueDate = new Date(issueDate);
+    if (expiryDate !== undefined) {
+      if (expiryDate === null || expiryDate === "") {
+        updateData.expiryDate = null;
+      } else {
+        updateData.expiryDate = new Date(expiryDate);
+      }
+    }
     if (recipientType !== undefined) updateData.recipientType = recipientType;
     if (individualRecipient !== undefined) updateData.individualRecipient = individualRecipient;
     if (readStatus !== undefined) updateData.readStatus = readStatus;
     if (req.body.status !== undefined) updateData.status = req.body.status;
 
-    // Update notice
-    const updatedNotice = await Notice.findByIdAndUpdate(
-      noticeId,
-      updateData,
-      { new: true, runValidators: true }
-    ).populate('createdBy', 'adminId firstName lastName');
+    const isWarden = !!req.warden;
+
+    let updatedNotice;
+    if (isWarden) {
+      // Store edit data in pendingData instead of updating immediately
+      updatedNotice = await Notice.findByIdAndUpdate(
+        noticeId,
+        { 
+          status: 'Pending Edit', 
+          pendingAction: 'Edit', 
+          pendingData: updateData,
+          pendingActionBy: (`${req.warden?.firstName || ''} ${req.warden?.lastName || ''}`.trim() || 'Warden')
+        },
+        { new: true, runValidators: true }
+      ).populate('createdBy', 'adminId firstName lastName');
+    } else {
+      // Update notice directly for Admin
+      updatedNotice = await Notice.findByIdAndUpdate(
+        noticeId,
+        updateData,
+        { new: true, runValidators: true }
+      ).populate('createdBy', 'adminId firstName lastName');
+    }
+
+    // ---------------- SEND UPDATE EMAILS AND NOTIFICATIONS ----------------
+    // Only send if the notice is active AND not a warden editing
+    if (updatedNotice.status === 'Active' && !isWarden) {
+      const finalTitle = updatedNotice.title;
+      const finalMessage = updatedNotice.message;
+      const finalRecipientType = updatedNotice.recipientType;
+      const finalIndividualRecipient = updatedNotice.individualRecipient;
+
+      let recipients = [];
+      let studentRecipients = [];
+
+      if (finalRecipientType === "All") {
+        const students = await Student.find({}, "_id email");
+        const parents = await Parent.find({}, "email");
+        const wardens = await Warden.find({}, "email");
+        const staffList = await Staff.find({}, "email");
+
+        studentRecipients = students;
+
+        recipients = [
+          ...students.map(s => s.email),
+          ...parents.map(p => p.email),
+          ...wardens.map(w => w.email),
+          ...staffList.map(s => s.email)
+        ].filter(Boolean);
+
+      } else if (finalRecipientType === "Student") {
+        if (!finalIndividualRecipient) {
+          const students = await Student.find({ studentId: { $not: /^STUW/ } }, "_id email");
+          studentRecipients = students;
+          recipients = students.map(s => s.email).filter(Boolean);
+        } else {
+          const student = await Student.findOne(
+            { studentId: finalIndividualRecipient },
+            "_id email"
+          );
+          if (student?.email) recipients.push(student.email);
+          if (student) studentRecipients.push(student);
+        }
+
+      } else if (finalRecipientType === "Parent") {
+        if (!finalIndividualRecipient) {
+          const parents = await Parent.find({}, "email");
+          recipients = parents.map(p => p.email).filter(Boolean);
+        } else {
+          const parent = await Parent.findOne({ studentId: finalIndividualRecipient });
+          if (parent?.email) recipients.push(parent.email);
+        }
+
+      } else if (finalRecipientType === "Warden") {
+        if (!finalIndividualRecipient) {
+          const wardens = await Warden.find({}, "email");
+          recipients = wardens.map(w => w.email).filter(Boolean);
+        } else {
+          const warden = await Warden.findOne({ wardenId: finalIndividualRecipient });
+          if (warden?.email) recipients.push(warden.email);
+        }
+      } else if (finalRecipientType === "Worker") {
+        if (!finalIndividualRecipient) {
+          const staffList = await Student.find({ studentId: { $regex: /^STUW/ } }, "_id email");
+          studentRecipients = staffList;
+          recipients = staffList.map(s => s.email).filter(Boolean);
+        } else {
+          const staff = await Student.findOne({ studentId: finalIndividualRecipient }, "_id email");
+          if (staff?.email) recipients.push(staff.email);
+          if (staff) studentRecipients.push(staff);
+        }
+      }
+
+      const emailSubject = `Updated Hostel Notice: ${finalTitle}`;
+      const istDateTime = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+
+      const emailHtml = `
+        <p style="margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #0066cc; text-transform: uppercase; letter-spacing: 1px;">Updated Hostel Notice</p>
+        <h2 style="margin: 0 0 20px; font-size: 24px; color: #0f172a; font-weight: 700;">${finalTitle}</h2>
+        
+        <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
+          Dear Resident/Staff,<br/><br/>
+          <span style="white-space: pre-wrap;">${finalMessage}</span>
+        </p>
+
+        <div style="border: 1px solid #e2e8f0; border-left: 4px solid #0066cc; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="padding: 0 0 0; font-size: 14px; color: #64748b; width: 40%;">Updated On</td>
+              <td style="padding: 0 0 0; font-size: 14px; font-weight: 600; text-align: right; width: 60%;">${istDateTime}</td>
+            </tr>
+          </table>
+        </div>
+        <p style="margin: 0; font-size: 15px; color: #475569;">Please ensure you follow all hostel guidelines. If you have any questions, please contact the hostel administration.</p>
+      `;
+
+      if (recipients.length > 0) {
+        const { default: sendEmail } = await import('../../utils/sendEmail.js');
+        await Promise.all(
+          recipients.map(email =>
+            sendEmail({
+              to: email,
+              subject: emailSubject,
+              html: emailHtml,
+              useKGFLayout: true
+            }).catch(err => console.error(`Failed to send notice update email to ${email}:`, err))
+          )
+        );
+        
+        if (studentRecipients.length > 0) {
+          try {
+            await sendBulkNotifications(
+              studentRecipients,
+              `Updated notice: ${finalTitle}`,
+              "notice",
+              "/notices"
+            );
+          } catch (notificationError) {
+            console.error("Failed to send push notifications:", notificationError);
+          }
+        }
+      }
+    }
+    // ---------------- END EMAILS ----------------
+
 
     // Create audit log
     await createAuditLog({
-      adminId: req.admin?._id,
-      adminName: req.admin?.adminId || 'System',
+      adminId: req.admin?._id || req.warden?._id,
+      adminName: req.admin?.adminId || req.warden?.wardenId || 'System',
       actionType: AuditActionTypes.NOTICE_UPDATED,
       description: `Updated notice: ${updatedNotice.title}`,
       targetType: 'Notice',
@@ -2139,7 +2366,7 @@ const updateNotice = async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Notice updated successfully.',
+      message: isWarden ? 'Notice edit submitted for Admin approval.' : 'Notice updated successfully.',
       notice: updatedNotice
     });
   } catch (err) {
@@ -2172,13 +2399,22 @@ const deleteNotice = async (req, res) => {
       issueDate: notice.issueDate
     };
 
-    // Delete notice
-    await Notice.findByIdAndDelete(noticeId);
+    const isWarden = !!req.warden;
+
+    if (isWarden) {
+      notice.status = 'Pending Deletion';
+      notice.pendingAction = 'Delete';
+      notice.pendingActionBy = (`${req.warden?.firstName || ''} ${req.warden?.lastName || ''}`.trim() || 'Warden');
+      await notice.save();
+    } else {
+      // Delete notice
+      await Notice.findByIdAndDelete(noticeId);
+    }
 
     // Create audit log 
     await createAuditLog({
-      adminId: req.admin?._id,
-      adminName: req.admin?.adminId || 'System',
+      adminId: req.admin?._id || req.warden?._id,
+      adminName: req.admin?.adminId || req.warden?.wardenId || 'System',
       actionType: AuditActionTypes.NOTICE_DELETED,
       description: `Deleted notice: ${noticeData.title}`,
       targetType: 'Notice',
@@ -2191,7 +2427,7 @@ const deleteNotice = async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Notice deleted successfully.',
+      message: isWarden ? 'Notice deletion submitted for Admin approval.' : 'Notice deleted successfully.',
       deletedNotice: {
         id: noticeId,
         title: noticeData.title
@@ -2262,6 +2498,334 @@ const updateNoticeReadStatus = async (req, res) => {
 };
 
 
+// ====================== NOTICE TEMPLATES ======================
+const getNoticeTemplates = async (req, res) => {
+  try {
+    const isWarden = !!req.warden;
+    let filter = {};
+    if (isWarden) {
+      filter = {
+        $or: [
+          { status: 'Active' },
+          { status: { $in: ['Pending Approval', 'Pending Edit', 'Pending Deletion', 'Rejected'] }, createdBy: req.warden._id }
+        ]
+      };
+    }
+    const templates = await NoticeTemplate.find(filter).sort({ createdAt: -1 });
+    res.json({ success: true, templates });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to fetch templates' });
+  }
+};
+
+const createNoticeTemplate = async (req, res) => {
+  try {
+    const { name, title, message } = req.body;
+    if (!name) return res.status(400).json({ success: false, message: 'Template name required' });
+    const existing = await NoticeTemplate.findOne({ name });
+    if (existing) return res.status(400).json({ success: false, message: 'Template already exists' });
+    
+    const isWarden = !!req.warden;
+    const templateData = { name, title, message };
+    
+    if (isWarden) {
+      templateData.status = 'Pending Approval';
+      templateData.pendingAction = 'Create';
+      templateData.createdBy = req.warden._id;
+    }
+    
+    const template = await NoticeTemplate.create(templateData);
+    res.json({ success: true, template, message: isWarden ? 'Template sent for admin approval' : 'Template created' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to create template' });
+  }
+};
+
+const updateNoticeTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, title, message } = req.body;
+    
+    const template = await NoticeTemplate.findById(id);
+    if (!template) return res.status(404).json({ success: false, message: 'Template not found' });
+    
+    const isWarden = !!req.warden;
+    if (isWarden) {
+      template.status = 'Pending Edit';
+      template.pendingAction = 'Edit';
+      template.pendingData = { name, title, message };
+      await template.save();
+      return res.json({ success: true, template, message: 'Template edit sent for admin approval' });
+    }
+    
+    template.name = name;
+    template.title = title;
+    template.message = message;
+    await template.save();
+    res.json({ success: true, template, message: 'Template updated' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to update template' });
+  }
+};
+
+const deleteNoticeTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const template = await NoticeTemplate.findById(id);
+    if (!template) return res.status(404).json({ success: false, message: 'Template not found' });
+
+    const isWarden = !!req.warden;
+    if (isWarden) {
+      template.status = 'Pending Deletion';
+      template.pendingAction = 'Delete';
+      await template.save();
+      return res.json({ success: true, template, message: 'Template deletion sent for admin approval' });
+    }
+
+    await NoticeTemplate.findByIdAndDelete(id);
+    res.json({ success: true, message: 'Template deleted' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Failed to delete template' });
+  }
+};
+
+const approveNoticeTemplateAction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const template = await NoticeTemplate.findById(id);
+    if (!template) return res.status(404).json({ success: false, message: 'Template not found' });
+
+    if (template.pendingAction === 'Create') {
+      template.status = 'Active';
+    } else if (template.pendingAction === 'Edit') {
+      template.name = template.pendingData.name || template.name;
+      template.title = template.pendingData.title || template.title;
+      template.message = template.pendingData.message || template.message;
+      template.status = 'Active';
+    } else if (template.pendingAction === 'Delete') {
+      await NoticeTemplate.findByIdAndDelete(id);
+      return res.json({ success: true, message: 'Template deletion approved' });
+    }
+    
+    template.pendingAction = 'None';
+    template.pendingData = {};
+    await template.save();
+    
+    res.json({ success: true, template, message: 'Action approved successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error while approving action', error: error.message });
+  }
+};
+
+const rejectNoticeTemplateAction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const template = await NoticeTemplate.findById(id);
+    if (!template) return res.status(404).json({ success: false, message: 'Template not found' });
+
+    if (template.pendingAction === 'Create') {
+      template.status = 'Rejected';
+    } else {
+      template.status = 'Active'; // Revert to active for edits/deletes
+    }
+    
+    template.pendingAction = 'None';
+    template.pendingData = {};
+    await template.save();
+
+    res.json({ success: true, template, message: 'Action rejected successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error while rejecting action', error: error.message });
+  }
+};
+
+const approveNoticeAction = async (req, res) => {
+  try {
+    const { noticeId } = req.params;
+    const notice = await Notice.findById(noticeId);
+    if (!notice) return res.status(404).json({ success: false, message: 'Notice not found' });
+
+    if (notice.pendingAction === 'Delete') {
+      await Notice.findByIdAndDelete(noticeId);
+      return res.json({ success: true, message: 'Notice deletion approved' });
+    }
+    if (notice.pendingAction === 'Edit' && notice.pendingData) {
+      Object.assign(notice, notice.pendingData);
+      // Wait to save until the end
+    }
+
+    const now = new Date();
+    const isIssued = notice.issueDate <= now;
+
+    if (notice.pendingAction === 'Create' && isIssued) {
+      const recipientType = notice.recipientType;
+      const individualRecipient = notice.individualRecipient;
+      const title = notice.title;
+      const message = notice.message;
+      const subject = `KGF Hostel: ${title}`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #333;">${title}</h2>
+          <p style="white-space: pre-wrap;">${message}</p>
+          <hr style="margin: 20px 0; border: none; border-top: 1px solid #ccc;" />
+          <p style="color: #666; font-size: 12px;">This is an automated message from KGF Hostel Management.</p>
+        </div>
+      `;
+
+      let recipients = [];
+      let studentRecipients = [];
+
+      if (recipientType === "All") {
+        const students = await Student.find({}, "_id email");
+        const parents = await Parent.find({}, "email");
+        const wardens = await Warden.find({}, "email");
+        const staffList = await Staff.find({}, "email");
+
+        studentRecipients = students;
+
+        recipients = [
+          ...students.map(s => s.email),
+          ...parents.map(p => p.email),
+          ...wardens.map(w => w.email),
+          ...staffList.map(s => s.email)
+        ].filter(Boolean);
+      } else if (recipientType === "Student") {
+        if (!individualRecipient) {
+          const students = await Student.find({ studentId: { $regex: /^STU/ } }, "_id email");
+          studentRecipients = students;
+          recipients = students.map(s => s.email).filter(Boolean);
+        } else {
+          const student = await Student.findOne({ studentId: individualRecipient }, "_id email");
+          if (student?.email) recipients.push(student.email);
+          if (student) studentRecipients.push(student);
+        }
+      } else if (recipientType === "Parent") {
+        if (!individualRecipient) {
+          const parents = await Parent.find({}, "email");
+          recipients = parents.map(p => p.email).filter(Boolean);
+        } else {
+          const parent = await Parent.findOne({ studentId: individualRecipient });
+          if (parent?.email) recipients.push(parent.email);
+        }
+      } else if (recipientType === "Warden") {
+        if (!individualRecipient) {
+          const wardens = await Warden.find({}, "email");
+          recipients = wardens.map(w => w.email).filter(Boolean);
+        } else {
+          const warden = await Warden.findOne({ wardenId: individualRecipient });
+          if (warden?.email) recipients.push(warden.email);
+        }
+      } else if (recipientType === "Worker") {
+        if (!individualRecipient) {
+          const staffList = await Student.find({ studentId: { $regex: /^STUW/ } }, "_id email");
+          studentRecipients = staffList;
+          recipients = staffList.map(s => s.email).filter(Boolean);
+        } else {
+          const staff = await Student.findOne({ studentId: individualRecipient }, "_id email");
+          if (staff?.email) recipients.push(staff.email);
+          if (staff) studentRecipients.push(staff);
+        }
+      }
+
+      if (recipients.length > 0) {
+        const { default: sendEmail } = await import('../../utils/sendEmail.js');
+        await Promise.all(
+          recipients.map(email =>
+            sendEmail({ to: email, subject, html: emailHtml, useKGFLayout: true })
+              .catch(err => console.error(`Failed to send notice email to ${email}:`, err))
+          )
+        );
+      }
+
+      if (studentRecipients.length > 0) {
+        try {
+          await sendBulkNotifications(studentRecipients, `New notice: ${title}`, "notice", "/notices");
+        } catch (err) {
+          console.error("Failed to send push notifications:", err);
+        }
+      }
+    }
+
+    if (notice.pendingAction === 'Edit' && notice.pendingData) {
+      notice.title = notice.pendingData.title || notice.title;
+      notice.message = notice.pendingData.message || notice.message;
+      notice.issueDate = notice.pendingData.issueDate || notice.issueDate;
+      notice.expiryDate = notice.pendingData.expiryDate || notice.expiryDate;
+      notice.recipientType = notice.pendingData.recipientType || notice.recipientType;
+      notice.individualRecipient = notice.pendingData.individualRecipient || notice.individualRecipient;
+      notice.template = notice.pendingData.template || notice.template;
+    }
+    
+    notice.status = notice.issueDate <= now ? 'Active' : 'Scheduled';
+    notice.pendingAction = 'None';
+    notice.pendingData = {};
+    
+    await notice.save();
+
+    res.json({ 
+      success: true, 
+      notice: {
+        id: notice._id,
+        title: notice.title,
+        message: notice.message,
+        date: notice.issueDate.toISOString().split('T')[0],
+        issueDate: notice.issueDate,
+        recipientType: notice.recipientType,
+        recipient: notice.recipientType === "All" ? "All Users" : (notice.individualRecipient ? `${notice.recipientType} (${notice.individualRecipient})` : `${notice.recipientType}s`),
+        individualRecipient: notice.individualRecipient,
+        template: notice.template,
+        status: notice.status,
+        createdAt: notice.createdAt
+      },
+      message: 'Notice approved successfully' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error while approving notice', error: error.message });
+  }
+};
+
+const rejectNoticeAction = async (req, res) => {
+  try {
+    const { noticeId } = req.params;
+    const { rejectionReason } = req.body;
+    
+    const notice = await Notice.findById(noticeId);
+    if (!notice) return res.status(404).json({ success: false, message: 'Notice not found' });
+
+    if (notice.pendingAction === 'Create') {
+      notice.status = 'Rejected';
+      notice.rejectionReason = rejectionReason || '';
+    } else {
+      notice.status = notice.issueDate <= new Date() ? 'Active' : 'Scheduled';
+      notice.rejectionReason = rejectionReason || '';
+    }
+    
+    notice.pendingAction = 'None';
+    notice.pendingData = {};
+    await notice.save();
+
+    res.json({ 
+      success: true, 
+      notice: {
+        id: notice._id,
+        title: notice.title,
+        message: notice.message,
+        date: notice.issueDate.toISOString().split('T')[0],
+        issueDate: notice.issueDate,
+        recipientType: notice.recipientType,
+        recipient: notice.recipientType === "All" ? "All Users" : (notice.individualRecipient ? `${notice.recipientType} (${notice.individualRecipient})` : `${notice.recipientType}s`),
+        individualRecipient: notice.individualRecipient,
+        template: notice.template,
+        status: notice.status,
+        createdAt: notice.createdAt
+      },
+      message: 'Notice rejected successfully' 
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Server error while rejecting notice', error: error.message });
+  }
+};
+
 export {
   addInventoryItem,
   getInventoryItems,
@@ -2287,5 +2851,12 @@ export {
   bulkGenerateQRCodes,
   getAvailableRoomsFloors,
   bulkDeleteInventory,
-
+  approveNoticeAction,
+  rejectNoticeAction,
+  getNoticeTemplates,
+  createNoticeTemplate,
+  updateNoticeTemplate,
+  deleteNoticeTemplate,
+  approveNoticeTemplateAction,
+  rejectNoticeTemplateAction
 }

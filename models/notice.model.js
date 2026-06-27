@@ -8,10 +8,13 @@ const noticeSchema = new mongoose.Schema({
   issueDate: { type: Date, required: true },
   recipientType: {
     type: String,
-    enum: ['All', 'Student', 'Parent', 'Warden'],
+    enum: ['All', 'Student', 'Parent', 'Warden', 'Worker'],
     required: true,
   },
+  expiryDate: { type: Date },
+   isIssued: { type: Boolean, default: false },
    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+   creatorName: { type: String },
   readBy: [{
     studentId: {
       type: String,
@@ -31,8 +34,25 @@ const noticeSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Active', 'Archived'],
+    enum: ['Active', 'Scheduled', 'Archived', 'Pending Approval', 'Pending Edit', 'Pending Deletion', 'Rejected'],
     default: 'Active'
+  },
+  pendingAction: {
+    type: String,
+    enum: ['Create', 'Edit', 'Delete', 'None'],
+    default: 'None'
+  },
+  pendingActionBy: {
+    type: String,
+    default: ''
+  },
+  rejectionReason: {
+    type: String,
+    default: ''
+  },
+  pendingData: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
   }
 },
 

@@ -52,6 +52,7 @@ const verifyWardenToken = (req, res, next) => {
 
     // Attach the decoded user to the request for use in controllers
     req.user = decoded;
+    req.warden = decoded;
 
     next(); // Proceed to the route/controller
   } catch (err) {

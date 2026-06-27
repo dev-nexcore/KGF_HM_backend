@@ -124,6 +124,14 @@ import {
   updateReplacementRequestStatus,
   applyReplacementRequest,
   bulkDeleteInventory,
+  approveNoticeAction,
+  rejectNoticeAction,
+  getNoticeTemplates,
+  createNoticeTemplate,
+  updateNoticeTemplate,
+  deleteNoticeTemplate,
+  approveNoticeTemplateAction,
+  rejectNoticeTemplateAction
 } from "../controllers/admin/notice_inventory.controller.js";
 
 import{
@@ -285,16 +293,19 @@ router.get('/audit-logs/export/csv', exportAuditLogs);
 // ====================== WARDEN REQUISITION ROUTES ======================
 router.get('/requisitions/stats', verifyAdminToken, getRequisitionStats);
 router.get('/requisitions/:id', verifyAdminToken, getRequisitionById);
-router.get('/requisitions', verifyAdminToken, getAllRequisitions);
-router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus);
+router.get('/inventory/available-beds', verifyAdminToken, getAvailableBeds);
+router.get('/inventory/available-rooms', verifyAdminToken, getAvailableRooms);
 
-// ====================== ATTENDANCE ROUTES ======================
+// Admin approval routes for notices
+router.put('/notices/:noticeId/approve', verifyAdminToken, approveNoticeAction);
+router.put('/notices/:noticeId/reject', verifyAdminToken, rejectNoticeAction);
+
+// ====================== HOLIDAY ROUTES ======================
 router.get('/attendance/logs', getAttendanceLogs);
 router.get('/attendance/stats', getAttendanceStats);
 router.post('/attendance/manual', verifyAdminToken, markManualAttendance);
 router.get('/attendance/biometric-status', getBiometricDeviceStatus);
 
-// ====================== HOLIDAY ROUTES ======================
 router.get('/holidays', getHolidays);
 router.post('/holidays', verifyAdminToken, addHoliday);
 router.delete('/holidays/:id', verifyAdminToken, deleteHoliday);
@@ -334,6 +345,13 @@ router.get('/notices/:noticeId', verifyAdminToken, getNoticeById);
 router.put('/notices/:noticeId', verifyAdminToken, updateNotice);
 router.delete('/notices/:noticeId', verifyAdminToken, deleteNotice);
 router.patch('/notices/:noticeId/read-status', verifyAdminToken, updateNoticeReadStatus);
+
+router.get('/notice-templates', verifyAdminToken, getNoticeTemplates);
+router.post('/notice-templates', verifyAdminToken, createNoticeTemplate);
+router.put('/notice-templates/:id', verifyAdminToken, updateNoticeTemplate);
+router.delete('/notice-templates/:id', verifyAdminToken, deleteNoticeTemplate);
+router.patch('/notice-templates/:id/approve', verifyAdminToken, approveNoticeTemplateAction);
+router.patch('/notice-templates/:id/reject', verifyAdminToken, rejectNoticeTemplateAction);
 
 // ====================== PUBLIC ROUTES ======================
 // Public inventory routes

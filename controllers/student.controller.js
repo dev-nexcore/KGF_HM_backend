@@ -2994,7 +2994,34 @@ const getCurrentFeesStatus = async (req, res) => {
 
 const getNotices = async (req, res) => {
   try {
-    const noticesList = await Notice.find().sort({ issueDate: -1 });
+    const studentId = req.studentId;
+    
+    // Determine if the user is a worker or regular student
+    let isWorker = false;
+    if (studentId && studentId.startsWith('STUW')) {
+      isWorker = true;
+    }
+    
+    const allowedRecipientTypes = ["All"];
+    if (isWorker) {
+      allowedRecipientTypes.push("Worker");
+    } else {
+      allowedRecipientTypes.push("Student");
+    }
+
+    const filter = {
+      status: { $in: ['Active', 'Scheduled'] },
+      issueDate: { $lte: new Date() },
+      recipientType: { $in: allowedRecipientTypes },
+      $or: [
+        { individualRecipient: "" },
+        { individualRecipient: null },
+        { individualRecipient: { $exists: false } },
+        { individualRecipient: studentId }
+      ]
+    };
+
+    const noticesList = await Notice.find(filter).sort({ issueDate: -1 });
 
     const noticesData = noticesList.map(notice => ({
       issueDate: notice.issueDate ? new Date(notice.issueDate).toISOString() : null,
@@ -3002,7 +3029,7 @@ const getNotices = async (req, res) => {
       message: notice.message || "No Description",
     }));
 
-    return res.json({ notices: noticesData }); // ✅ FIXED
+    return res.json({ notices: noticesData });
   } catch (err) {
     console.error("Notices fetch error:", err);
     return res.status(500).json({ message: "Server error while fetching notices data." });

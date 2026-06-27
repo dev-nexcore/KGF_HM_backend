@@ -1357,8 +1357,20 @@ const notices = async (req, res) => {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // Fetch all notices (you can add filtering logic if needed)
-    const noticesList = await Notice.find()
+    const filter = {
+      status: { $in: ['Active', 'Scheduled'] },
+      issueDate: { $lte: new Date() },
+      recipientType: { $in: ["All", "Parent", "Student"] },
+      $or: [
+        { individualRecipient: "" },
+        { individualRecipient: null },
+        { individualRecipient: { $exists: false } },
+        { individualRecipient: studentId }
+      ]
+    };
+
+    // Fetch all notices with filter
+    const noticesList = await Notice.find(filter)
       .sort({ issueDate: -1 }) // Sort by issue date, newest first
       .lean(); // Use lean() for better performance
 

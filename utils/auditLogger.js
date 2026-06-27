@@ -52,6 +52,8 @@ const AuditActionTypes = {
   COMPLAINT_RESOLVED: 'Complaint Resolved',
   COMPLAINT_UPDATED: 'Complaint Updated',
   NOTICE_ISSUED: 'Notice Issued',
+  NOTICE_UPDATED: 'Notice Updated',
+  NOTICE_DELETED: 'Notice Deleted',
   INVENTORY_ADDED: 'Inventory Added',
   ADMIN_LOGIN: 'Admin Login',
   ADMIN_LOGOUT: 'Admin Logout',

@@ -45,9 +45,9 @@ router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
-router.get("/notices", getNotices);
 
 // Routes that work for both students and parents
+router.get("/notices", verifyStudentOrParentToken, getNotices);
 router.get('/attendance-log/:studentId', verifyStudentOrParentToken, getAttendanceLog);
 router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile);
 router.get("/profile", verifyStudentOrParentToken, getStudentProfile);
