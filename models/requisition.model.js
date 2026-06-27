@@ -46,6 +46,16 @@ const requisitionSchema = new mongoose.Schema(
         path: { type: String },
         uploadedAt: { type: Date },
       },
+      studentIdCard: {
+        filename: { type: String },
+        path: { type: String },
+        uploadedAt: { type: Date },
+      },
+      feesReceipt: {
+        filename: { type: String },
+        path: { type: String },
+        uploadedAt: { type: Date },
+      },
     },
     
     approvedBy: {

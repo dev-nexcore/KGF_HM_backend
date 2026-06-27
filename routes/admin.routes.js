@@ -291,8 +291,10 @@ router.get('/audit-logs/:logId', getAuditLogDetails);
 router.get('/audit-logs/export/csv', exportAuditLogs);
 
 // ====================== WARDEN REQUISITION ROUTES ======================
+router.get('/requisitions', verifyAdminToken, getAllRequisitions);
 router.get('/requisitions/stats', verifyAdminToken, getRequisitionStats);
 router.get('/requisitions/:id', verifyAdminToken, getRequisitionById);
+router.put('/requisitions/:id/status', verifyAdminToken, updateRequisitionStatus);
 router.get('/inventory/available-beds', verifyAdminToken, getAvailableBeds);
 router.get('/inventory/available-rooms', verifyAdminToken, getAvailableRooms);
 

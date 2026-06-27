@@ -409,7 +409,47 @@ const getStudentListForWarden = async (req, res) => {
       };
     });
 
-    res.status(200).json({ success: true, students: transformedStudents });
+    const pendingRequisitions = await Requisition.find({
+      requisitionType: { $in: ['student', 'worker'] },
+      status: { $in: ['pending', 'rejected'] }
+    });
+
+    const pendingStudents = pendingRequisitions.map(req => {
+      const data = req.data || {};
+      return {
+        _id: req._id,
+        id: req._id,
+        studentId: "Pending",
+        name: `${data.firstName || 'Unknown'} ${data.lastName || ''}`.trim(),
+        firstName: data.firstName || "Unknown",
+        lastName: data.lastName || "",
+        contact: data.contactNumber || "N/A",
+        contactNumber: data.contactNumber || "N/A",
+        email: data.email || "N/A",
+        room: data.roomBedNumber && data.roomBedNumber !== "Not Assigned" ? data.roomBedNumber : "Pending",
+        roomBedNumber: data.roomBedNumber && data.roomBedNumber !== "Not Assigned" ? data.roomBedNumber : null,
+        roomDetails: { roomNo: data.roomBedNumber || "Pending" },
+        roomType: data.roomType || "",
+        emergencyContactNumber: data.emergencyContactNumber || "",
+        emergencyContactName: data.emergencyContactName || "",
+        admissionDate: data.admissionDate || "",
+        feeStatus: data.feeStatus || "Unpaid",
+        monthlyFee: data.monthlyFee || "-",
+        dues: 0,
+        documents: req.documents || {},
+        hasCollegeId: data.hasCollegeId || false,
+        isWorking: req.requisitionType === 'worker',
+        isAddedToBiometric: false,
+        relation: data.relation || "",
+        isPendingApproval: req.status === 'pending',
+        isRejected: req.status === 'rejected',
+        rejectReason: req.adminNotes || "No reason provided",
+        requisitionId: req._id
+      };
+    });
+
+    const allStudents = [...transformedStudents, ...pendingStudents];
+    res.status(200).json({ success: true, students: allStudents });
   } catch (error) {
     console.error("Error fetching students for warden:", error);
     res.status(500).json({ success: false, message: "Error fetching students." });
@@ -815,7 +855,13 @@ const updateEmergencyContact = async (req, res) => {
 const getStudentDocument = async (req, res) => {
   try {
     const { studentId, docType } = req.params;
-    const student = await Student.findOne({ studentId });
+    let student = await Student.findOne({ studentId });
+    
+    // If not found in Student, it might be a pending requisition where studentId is the Requisition _id
+    if (!student && studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      student = await Requisition.findById(studentId);
+    }
+    
     if (!student?.documents?.[docType]?.path) return res.status(404).json({ message: "Not found" });
     res.sendFile(path.resolve(student.documents[docType].path));
   } catch (error) {
@@ -932,16 +978,75 @@ const getStudentsWithoutParents = async (req, res) => {
 
 const updateStudentWarden = async (req, res) => {
   try {
-    const updated = await Student.findOneAndUpdate({ studentId: req.params.studentId }, req.body, { new: true });
-    res.status(200).json({ success: true, student: updated });
+    const { studentId } = req.params;
+    let newDocuments = {};
+    if (req.files) {
+      Object.keys(req.files).forEach(k => {
+        newDocuments[k] = { filename: req.files[k][0].filename, path: req.files[k][0].path, uploadedAt: new Date() };
+      });
+    }
+
+    if (studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      // It's a pending/rejected Requisition
+      const reqq = await Requisition.findById(studentId);
+      if (reqq) {
+        reqq.data = { ...reqq.data, ...req.body };
+        if (Object.keys(newDocuments).length > 0) {
+          reqq.documents = { ...reqq.documents, ...newDocuments };
+        }
+        reqq.status = 'pending'; // Reset to pending if it was rejected
+        await reqq.save();
+        return res.status(200).json({ success: true, student: reqq });
+      }
+    }
+
+    // Otherwise, it's an approved Student
+    const student = await Student.findOne({ studentId });
+    if (student) {
+      Object.assign(student, req.body);
+      if (Object.keys(newDocuments).length > 0) {
+        student.documents = { ...student.documents, ...newDocuments };
+      }
+      await student.save();
+      return res.status(200).json({ success: true, student });
+    }
+
+    res.status(404).json({ success: false, message: "Student not found" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
   }
 };
 
+const getBedOccupancyStatus = async (req, res) => {
+  try {
+    const totalBeds = await Inventory.countDocuments({ 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] 
+    });
+
+    const occupiedBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });
+
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
+
+    return res.json({
+      totalBeds,
+      occupiedBeds,
+      availableBeds
+    });
+  } catch (err) {
+    console.error("Error fetching bed occupancy data:", err);
+    return res.status(500).json({ message: "Error fetching data." });
+  }
+};
+
 const getAvailableBedsInventory = async (req, res) => {
   try {
-    const beds = await Inventory.find({ status: 'Available' });
+    const beds = await Inventory.find({
+      status: 'Available',
+      $or: [
+        { category: { $in: ['Furniture', 'BEDS'] } },
+        { itemName: { $regex: /Bed|B\d+/i } }
+      ]
+    });
     res.status(200).json({ success: true, availableBeds: beds });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
@@ -1121,6 +1226,7 @@ export {
   getStudentsWithoutParents,
   updateStudentWarden,
   getAvailableBedsInventory,
+  getBedOccupancyStatus,
   getAvailableRoomsInventory,
   getInventoryItemById,
   getStudentInvoicesForWarden,

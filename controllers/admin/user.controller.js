@@ -1238,6 +1238,7 @@ import { Warden } from '../../models/warden.model.js';
 import { Staff } from '../../models/staff.model.js';
 import { Inventory } from '../../models/inventory.model.js';
 import { StudentInvoice } from '../../models/studentInvoice.model.js';
+import { Requisition } from '../../models/requisition.model.js';
 import fs from 'fs';
 import path from 'path'; // ✅ ADD THIS — getStudentDocument ke liye zaroori hai
 
@@ -1696,11 +1697,47 @@ const getAllStudents = async (req, res) => {
       };
     });
 
+    const pendingRequisitions = await Requisition.find({
+      requisitionType: { $in: ['student', 'worker'] },
+      status: 'pending'
+    });
+
+    const pendingStudents = pendingRequisitions.map(req => {
+      const data = req.data || {};
+      return {
+        _id: req._id,
+        id: req._id, // unique ID for frontend list mapping
+        studentId: "Pending",
+        name: `${data.firstName || 'Unknown'} ${data.lastName || ''}`.trim(),
+        firstName: data.firstName || "Unknown",
+        lastName: data.lastName || "",
+        contactNumber: data.contactNumber || "N/A",
+        email: data.email || "N/A",
+        roomBedNumber: data.roomBedNumber && data.roomBedNumber !== "Not Assigned" ? data.roomBedNumber : "Pending",
+        roomType: data.roomType || "",
+        emergencyContactNumber: data.emergencyContactNumber || "",
+        emergencyContactName: data.emergencyContactName || "",
+        admissionDate: data.admissionDate || "",
+        feeStatus: data.feeStatus || "Unpaid",
+        dues: 0,
+        documents: req.documents || {},
+        hasCollegeId: data.hasCollegeId || false,
+        isWorking: req.requisitionType === 'worker',
+        isAddedToBiometric: false,
+        isPendingApproval: true,
+        requisitionId: req._id,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt
+      };
+    });
+
+    const allStudents = [...transformedStudents, ...pendingStudents];
+
     return res.json({
       success: true,
       message: "Students fetched successfully",
-      students: transformedStudents,
-      count: transformedStudents.length
+      students: allStudents,
+      count: allStudents.length
     });
 
   } catch (err) {
@@ -1958,12 +1995,16 @@ const getStudentById = async (req, res) => {
       });
     }
 
-    const student = await Student.findOne({ studentId });
+    let student = await Student.findOne({ studentId });
+
+    if (!student && studentId.match(/^[0-9a-fA-F]{24}$/)) {
+      student = await Requisition.findById(studentId);
+    }
 
     if (!student) {
       return res.status(404).json({
         success: false,
-        message: "Student not found",
+        message: "Student/Requisition not found",
       });
     }
 

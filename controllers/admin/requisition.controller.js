@@ -148,16 +148,17 @@ export const updateRequisitionStatus = async (req, res) => {
         const prefix = isWorking ? "STUW" : "STU";
         
         // Generate ID
-        const idRegex = new RegExp(`^${prefix}`);
-        const lastStudent = await Student.findOne({ studentId: idRegex }).sort({ studentId: -1 }).select("studentId");
-        let nextId = `${prefix}001`;
-        if (lastStudent && lastStudent.studentId) {
-          const match = lastStudent.studentId.match(/\d+/);
+        const idRegex = new RegExp(`^${prefix}-`);
+        const studentsWithPrefix = await Student.find({ studentId: idRegex }, { studentId: 1 });
+        let maxNumber = 0;
+        studentsWithPrefix.forEach((student) => {
+          const match = student.studentId.match(new RegExp(`^${prefix}-(\\d+)`));
           if (match) {
-            const lastNumber = parseInt(match[0]);
-            nextId = `${prefix}${String(lastNumber + 1).padStart(3, "0")}`;
+            const number = parseInt(match[1], 10);
+            if (number > maxNumber) maxNumber = number;
           }
-        }
+        });
+        const nextId = `${prefix}-${String(maxNumber + 1).padStart(3, "0")}`;
         
         password = `${data.firstName.toLowerCase().replace(/\s+/g, '')}${nextId}`;
         

@@ -2740,12 +2740,12 @@ const approveRequisition = async (req, res) => {
     
     if (requisitionType === 'student') {
       // Auto-generate Student ID
-      const lastStudent = await Student.findOne().sort({ studentId: -1 }).select("studentId");
-      let newStudentId = "STU001";
+      const lastStudent = await Student.findOne({ studentId: /^STU-/ }).sort({ studentId: -1 }).select("studentId");
+      let newStudentId = "STU-001";
       if (lastStudent && lastStudent.studentId) {
-        const lastIdNumber = parseInt(lastStudent.studentId.replace("STU", ""));
+        const lastIdNumber = parseInt(lastStudent.studentId.replace("STU-", ""));
         const nextIdNumber = lastIdNumber + 1;
-        newStudentId = `STU${String(nextIdNumber).padStart(3, "0")}`;
+        newStudentId = `STU-${String(nextIdNumber).padStart(3, "0")}`;
       }
       
       createdEntity = new Student({

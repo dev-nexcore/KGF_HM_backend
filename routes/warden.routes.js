@@ -44,6 +44,7 @@ import {
   getStudentsWithoutParents,
   updateStudentWarden,
   getAvailableBedsInventory,
+  getBedOccupancyStatus,
   getAvailableRoomsInventory,
   getInventoryItemById,
   getStudentInvoicesForWarden,
@@ -110,6 +111,9 @@ router.get("/inventory/available-beds", verifyWardenToken, getAvailableBedsInven
 router.get("/inventory/available-rooms", verifyWardenToken, getAvailableRoomsInventory);
 router.get("/inventory/:id", verifyWardenToken, getInventoryItemById);
 
+// Bed occupancy status
+router.get("/bed-occupancy-status", verifyWardenToken, getBedOccupancyStatus);
+
 
 // Invoices for Warden
 router.get("/invoices/student", verifyWardenToken, getStudentInvoicesForWarden);
@@ -148,12 +152,12 @@ router.put('/emergency-contact/:studentId', updateEmergencyContact);
 
 
 // Student Intern Registration and Management
-router.post("/register-worker", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerIntern);
+router.post("/register-worker", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }, { name: 'studentIdCard' }, { name: 'feesReceipt' }]), registerIntern);
 router.get("/workers", getAllInterns);
 
 
 // Student Registration
-router.post("/register-student", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerStudent);
+router.post("/register-student", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }, { name: 'studentIdCard' }, { name: 'feesReceipt' }]), registerStudent);
 
 
 // Parent Registration and Management
