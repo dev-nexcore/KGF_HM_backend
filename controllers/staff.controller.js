@@ -1,6 +1,7 @@
 // controllers/staff.controller.js
 
 import { Staff } from "../models/staff.model.js";
+import { emitAddEmployee } from '../socketManager.js';
 import { Requisition } from "../models/requisition.model.js";
 import { Warden } from "../models/warden.model.js";
 import sendEmail from '../utils/sendEmail.js';
@@ -107,14 +108,26 @@ export const updateStaff =
 
     try {
 
+      const updateData = { ...req.body };
+      
+      if (req.files?.['aadharCard']) {
+        updateData.aadharCard = req.files['aadharCard'][0].path.replace(/\\/g, '/');
+      }
+      if (req.files?.['panCard']) {
+        updateData.panCard = req.files['panCard'][0].path.replace(/\\/g, '/');
+      }
+
       const updatedStaff =
         await Staff.findByIdAndUpdate(
           req.params.id,
-          req.body,
+          updateData,
           {
             new: true,
           }
         );
+
+      // Emit to biometric agent to update name in device if online
+      emitAddEmployee(updatedStaff);
 
       return res.json({
         success: true,

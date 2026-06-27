@@ -35,6 +35,10 @@ const wardenSchema = new mongoose.Schema({
   profilePhoto: {
     type: String, // File path or filename
   },
+  isAddedToBiometric: {
+    type: Boolean,
+    default: false
+  },
   attendanceLog: [
     {
       date: { type: Date, required: true },
@@ -53,6 +57,18 @@ const wardenSchema = new mongoose.Schema({
   },
   otpCode: String,
   otpExpires: Date,
+  isAddedToBiometric: {
+    type: Boolean,
+    default: false
+  },
+  aadharCard: {
+    type: String,
+    default: null,
+  },
+  panCard: {
+    type: String,
+    default: null,
+  }
 }, { timestamps: true });
 
 //  Password Hash Middleware

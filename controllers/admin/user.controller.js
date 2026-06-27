@@ -1,4 +1,5 @@
 
+
 // import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
 // // configure SMTP transporter
@@ -801,6 +802,8 @@
 
 const registerStaff = async (req, res) => {
   const { firstName, lastName, email, contactNumber, designation, shiftStart, shiftEnd, salary } = req.body;
+  const aadharCard = req.files?.['aadharCard'] ? req.files['aadharCard'][0].path.replace(/\\/g, '/') : null;
+  const panCard = req.files?.['panCard'] ? req.files['panCard'][0].path.replace(/\\/g, '/') : null;
 
   try {
     const existingStaff = await Staff.findOne({ email });
@@ -823,10 +826,19 @@ const registerStaff = async (req, res) => {
       shiftEnd,
       salary,
       staffId,
-      password
+      password,
+      aadharCard,
+      panCard
     });
 
     await newStaff.save();
+
+    // Add Staff to Biometric Device
+    emitAddEmployee({
+      staffId,
+      firstName,
+      lastName
+    });
 
     return res.json({
       success: true,
@@ -1545,6 +1557,8 @@ The OTP will be valid for 5 minutes each time you request it.
 
 const registerWarden = async (req, res) => {
   const { firstName, lastName, email, contactNumber, salary } = req.body;
+  const aadharCard = req.files?.['aadharCard'] ? req.files['aadharCard'][0].path.replace(/\\/g, '/') : null;
+  const panCard = req.files?.['panCard'] ? req.files['panCard'][0].path.replace(/\\/g, '/') : null;
 
   try {
     const existingWarden = await Warden.findOne({ email });
@@ -1565,7 +1579,7 @@ const registerWarden = async (req, res) => {
     const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
     const wardenPassword = `${cleanName}${lastName}`;
 
-    const newWarden = new Warden({ firstName, lastName, email, wardenId: newWardenId, contactNumber, salary, password: wardenPassword });
+    const newWarden = new Warden({ firstName, lastName, email, wardenId: newWardenId, contactNumber, salary, password: wardenPassword, aadharCard, panCard });
     await newWarden.save();
 
     // Add Warden to Biometric Device
@@ -1670,6 +1684,7 @@ const getAllStudents = async (req, res) => {
         emergencyContactNumber: student.emergencyContactNumber,
         hasCollegeId: student.hasCollegeId,
         isWorking: student.isWorking,
+        isAddedToBiometric: student.isAddedToBiometric,
         documents: {
           aadharCard: student.documents?.aadharCard || null,
           panCard: student.documents?.panCard || null,
@@ -1854,6 +1869,9 @@ const updateStudent = async (req, res) => {
         isWorking
       }
     });
+
+    // Emit to biometric agent to update name in device if online
+    emitAddEmployee(updatedStudent);
 
     return res.json({ message: 'Student updated successfully.', student: updatedStudent });
 

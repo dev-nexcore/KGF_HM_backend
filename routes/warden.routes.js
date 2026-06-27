@@ -52,7 +52,7 @@ import {
   submitNoticeRequisition,
   submitInventoryReplacement
 } from "../controllers/warden.controller.js";
-import { upload } from "../middleware/upload.js";
+import { upload, uploadWardenDocuments } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
 import { getAttendanceLogs, getAttendanceStats } from "../controllers/admin/attendance.controller.js";
 import {
@@ -138,7 +138,7 @@ router.delete('/leave/:leaveId', verifyWardenToken, deleteLeaveRequest);
 router.get("/profile/:id", getWardenProfile);
 router.put("/profile/:id", upload.single("profilePhoto"), updateWardenProfile);
 router.get("/all", getAllWarden);
-router.put("/update/:id", updateWarden);
+router.put("/update/:id", uploadWardenDocuments, updateWarden);
 router.delete("/delete/:id", deleteWarden);
 
 

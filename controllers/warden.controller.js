@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { emitAddEmployee } from '../socketManager.js';
 import nodemailer from "nodemailer";
 import bcrypt from "bcrypt";
 import { Warden } from "../models/warden.model.js";
@@ -743,7 +744,19 @@ const getAllWarden = async (req, res) => {
 
 const updateWarden = async (req, res) => {
   try {
-    const warden = await Warden.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updateData = { ...req.body };
+    if (req.files?.['aadharCard']) {
+      updateData.aadharCard = req.files['aadharCard'][0].path.replace(/\\/g, '/');
+    }
+    if (req.files?.['panCard']) {
+      updateData.panCard = req.files['panCard'][0].path.replace(/\\/g, '/');
+    }
+
+    const warden = await Warden.findByIdAndUpdate(req.params.id, updateData, { new: true });
+    
+    // Emit to biometric agent to update name in device if online
+    emitAddEmployee(warden);
+
     res.status(200).json({ success: true, warden });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });

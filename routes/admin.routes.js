@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { verifyAdminToken } from '../middleware/auth.middleware.js';
 import { Inventory } from '../models/inventory.model.js';
-import { uploadStudentDocuments, uploadParentDocuments, uploadPaymentScreenshot } from '../middleware/upload.js';
+import { uploadStudentDocuments, uploadParentDocuments, uploadPaymentScreenshot, uploadStaffDocuments, uploadWardenDocuments } from '../middleware/upload.js';
 import { uploadBulk } from "../middleware/upload.js";
 // Import mein add karo:
 import { getStudentDocument } from "../controllers/admin/user.controller.js";
@@ -188,8 +188,8 @@ router.post(
   uploadParentDocuments,
   registerParent
 );
-router.post('/register-warden', registerWarden);
-router.post('/register-staff', registerStaff);
+router.post('/register-warden', uploadWardenDocuments, registerWarden);
+router.post('/register-staff', uploadStaffDocuments, registerStaff);
 router.get('/students', getAllStudents);
 router.get('/parents', getAllParents);
 router.get('/wardens', getAllWardens);

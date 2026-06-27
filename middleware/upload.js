@@ -213,6 +213,8 @@ const ensureUploadsDir = () => {
     "uploads/complaints/",
     "uploads/student-documents/",
     "uploads/parent-documents/",
+    "uploads/staff-documents/",
+    "uploads/warden-documents/",
     "uploads/bulk/",
     "uploads/payment-screenshots/",
   ];
@@ -238,6 +240,16 @@ const wardenStorage = multer.diskStorage({
       null,
       `warden_${Date.now()}${path.extname(file.originalname)}`
     );
+  },
+});
+
+// Warden documents storage
+const wardenDocumentStorage = multer.diskStorage({
+  destination: "uploads/warden-documents/",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.body.email || "temp"}-${file.fieldname}-${uniqueSuffix}${ext}`);
   },
 });
 
@@ -271,6 +283,16 @@ const studentDocumentStorage = multer.diskStorage({
         file.fieldname
       }-${uniqueSuffix}${ext}`
     );
+  },
+});
+
+// Staff documents storage
+const staffDocumentStorage = multer.diskStorage({
+  destination: "uploads/staff-documents/",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${req.body.email || "temp"}-${file.fieldname}-${uniqueSuffix}${ext}`);
   },
 });
 
@@ -426,6 +448,30 @@ export const uploadParent = multer({
     fileSize: 5 * 1024 * 1024,
   },
 });
+
+// Staff documents upload
+export const uploadStaffDocuments = multer({
+  storage: staffDocumentStorage,
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+}).fields([
+  { name: "aadharCard", maxCount: 1 },
+  { name: "panCard", maxCount: 1 },
+]);
+
+// Warden documents upload
+export const uploadWardenDocuments = multer({
+  storage: wardenDocumentStorage,
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+}).fields([
+  { name: "aadharCard", maxCount: 1 },
+  { name: "panCard", maxCount: 1 },
+]);
 
 // Student documents upload
 export const uploadStudentDocuments = multer({

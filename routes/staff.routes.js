@@ -10,6 +10,7 @@ import {
 } from "../controllers/staff.controller.js";
 
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
+import { uploadStaffDocuments } from "../middleware/upload.js";
 
 const router = express.Router();
 
@@ -28,6 +29,7 @@ router.get(
 // Update
 router.put(
   "/update/:id",
+  uploadStaffDocuments,
   updateStaff
 );
 

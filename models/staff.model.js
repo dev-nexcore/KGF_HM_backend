@@ -62,6 +62,22 @@ const staffSchema = new mongoose.Schema(
       default: null,
     },
 
+    aadharCard: {
+      type: String,
+      default: null,
+    },
+
+    panCard: {
+      type: String,
+      default: null,
+    },
+
+    isAddedToBiometric: {
+      type: Boolean,
+      default: false
+    },
+
+
     attendanceLog: [
       {
         date: {
@@ -95,6 +111,10 @@ const staffSchema = new mongoose.Schema(
     otpCode: String,
 
     otpExpires: Date,
+    isAddedToBiometric: {
+      type: Boolean,
+      default: false
+    }
   },
   {
     timestamps: true,

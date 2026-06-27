@@ -121,6 +121,34 @@ export const initSocket = (server) => {
       }
     });
 
+    socket.on('BIOMETRIC_ADD_SUCCESS', async (data) => {
+      try {
+        if (data && data.employeeCode) {
+          // Update student, staff, or warden based on employee code
+          await Student.updateOne({ studentId: data.employeeCode }, { $set: { isAddedToBiometric: true } });
+          await Staff.updateOne({ staffId: data.employeeCode }, { $set: { isAddedToBiometric: true } });
+          await Warden.updateOne({ wardenId: data.employeeCode }, { $set: { isAddedToBiometric: true } });
+          console.log(`✅ Biometric status updated for ${data.employeeCode}`);
+        }
+      } catch (error) {
+        console.error("Error updating biometric status:", error);
+      }
+    });
+
+    socket.on('SYNC_PENDING_EMPLOYEES', async (callback) => {
+      try {
+        const pendingStudents = await Student.find({ isAddedToBiometric: false }).lean();
+        const pendingStaff = await Staff.find({ isAddedToBiometric: false }).lean();
+        const pendingWardens = await Warden.find({ isAddedToBiometric: false }).lean();
+        if (callback) {
+          callback({ success: true, pendingStudents, pendingStaff, pendingWardens });
+        }
+      } catch (error) {
+        console.error("Error fetching pending employees:", error);
+        if (callback) callback({ success: false, error: error.message });
+      }
+    });
+
     socket.on('disconnect', () => {
       console.log(`❌ Local Agent disconnected: ${socket.id}`);
       agentStatus = 'Offline';

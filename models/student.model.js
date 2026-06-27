@@ -22,6 +22,7 @@ const studentSchema = new mongoose.Schema({
   emergencyContactNumber: { type: String },
   roomType: { type: String, default: "" },
   password: { type: String, required: true },
+  isAddedToBiometric: { type: Boolean, default: false },
   
   documents: {
     aadharCard: {
