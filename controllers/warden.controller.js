@@ -443,7 +443,7 @@ const getStudentListForWarden = async (req, res) => {
         relation: data.relation || "",
         isPendingApproval: req.status === 'pending',
         isRejected: req.status === 'rejected',
-        rejectReason: req.adminNotes || "No reason provided",
+        rejectReason: req.rejectionReason || "No reason provided",
         requisitionId: req._id
       };
     });
@@ -1112,7 +1112,36 @@ const getStudentInvoicesForWarden = async (req, res) => {
 
 const updateParentWarden = async (req, res) => {
   try {
-    const updated = await Parent.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const parent = await Parent.findById(req.params.id);
+    if (!parent) return res.status(404).json({ success: false, message: "Parent not found." });
+
+    const { firstName, lastName, email, relation, contactNumber } = req.body;
+    parent.firstName = firstName || parent.firstName;
+    parent.lastName = lastName || parent.lastName;
+    parent.email = email || parent.email;
+    parent.relation = relation || parent.relation;
+    parent.contactNumber = contactNumber || parent.contactNumber;
+
+    if (req.files) {
+      if (!parent.documents) parent.documents = {};
+      if (req.files.aadharCard && req.files.aadharCard.length > 0) {
+        parent.documents.aadharCard = {
+          filename: req.files.aadharCard[0].originalname,
+          path: req.files.aadharCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      if (req.files.panCard && req.files.panCard.length > 0) {
+        parent.documents.panCard = {
+          filename: req.files.panCard[0].originalname,
+          path: req.files.panCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      parent.markModified('documents');
+    }
+
+    const updated = await parent.save();
     res.status(200).json({ success: true, parent: updated });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
@@ -1131,7 +1160,39 @@ const deleteParentWarden = async (req, res) => {
 const getAllParents = async (req, res) => {
   try {
     const parents = await Parent.find().sort({ createdAt: -1 });
-    res.status(200).json({ success: true, parents });
+    const transformedParents = parents.map(p => ({
+      ...p.toObject(),
+      isPendingApproval: false,
+      isRejected: false
+    }));
+
+    const pendingRequisitions = await Requisition.find({
+      requisitionType: 'parent',
+      status: { $in: ['pending', 'rejected'] }
+    });
+
+    const pendingParents = pendingRequisitions.map(reqDoc => {
+      const req = reqDoc.toObject ? reqDoc.toObject() : reqDoc;
+      const data = req.data || {};
+      return {
+        _id: req._id,
+        id: req._id,
+        firstName: data.firstName || "Unknown",
+        lastName: data.lastName || "",
+        contactNumber: data.contactNumber || "N/A",
+        email: data.email || "N/A",
+        relation: data.relation || "",
+        studentId: data.studentId || "Unknown",
+        documents: req.documents || data.documents || {},
+        isPendingApproval: req.status === 'pending',
+        isRejected: req.status === 'rejected',
+        rejectReason: req.adminNotes || "No reason provided",
+        requisitionId: req._id
+      };
+    });
+
+    const allParents = [...transformedParents, ...pendingParents];
+    res.status(200).json({ success: true, parents: allParents });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
   }
@@ -1234,4 +1295,55 @@ export {
   deleteParentWarden,
   submitNoticeRequisition,
   submitInventoryReplacement
+};
+export const registerStaffWarden = async (req, res) => {
+  const { firstName, lastName, email, contactNumber, designation, shiftStart, shiftEnd, salary } = req.body;
+  const aadharCard = req.files?.['aadharCard'] ? req.files['aadharCard'][0].path.replace(/\\/g, '/') : null;
+  const panCard = req.files?.['panCard'] ? req.files['panCard'][0].path.replace(/\\/g, '/') : null;
+
+  try {
+    const existingStaff = await Staff.findOne({ email });
+    if (existingStaff) {
+      return res.status(409).json({ success: false, message: "Staff already exists with this email." });
+    }
+
+    const count = await Staff.countDocuments();
+    const paddedNumber = String(count + 1).padStart(3, '0');
+    const staffId = `STF${paddedNumber}`;
+    const password = `${firstName.toLowerCase().replace(/\s+/g, '')}${staffId}`;
+
+    const newStaff = new Staff({
+      firstName,
+      lastName,
+      email,
+      contactNumber,
+      designation,
+      shiftStart,
+      shiftEnd,
+      salary,
+      staffId,
+      password,
+      aadharCard,
+      panCard,
+      status: 'Pending'
+    });
+
+    await newStaff.save();
+
+    // Biometric device integration can be deferred until admin approval.
+    // If you want it added immediately, uncomment below.
+    // emitAddEmployee({
+    //   staffId,
+    //   firstName,
+    //   lastName
+    // });
+
+    return res.json({
+      success: true,
+      message: "Staff registered successfully. Sent to admin for approval."
+    });
+  } catch (error) {
+    console.error("Error registering staff by warden:", error);
+    return res.status(500).json({ success: false, message: "Error registering staff." });
+  }
 };

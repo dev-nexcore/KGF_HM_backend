@@ -53,6 +53,18 @@ export const registerStaff =
           shiftStart,
           shiftEnd,
           salary
+        },
+        documents: {
+          aadharCard: req.files?.aadharCard ? {
+            filename: req.files.aadharCard[0].originalname,
+            path: req.files.aadharCard[0].path.replace(/\\/g, '/'),
+            uploadedAt: new Date()
+          } : undefined,
+          panCard: req.files?.panCard ? {
+            filename: req.files.panCard[0].originalname,
+            path: req.files.panCard[0].path.replace(/\\/g, '/'),
+            uploadedAt: new Date()
+          } : undefined,
         }
       });
 

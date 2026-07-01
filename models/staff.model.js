@@ -114,6 +114,11 @@ const staffSchema = new mongoose.Schema(
     isAddedToBiometric: {
       type: Boolean,
       default: false
+    },
+    status: {
+      type: String,
+      enum: ['Pending', 'Approved', 'Rejected'],
+      default: 'Approved'
     }
   },
   {

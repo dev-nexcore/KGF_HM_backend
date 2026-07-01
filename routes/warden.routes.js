@@ -51,7 +51,8 @@ import {
   updateParentWarden,
   deleteParentWarden,
   submitNoticeRequisition,
-  submitInventoryReplacement
+  submitInventoryReplacement,
+  registerStaffWarden
 } from "../controllers/warden.controller.js";
 import { upload, uploadWardenDocuments } from "../middleware/upload.js";
 import { verifyWardenToken } from "../middleware/auth.middleware.js";
@@ -103,6 +104,10 @@ router.get('/students/count', getTotalStudents);
 router.get('/students/available-bed', getAllAvailableBed);
 router.get("/students-without-parents", verifyWardenToken, getStudentsWithoutParents);
 router.get('/student-document/:studentId/:docType', getStudentDocument);
+
+import { getParentDocument } from "../controllers/admin/user.controller.js";
+router.get('/parent-document/:parentId/:docType', getParentDocument);
+
 router.put("/update-student/:studentId", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }, { name: 'studentIdCard' }, { name: 'feesReceipt' }]), updateStudentWarden);
 
 
@@ -159,11 +164,14 @@ router.get("/workers", getAllInterns);
 // Student Registration
 router.post("/register-student", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }, { name: 'studentIdCard' }, { name: 'feesReceipt' }]), registerStudent);
 
+// Staff Registration
+router.post("/register-staff", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerStaffWarden);
+
 
 // Parent Registration and Management
 router.post("/register-parent", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), registerParent);
 router.get("/parents", getAllParents);
-router.put("/update-parent/:id", verifyWardenToken, updateParentWarden);
+router.put("/update-parent/:id", verifyWardenToken, upload.fields([{ name: 'aadharCard' }, { name: 'panCard' }]), updateParentWarden);
 router.delete("/delete-parent/:id", verifyWardenToken, deleteParentWarden);
 
 

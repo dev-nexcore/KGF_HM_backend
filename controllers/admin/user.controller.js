@@ -1699,7 +1699,7 @@ const getAllStudents = async (req, res) => {
 
     const pendingRequisitions = await Requisition.find({
       requisitionType: { $in: ['student', 'worker'] },
-      status: 'pending'
+      status: { $in: ['pending', 'rejected'] }
     });
 
     const pendingStudents = pendingRequisitions.map(req => {
@@ -1725,6 +1725,8 @@ const getAllStudents = async (req, res) => {
         isWorking: req.requisitionType === 'worker',
         isAddedToBiometric: false,
         isPendingApproval: true,
+        reqStatus: req.status,
+        rejectionReason: req.rejectionReason,
         requisitionId: req._id,
         createdAt: req.createdAt,
         updatedAt: req.updatedAt
@@ -2038,6 +2040,71 @@ const getStudentById = async (req, res) => {
   }
 };
 
+const getParentDocument = async (req, res) => {
+  try {
+    const { parentId, docType } = req.params;
+
+    const allowedDocs = [
+      "aadharCard",
+      "panCard",
+    ];
+
+    if (!allowedDocs.includes(docType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid document type",
+      });
+    }
+
+    let parent = null;
+    if (parentId.match(/^[0-9a-fA-F]{24}$/)) {
+      parent = await Parent.findById(parentId);
+      if (!parent) {
+        const reqq = await Requisition.findById(parentId);
+        if (reqq && reqq.data) {
+          parent = { ...reqq.data, documents: reqq.documents || reqq.data.documents };
+        }
+      }
+    } else {
+      parent = await Parent.findOne({ studentId: parentId });
+    }
+
+    if (!parent) {
+      return res.status(404).json({
+        success: false,
+        message: "Parent/Requisition not found",
+      });
+    }
+
+    const document = parent.documents?.[docType];
+
+    if (!document || !document.path) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found",
+      });
+    }
+
+    const filePath = path.resolve(document.path);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: "File missing on server",
+      });
+    }
+
+    return res.sendFile(filePath);
+
+  } catch (error) {
+    console.error("Parent Document view error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error opening document",
+    });
+  }
+};
 
 const getAllWardens = async (req, res) => {
   try {
@@ -2071,12 +2138,42 @@ const getAllWardens = async (req, res) => {
 const getAllParents = async (req, res) => {
   try {
     const parents = await Parent.find({}).sort({ createdAt: -1 });
+    const transformedParents = parents.map(p => p.toObject ? p.toObject() : p);
+
+    const pendingRequisitions = await Requisition.find({
+      requisitionType: 'parent',
+      status: { $in: ['pending', 'rejected'] }
+    });
+
+    const pendingParents = pendingRequisitions.map(reqDoc => {
+      const req = reqDoc.toObject ? reqDoc.toObject() : reqDoc;
+      const data = req.data || {};
+      return {
+        _id: req._id,
+        id: req._id,
+        firstName: data.firstName || "Unknown",
+        lastName: data.lastName || "",
+        email: data.email || "N/A",
+        contactNumber: data.contactNumber || "N/A",
+        relation: data.relation || "N/A",
+        studentId: data.studentId || "Pending",
+        documents: req.documents || data.documents || {},
+        isPendingApproval: true,
+        reqStatus: req.status,
+        rejectionReason: req.rejectionReason,
+        requisitionId: req._id,
+        createdAt: req.createdAt,
+        updatedAt: req.updatedAt
+      };
+    });
+
+    const allParents = [...transformedParents, ...pendingParents];
 
     return res.json({
       success: true,
       message: "Parents fetched successfully",
-      parents,
-      count: parents.length
+      parents: allParents,
+      count: allParents.length
     });
   } catch (err) {
     console.error("Error fetching parents:", err);
@@ -2114,11 +2211,35 @@ const updateParent = async (req, res) => {
   const { id } = req.params;
   const { firstName, lastName, email, relation, contactNumber } = req.body;
   try {
-    const parent = await Parent.findByIdAndUpdate(
-      id,
-      { firstName, lastName, email, relation, contactNumber },
-      { new: true }
-    );
+    const parent = await Parent.findById(id);
+    if (!parent) return res.status(404).json({ success: false, message: "Parent not found." });
+
+    parent.firstName = firstName || parent.firstName;
+    parent.lastName = lastName || parent.lastName;
+    parent.email = email || parent.email;
+    parent.relation = relation || parent.relation;
+    parent.contactNumber = contactNumber || parent.contactNumber;
+
+    if (req.files) {
+      if (!parent.documents) parent.documents = {};
+      if (req.files.aadharCard && req.files.aadharCard.length > 0) {
+        parent.documents.aadharCard = {
+          filename: req.files.aadharCard[0].originalname,
+          path: req.files.aadharCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      if (req.files.panCard && req.files.panCard.length > 0) {
+        parent.documents.panCard = {
+          filename: req.files.panCard[0].originalname,
+          path: req.files.panCard[0].path,
+          uploadedAt: new Date(),
+        };
+      }
+      parent.markModified('documents');
+    }
+
+    await parent.save();
     if (!parent) return res.status(404).json({ success: false, message: "Parent not found." });
     return res.json({ success: true, parent });
   } catch (err) {
@@ -2127,6 +2248,36 @@ const updateParent = async (req, res) => {
   }
 };
 
+
+const updateStaffStatus = async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const staff = await Staff.findById(id);
+    if (!staff) return res.status(404).json({ success: false, message: "Staff not found." });
+
+    if (!['Pending', 'Approved', 'Rejected'].includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status." });
+    }
+
+    staff.status = status;
+    await staff.save();
+
+    if (status === 'Approved') {
+      emitAddEmployee({
+        staffId: staff.staffId,
+        firstName: staff.firstName,
+        lastName: staff.lastName
+      });
+    }
+
+    return res.json({ success: true, message: `Staff status updated to ${status}.` });
+  } catch (error) {
+    console.error("Error updating staff status:", error);
+    return res.status(500).json({ success: false, message: "Error updating staff status." });
+  }
+};
 
 export {
   registerStudent,
@@ -2141,7 +2292,9 @@ export {
   updateStudent,
   deleteStudent,
   getStudentDocument,
+  getParentDocument,
 
   deleteParent,
   updateParent,
+  updateStaffStatus
 }

@@ -36,6 +36,8 @@ import {
   deleteParent,
   updateParent,
   registerStaff,
+  updateStaffStatus,
+  getParentDocument,
 } from "../controllers/admin/user.controller.js";
 
 import {
@@ -190,19 +192,21 @@ router.post(
 );
 router.post('/register-warden', uploadWardenDocuments, registerWarden);
 router.post('/register-staff', uploadStaffDocuments, registerStaff);
+router.put('/staff-status/:id', verifyAdminToken, updateStaffStatus);
 router.get('/students', getAllStudents);
 router.get('/parents', getAllParents);
 router.get('/wardens', getAllWardens);
 router.get('/students-without-parents', getStudentsWithoutParents);
 router.get('/parents', getAllParents);
 router.delete('/delete-parent/:id', verifyAdminToken, deleteParent);
-router.put('/update-parent/:id', verifyAdminToken, updateParent);
+router.put('/update-parent/:id', verifyAdminToken, uploadParentDocuments, updateParent);
 router.get('/student/:studentId', getStudentById);
 // router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
 router.put('/update-student/:studentId', verifyAdminToken, uploadStudentDocuments, updateStudent);
 router.delete('/delete-student/:studentId', deleteStudent);
 
 router.get('/student-document/:studentId/:docType', getStudentDocument);
+router.get('/parent-document/:parentId/:docType', getParentDocument);
 
 
 router.post(

@@ -215,7 +215,9 @@ export const updateRequisitionStatus = async (req, res) => {
         createdEntity = new Staff({
           ...data,
           staffId: nextId,
-          password
+          password,
+          aadharCard: documents?.aadharCard?.path || null,
+          panCard: documents?.panCard?.path || null
         });
         await createdEntity.save();
         entityId = nextId;
