@@ -124,7 +124,7 @@ const getOpenComplaints = async (req, res) => {
     const openComplaints = await Complaint.find({ 
       $or: [
         { status: 'pending' },
-        { status: 'pending_approval', targetStatus: 'in progress' }
+        { status: 'pending_approval' }
       ]
     })
       .populate('studentId', 'firstName lastName studentId email contactNumber')
@@ -136,7 +136,7 @@ const getOpenComplaints = async (req, res) => {
     const totalOpen = await Complaint.countDocuments({ 
       $or: [
         { status: 'pending' },
-        { status: 'pending_approval', targetStatus: 'in progress' }
+        { status: 'pending_approval' }
       ]
     });
 
@@ -245,24 +245,14 @@ const getResolvedComplaints = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const skip = (page - 1) * limit;
 
-    const resolvedComplaints = await Complaint.find({ 
-      $or: [
-        { status: 'resolved' },
-        { status: 'pending_approval', targetStatus: { $in: ['resolved', 'rejected'] } }
-      ]
-    })
+    const resolvedComplaints = await Complaint.find({ status: 'resolved' })
       .populate('studentId', 'firstName lastName studentId email contactNumber')
       .select('complaintType subject description status targetStatus adminNotes filedDate updatedAt attachments')
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const totalResolved = await Complaint.countDocuments({ 
-      $or: [
-        { status: 'resolved' },
-        { status: 'pending_approval', targetStatus: { $in: ['resolved', 'rejected'] } }
-      ]
-    });
+    const totalResolved = await Complaint.countDocuments({ status: 'resolved' });
 
     return res.json({
       message: "Resolved complaints fetched successfully",

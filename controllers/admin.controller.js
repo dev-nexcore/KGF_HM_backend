@@ -249,9 +249,8 @@ const registerStudent = async (req, res) => {
 Your student account has been created.
 
 • Student ID: ${studentId}
-• Password: ${password}
 
-Please log in at https://www.KGF-HM.com and change your password after first login.
+Please log in at https://www.KGF-HM.com using your OTP.
 
 – Hostel Admin`
     });
@@ -323,9 +322,8 @@ const registerParent = async (req, res) => {
 Your parent account has been created.
 
 • Your Child's Student ID: ${studentId}
-• Your Login Password: ${parentPassword}
 
-Please log in at https://www.KGF-HM.com and change your password after first login.
+Please log in at https://www.KGF-HM.com using your OTP.
 
 – Hostel Admin`
     });
@@ -380,9 +378,8 @@ Your warden account has been created.
 
 • Warden Name: ${firstName} ${lastName}
 • Warden ID: ${wardenId}
-• Your Login Password: ${wardenPassword}
 
-Please log in at https://www.KGF-HM.com and change your password after first login.
+Please log in at https://www.KGF-HM.com using your OTP.
 
 – Hostel Admin`
     });
@@ -2823,7 +2820,7 @@ const approveRequisition = async (req, res) => {
         from: `"Hostel Management" <${process.env.MAIL_USER}>`,
         to: data.email,
         subject: `${requisitionType.charAt(0).toUpperCase() + requisitionType.slice(1)} Registration - Login Credentials`,
-        text: `Hello ${data.firstName} ${data.lastName},\n\nYou have been registered in the Hostel Management System.\n\nYour login credentials:\nID: ${entityId}\nPassword: ${randomPassword}\n\nPlease change your password after first login.\n\n– Hostel Management System`,
+        text: `Hello ${data.firstName} ${data.lastName},\n\nYou have been registered in the Hostel Management System.\n\nYour login credentials:\nID: ${entityId}\n\nPlease log in using your OTP.\n\n– Hostel Management System`,
       });
     } catch (emailError) {
       console.error("Error sending credentials email:", emailError);

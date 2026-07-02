@@ -1600,9 +1600,8 @@ Your warden account has been created.
 
 • Warden Name: ${firstName} ${lastName}
 • Warden ID: ${newWardenId}
-• Your Login Password: ${wardenPassword}
 
-Please log in at https://www.KGF-HM.com and change your password after first login.
+Please log in at https://www.KGF-HM.com using your OTP.
 
 – Hostel Admin`
     });

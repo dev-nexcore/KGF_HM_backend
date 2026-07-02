@@ -766,7 +766,11 @@ const getWardenProfile = async (req, res) => {
 
 const updateWardenProfile = async (req, res) => {
   try {
-    const updated = await Warden.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const updateData = { ...req.body };
+    if (req.file) {
+      updateData.profilePhoto = req.file.filename;
+    }
+    const updated = await Warden.findByIdAndUpdate(req.params.id, updateData, { new: true });
     res.status(200).json({ message: "Updated", warden: updated });
   } catch (error) {
     res.status(500).json({ message: "Error" });
