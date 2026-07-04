@@ -120,7 +120,9 @@ const getBedOccupancyStatus = async (req, res) => {
       $or: [
         { category: { $in: ['Furniture', 'BEDS', 'Bed'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
-      ]
+      ],
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     };
 
     const totalBeds = await Inventory.countDocuments(bedCriteria);

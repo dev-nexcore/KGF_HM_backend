@@ -262,7 +262,11 @@ const getAttendanceLog = async (req, res) => {
 const getWardenDashboardStats = async (req, res) => {
   try {
     const totalStudents = await Student.countDocuments();
-    const bedFilter = { $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] };
+    const bedFilter = { 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+    };
     const [totalBeds, inUseBeds, availableBeds, damagedBeds] = await Promise.all([
       Inventory.countDocuments(bedFilter),
       Inventory.countDocuments({ ...bedFilter, status: 'In Use' }),
@@ -340,7 +344,11 @@ const getWardenDashboardStats = async (req, res) => {
 const getBedStats = async (req, res) => {
   try {
     const stats = await Inventory.aggregate([
-      { $match: { $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] } },
+      { $match: { 
+        $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+        location: { $not: /gym|conference|store|common/i },
+        floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
     const result = { totalBeds: 0, available: 0, inUse: 0, inMaintenance: 0, damaged: 0 };
@@ -359,7 +367,11 @@ const getBedStats = async (req, res) => {
 const getBedStatusOverview = async (req, res) => {
   try {
     const { floor, roomNo, status } = req.query;
-    const filters = { $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] };
+    const filters = { 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+    };
     if (floor) filters.floor = floor;
     if (roomNo) filters.roomNo = roomNo;
     if (status) filters.status = status;
@@ -380,7 +392,9 @@ const getStudentListForWarden = async (req, res) => {
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
-      ]
+      ],
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
     const capacityMap = {};
     allBedItems.forEach(bed => {
@@ -491,7 +505,12 @@ const updateStudentRoom = async (req, res) => {
 
 const getAllAvailableBed = async (req, res) => {
   try {
-    const beds = await Inventory.find({ status: 'Available', $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] }).select('barcodeId roomNo');
+    const beds = await Inventory.find({ 
+      status: 'Available', 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+    }).select('barcodeId roomNo');
     res.status(200).json({ success: true, beds });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error' });
@@ -1069,7 +1088,8 @@ const getAvailableBedsInventory = async (req, res) => {
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
-      locationCategory: 'Residential Room'
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
     res.status(200).json({ success: true, availableBeds: beds });
   } catch (error) {
@@ -1084,7 +1104,8 @@ const getAvailableRoomsInventory = async (req, res) => {
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
-      locationCategory: 'Residential Room'
+      location: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
 
     const roomStats = {};
