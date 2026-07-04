@@ -1880,7 +1880,6 @@ const updateStudent = async (req, res) => {
           uploadedAt: new Date()
         };
       }
-      }
     }
 
     const newBedId = roomBedNumber;
