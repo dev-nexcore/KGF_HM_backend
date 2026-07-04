@@ -116,6 +116,18 @@ const inventorySchema = new mongoose.Schema({
     index: true
   },
 
+  occupiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Student',
+    default: null
+  },
+
+  locationCategory: {
+    type: String,
+    enum: ['Residential Room', 'Common Area', 'Gym', 'Staff Room', 'Storage'],
+    default: 'Residential Room'
+  },
+
   // ✅ ADD THIS
   replacementRequest: {
     type: replacementRequestSchema,

@@ -461,13 +461,28 @@ const updateStudentRoom = async (req, res) => {
     const { studentId } = req.params;
     const { barcodeId } = req.body;
     const student = await Student.findOne({ studentId });
-    const newBed = await Inventory.findOne({ barcodeId });
-    if (!student || !newBed || newBed.status === 'In Use') return res.status(400).json({ success: false, message: 'Invalid assignment' });
-    if (student.roomBedNumber) await Inventory.findByIdAndUpdate(student.roomBedNumber, { status: 'Available' });
-    student.roomBedNumber = newBed._id;
+    
+    if (!student) return res.status(404).json({ success: false, message: 'Student not found' });
+    
+    const claimedBed = await Inventory.findOneAndUpdate(
+      { barcodeId: barcodeId, occupiedBy: null },
+      { $set: { occupiedBy: student._id, status: 'In Use' } },
+      { new: true }
+    );
+
+    if (!claimedBed) {
+      return res.status(400).json({ success: false, message: 'Invalid assignment or bed is already taken.' });
+    }
+
+    const previousBedId = student.roomBedNumber;
+
+    student.roomBedNumber = claimedBed._id;
     await student.save();
-    newBed.status = 'In Use';
-    await newBed.save();
+
+    if (previousBedId && String(previousBedId) !== String(claimedBed._id)) {
+      await Inventory.findByIdAndUpdate(previousBedId, { $set: { status: 'Available', occupiedBy: null } });
+    }
+
     res.status(200).json({ success: true, message: 'Updated' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Error' });
@@ -1024,10 +1039,14 @@ const updateStudentWarden = async (req, res) => {
 const getBedOccupancyStatus = async (req, res) => {
   try {
     const totalBeds = await Inventory.countDocuments({ 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }] 
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      locationCategory: 'Residential Room'
     });
 
-    const occupiedBeds = await Student.countDocuments({ roomBedNumber: { $ne: null } });
+    const occupiedBeds = await Inventory.countDocuments({ 
+      occupiedBy: { $ne: null },
+      locationCategory: 'Residential Room'
+    });
 
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);
 
@@ -1049,7 +1068,8 @@ const getAvailableBedsInventory = async (req, res) => {
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
-      ]
+      ],
+      locationCategory: 'Residential Room'
     });
     res.status(200).json({ success: true, availableBeds: beds });
   } catch (error) {
@@ -1063,7 +1083,8 @@ const getAvailableRoomsInventory = async (req, res) => {
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
-      ]
+      ],
+      locationCategory: 'Residential Room'
     });
 
     const roomStats = {};

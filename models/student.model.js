@@ -11,7 +11,9 @@ const studentSchema = new mongoose.Schema({
   roomBedNumber: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Inventory',
-    required: false
+    required: false,
+    unique: true,
+    sparse: true
   },
   profileImage: { type: String, default: null },
   email: { type: String, required: true, unique: true },

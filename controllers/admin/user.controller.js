@@ -1361,11 +1361,18 @@ const registerStudent = async (req, res) => {
       relation
     });
 
-    await newStudent.save();
-
     if (roomBedNumber && roomBedNumber !== "Not Assigned") {
-      await Inventory.findByIdAndUpdate(roomBedNumber, { status: "In Use" }, { new: true });
+      const claimedBed = await Inventory.findOneAndUpdate(
+        { _id: roomBedNumber, occupiedBy: null },
+        { $set: { occupiedBy: newStudent._id, status: "In Use" } },
+        { new: true }
+      );
+      if (!claimedBed) {
+        return res.status(400).json({ success: false, message: "Bed is already taken or does not exist." });
+      }
     }
+
+    await newStudent.save();
 
     // Call eSSL Biometric Integration
     try {
@@ -1873,6 +1880,21 @@ const updateStudent = async (req, res) => {
           uploadedAt: new Date()
         };
       }
+      }
+    }
+
+    const newBedId = roomBedNumber;
+    let claimedBed = null;
+
+    if (newBedId && newBedId !== "Not Assigned" && String(previousBedId) !== String(newBedId)) {
+      claimedBed = await Inventory.findOneAndUpdate(
+        { _id: newBedId, occupiedBy: null },
+        { $set: { occupiedBy: currentStudent._id, status: "In Use" } },
+        { new: true }
+      );
+      if (!claimedBed) {
+        return res.status(400).json({ success: false, message: "New bed is already taken or does not exist." });
+      }
     }
 
     const updatedStudent = await Student.findOneAndUpdate(
@@ -1881,13 +1903,8 @@ const updateStudent = async (req, res) => {
       { new: true }
     );
 
-    // bed inventory logic stays same
-    const newBedId = roomBedNumber;
-    if (previousBedId && previousBedId !== "Not Assigned" && previousBedId !== newBedId) {
-      await Inventory.findByIdAndUpdate(previousBedId, { status: "Available" });
-    }
-    if (newBedId && newBedId !== "Not Assigned" && newBedId !== previousBedId) {
-      await Inventory.findByIdAndUpdate(newBedId, { status: "In Use" });
+    if (previousBedId && previousBedId !== "Not Assigned" && String(previousBedId) !== String(newBedId)) {
+      await Inventory.findByIdAndUpdate(previousBedId, { $set: { status: "Available", occupiedBy: null } });
     }
 
     // Create audit log for the update
