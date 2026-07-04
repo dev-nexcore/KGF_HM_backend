@@ -43,6 +43,8 @@ startNoticeSchedulerCron();
 // ----- CORS -----
   const corsOptions = {
     origin: [
+      "https://kokanglobal.org",
+      "https://www.kokanglobal.org",
       "https://kgf-hm-admin.nexcorealliance.com",
       "https://kgf-hm-parent.nexcorealliance.com",
       "https://kgf-hm-student.nexcorealliance.com",
@@ -51,8 +53,6 @@ startNoticeSchedulerCron();
        "http://localhost:3001",
         "http://localhost:3002",
          "http://localhost:3003",
-      "https://kokanglobal.org",
-      "https://www.kokanglobal.org",
       "https://admin.kokanglobal.org",
       "https://www.admin.kokanglobal.org"
 
