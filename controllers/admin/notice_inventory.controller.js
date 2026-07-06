@@ -1274,8 +1274,11 @@ const getAvailableBeds = async (req, res) => {
     const availableBeds = await Inventory.find({
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
-        { itemName: { $regex: /Bed|B\d+/i } }
+        { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       status: 'Available',
       locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
@@ -1299,8 +1302,11 @@ const getAvailableRooms = async (req, res) => {
     const allBedItems = await Inventory.find({
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
-        { itemName: { $regex: /Bed|B\d+/i } }
+        { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
