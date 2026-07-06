@@ -508,7 +508,7 @@ const getAllAvailableBed = async (req, res) => {
     const beds = await Inventory.find({ 
       status: 'Available', 
       $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
-      location: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     }).select('barcodeId roomNo');
     res.status(200).json({ success: true, beds });
@@ -1088,7 +1088,7 @@ const getAvailableBedsInventory = async (req, res) => {
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
-      location: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
     res.status(200).json({ success: true, availableBeds: beds });
@@ -1104,7 +1104,7 @@ const getAvailableRoomsInventory = async (req, res) => {
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
-      location: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
 

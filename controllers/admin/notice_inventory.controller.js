@@ -1277,9 +1277,9 @@ const getAvailableBeds = async (req, res) => {
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
       status: 'Available',
-      location: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
-    }).select('_id itemName barcodeId roomNo floor location');
+    }).select('_id itemName barcodeId roomNo floor location locationCategory');
 
     res.status(200).json({
       success: true,
@@ -1301,7 +1301,7 @@ const getAvailableRooms = async (req, res) => {
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
-      location: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
 

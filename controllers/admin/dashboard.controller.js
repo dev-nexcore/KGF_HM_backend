@@ -121,7 +121,7 @@ const getBedOccupancyStatus = async (req, res) => {
         { category: { $in: ['Furniture', 'BEDS', 'Bed'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
       ],
-      location: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     };
 

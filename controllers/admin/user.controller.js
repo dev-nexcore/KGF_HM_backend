@@ -1653,7 +1653,9 @@ const getAllStudents = async (req, res) => {
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
         { itemName: { $regex: /Bed|B\d+/i } }
-      ]
+      ],
+      locationCategory: 'Residential Room',
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
     const capacityMap = {};
     allBedItems.forEach(bed => {
