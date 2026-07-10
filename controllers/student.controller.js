@@ -3251,8 +3251,37 @@ const getAttendanceSummary = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
+    // Adjust startDate so we don't count days before the student registered
+    const registrationDate = student.admissionDate || student.createdAt;
+    if (registrationDate) {
+      const adjStart = new Date(registrationDate);
+      adjStart.setHours(0, 0, 0, 0);
+      
+      if (adjStart > startDate) {
+        startDate = adjStart;
+      }
+    }
+
+    // If the requested range is entirely before registration
+    if (startDate > endDate) {
+      return res.json({
+        range,
+        totalDays: 0,
+        present: 0,
+        absent: 0,
+      });
+    }
+
     const calcEnd = endDate > now ? now : endDate;
     let presentDays = 0;
+
+    const attendanceRecords = await Attendance.find({ 
+      studentId: student._id,
+      timestamp: { $gte: startDate, $lte: calcEnd },
+      direction: 'IN' 
+    });
+
+    const fallbackLog = student.attendanceLog || [];
 
     // Loop through each day from startDate to calcEnd
     for (let d = new Date(startDate); d <= calcEnd; d.setDate(d.getDate() + 1)) {
@@ -3262,14 +3291,22 @@ const getAttendanceSummary = async (req, res) => {
       const dayEnd = new Date(d);
       dayEnd.setHours(23, 59, 59, 999);
 
-      // Check if student was present on this day
-      const isPresent = student.attendanceLog.some(log => {
-        if (!log.checkInDate) return false;
-        const checkIn = new Date(log.checkInDate);
-        const checkOut = log.checkOutDate ? new Date(log.checkOutDate) : null;
-        
-        return checkIn <= dayEnd && (!checkOut || checkOut >= dayStart);
+      // Check Attendance model first
+      let isPresent = attendanceRecords.some(log => {
+        const timestamp = new Date(log.timestamp);
+        return timestamp >= dayStart && timestamp <= dayEnd;
       });
+
+      // Fallback to student.attendanceLog if not found in Attendance model
+      if (!isPresent) {
+        isPresent = fallbackLog.some(log => {
+          if (!log.checkInDate) return false;
+          const checkIn = new Date(log.checkInDate);
+          const checkOut = log.checkOutDate ? new Date(log.checkOutDate) : null;
+          
+          return checkIn <= dayEnd && (!checkOut || checkOut >= dayStart);
+        });
+      }
 
       if (isPresent) {
         presentDays++;
