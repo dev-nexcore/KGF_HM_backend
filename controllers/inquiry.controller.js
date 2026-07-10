@@ -6,7 +6,28 @@ export const createInquiry = async (req, res) => {
     const { name, email, phone, roomType, message } = req.body;
 
     if (!name || !email || !phone || !roomType) {
-      return res.status(400).json({ message: 'Please provide all required fields.' });
+      return res.status(400).json({ success: false, message: 'Please provide all required fields: name, email, phone, and roomType.' });
+    }
+
+    // Name must not contain digits
+    if (/[0-9]/.test(name)) {
+      return res.status(400).json({ success: false, message: 'Name must not contain numbers.' });
+    }
+    // Name min length
+    if (name.trim().length < 2) {
+      return res.status(400).json({ success: false, message: 'Name must be at least 2 characters long.' });
+    }
+
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+    }
+
+    // Phone must be exactly 10 digits
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(phone.trim())) {
+      return res.status(400).json({ success: false, message: 'Phone number must be exactly 10 digits (numbers only).' });
     }
 
     const newInquiry = new Inquiry({
