@@ -31,7 +31,8 @@ import {
   getNotifications,
   markNotificationsAsSeen,
   uploadMyDocument,
-  getMyDocument
+  getMyDocument,
+  markNoticeAsRead
 } from '../controllers/student.controller.js';
 import { verifyStudentToken, verifyStudentOrParentToken } from '../middleware/auth.middleware.js'
 import { uploadStudent, uploadComplaint, uploadSingleStudentDocument } from '../middleware/upload.js';
@@ -48,6 +49,7 @@ router.post('/reset-password', resetPassword);
 
 // Routes that work for both students and parents
 router.get("/notices", verifyStudentOrParentToken, getNotices);
+router.patch('/notices/:noticeId/read', verifyStudentOrParentToken, markNoticeAsRead);
 router.get('/attendance-log/:studentId', verifyStudentOrParentToken, getAttendanceLog);
 router.get("/profile/:studentId", verifyStudentOrParentToken, getStudentProfile);
 router.get("/profile", verifyStudentOrParentToken, getStudentProfile);

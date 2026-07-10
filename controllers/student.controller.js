@@ -3024,9 +3024,11 @@ const getNotices = async (req, res) => {
     const noticesList = await Notice.find(filter).sort({ issueDate: -1 });
 
     const noticesData = noticesList.map(notice => ({
+      _id: notice._id,
       issueDate: notice.issueDate ? new Date(notice.issueDate).toISOString() : null,
       title: notice.title || "No Subject",
       message: notice.message || "No Description",
+      isRead: notice.readBy ? notice.readBy.some(r => r.studentId === studentId) : false
     }));
 
     return res.json({ notices: noticesData });
@@ -3036,6 +3038,32 @@ const getNotices = async (req, res) => {
   }
 };
 
+const markNoticeAsRead = async (req, res) => {
+  const { noticeId } = req.params;
+  const studentId = req.studentId;
+
+  if (!noticeId) {
+    return res.status(400).json({ message: "Notice ID is required" });
+  }
+
+  try {
+    const notice = await Notice.findById(noticeId);
+    if (!notice) {
+      return res.status(404).json({ message: "Notice not found" });
+    }
+
+    const hasRead = notice.readBy && notice.readBy.some(r => r.studentId === studentId);
+    if (!hasRead) {
+      notice.readBy.push({ studentId, readAt: new Date() });
+      await notice.save();
+    }
+
+    return res.json({ message: "Notice marked as read", noticeId });
+  } catch (err) {
+    console.error("Mark notice as read error:", err);
+    return res.status(500).json({ message: "Server error while marking notice as read" });
+  }
+};
 
 const getNextInspection = async (req, res) => {
   try {
@@ -3206,12 +3234,14 @@ const getAttendanceSummary = async (req, res) => {
     startDate = new Date(now.getFullYear(), now.getMonth(), 1);
     // endDate = last day of the month
     endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    endDate.setHours(23, 59, 59, 999);
   }
 
-  // Helper to get number of days in the range:
+  // Helper to get number of days in the range up to today
   function getTotalDays(start, end) {
+    const calcEnd = end > now ? now : end;
     const oneDay = 1000 * 60 * 60 * 24;
-    return Math.floor((end - start) / oneDay) + 1;
+    return Math.floor((calcEnd - start) / oneDay) + 1;
   }
 
   try {
@@ -3221,46 +3251,30 @@ const getAttendanceSummary = async (req, res) => {
       return res.status(404).json({ message: 'Student not found' });
     }
 
-    // Group logs by day within the range
-    const logsByDay = {};
-
-    student.attendanceLog.forEach(log => {
-      const checkIn = new Date(log.checkInDate);
-      // Only consider logs within range
-      if (checkIn >= startDate && checkIn <= endDate) {
-        const dayKey = checkIn.toISOString().split('T')[0];
-
-        if (!logsByDay[dayKey]) {
-          logsByDay[dayKey] = { checkIns: [], checkOuts: [] };
-        }
-
-        if (log.checkInDate) {
-          logsByDay[dayKey].checkIns.push(new Date(log.checkInDate));
-        }
-
-        if (log.checkOutDate) {
-          logsByDay[dayKey].checkOuts.push(new Date(log.checkOutDate));
-        }
-      }
-    });
-
-    // Calculate attendance by checking for valid first check-in and last check-out each day
+    const calcEnd = endDate > now ? now : endDate;
     let presentDays = 0;
 
-    Object.keys(logsByDay).forEach(day => {
-      const dayLogs = logsByDay[day];
+    // Loop through each day from startDate to calcEnd
+    for (let d = new Date(startDate); d <= calcEnd; d.setDate(d.getDate() + 1)) {
+      const dayStart = new Date(d);
+      dayStart.setHours(0, 0, 0, 0);
+      
+      const dayEnd = new Date(d);
+      dayEnd.setHours(23, 59, 59, 999);
 
-      if (dayLogs.checkIns.length > 0 && dayLogs.checkOuts.length > 0) {
-        // Get earliest check-in and latest check-out for the day
-        const firstCheckIn = new Date(Math.min(...dayLogs.checkIns));
-        const lastCheckOut = new Date(Math.max(...dayLogs.checkOuts));
+      // Check if student was present on this day
+      const isPresent = student.attendanceLog.some(log => {
+        if (!log.checkInDate) return false;
+        const checkIn = new Date(log.checkInDate);
+        const checkOut = log.checkOutDate ? new Date(log.checkOutDate) : null;
+        
+        return checkIn <= dayEnd && (!checkOut || checkOut >= dayStart);
+      });
 
-        // Make sure check-in is before check-out (valid attendance)
-        if (firstCheckIn < lastCheckOut) {
-          presentDays += 1;
-        }
+      if (isPresent) {
+        presentDays++;
       }
-    });
+    }
 
     const totalDays = getTotalDays(startDate, endDate);
     const absentDays = Math.max(totalDays - presentDays, 0);
@@ -3435,5 +3449,6 @@ export {
   uploadMyDocument,
   getNotifications,
   markNotificationsAsSeen,
-  getStudentAttendance, getMyDocument
+  getStudentAttendance, getMyDocument,
+  markNoticeAsRead
 }
