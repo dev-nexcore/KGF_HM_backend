@@ -197,7 +197,7 @@ const sendLoginOTP = async (req, res) => {
         `
       });
     } catch (mailError) {
-      console.error("Email sending error:", mailError);
+      console.log("Email sending error:", mailError);
       return res.status(500).json({ message: "Failed to send OTP via Email" });
     }
 

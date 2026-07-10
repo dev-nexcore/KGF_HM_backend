@@ -263,8 +263,10 @@ const getWardenDashboardStats = async (req, res) => {
   try {
     const totalStudents = await Student.countDocuments();
     const bedFilter = { 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     };
     const [totalBeds, inUseBeds, availableBeds, damagedBeds] = await Promise.all([
@@ -345,8 +347,10 @@ const getBedStats = async (req, res) => {
   try {
     const stats = await Inventory.aggregate([
       { $match: { 
-        $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+        $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+        barcodeId: { $not: /^CR/i },
         location: { $not: /gym|conference|store|common/i },
+        roomNo: { $not: /gym|conference|store|common/i },
         floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
       } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
@@ -368,8 +372,10 @@ const getBedStatusOverview = async (req, res) => {
   try {
     const { floor, roomNo, status } = req.query;
     const filters = { 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     };
     if (floor) filters.floor = floor;
@@ -391,9 +397,11 @@ const getStudentListForWarden = async (req, res) => {
     const allBedItems = await Inventory.find({
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
-        { itemName: { $regex: /Bed|B\d+/i } }
+        { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
+      barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
     const capacityMap = {};
@@ -507,7 +515,10 @@ const getAllAvailableBed = async (req, res) => {
   try {
     const beds = await Inventory.find({ 
       status: 'Available', 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     }).select('barcodeId roomNo');
@@ -964,8 +975,12 @@ const getAllInterns = async (req, res) => {
     const allBedItems = await Inventory.find({
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
-        { itemName: { $regex: /Bed|B\d+/i } }
-      ]
+        { itemName: { $regex: /Bed|\bB\d+/i } }
+      ],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
     const capacityMap = {};
     allBedItems.forEach(bed => {
@@ -1058,8 +1073,12 @@ const updateStudentWarden = async (req, res) => {
 const getBedOccupancyStatus = async (req, res) => {
   try {
     const totalBeds = await Inventory.countDocuments({ 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
-      locationCategory: 'Residential Room'
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
+      locationCategory: 'Residential Room',
+      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
 
     const occupiedBeds = await Inventory.countDocuments({ 
@@ -1086,8 +1105,11 @@ const getAvailableBedsInventory = async (req, res) => {
       status: 'Available',
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
-        { itemName: { $regex: /Bed|B\d+/i } }
+        { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
@@ -1102,8 +1124,11 @@ const getAvailableRoomsInventory = async (req, res) => {
     const allBedItems = await Inventory.find({
       $or: [
         { category: { $in: ['Furniture', 'BEDS'] } },
-        { itemName: { $regex: /Bed|B\d+/i } }
+        { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
+      barcodeId: { $not: /^CR/i },
+      location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       locationCategory: 'Residential Room',
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });

@@ -272,7 +272,7 @@ Please log in at https://www.KGF-HM.com using your OTP.
 
     return res.json({
       message: 'Student registered and credentials emailed.',
-      student: { firstName, lastName, studentId, email, password }
+      student: { firstName, lastName, studentId, email }
     });
   } catch (err) {
     console.error('Error registering student:', err);
@@ -330,7 +330,7 @@ Please log in at https://www.KGF-HM.com using your OTP.
 
     return res.json({
       message: 'Parent registered and login credentials emailed.',
-      parent: { firstName, lastName, email, studentId, parentPassword }
+      parent: { firstName, lastName, email, studentId }
     });
   } catch (err) {
     console.error("Error registering parent:", err);
@@ -386,7 +386,7 @@ Please log in at https://www.KGF-HM.com using your OTP.
 
     return res.json({
       message: 'Warden registered and login credentials emailed.',
-      warden: { firstName, lastName, email, wardenId, wardenPassword }
+      warden: { firstName, lastName, email, wardenId }
     });
   } catch (err) {
     console.error("Error registering warden:", err);
@@ -1245,14 +1245,18 @@ const getTodaysCheckInOutStatus = async (req, res) => {
 const getBedOccupancyStatus = async (req, res) => {
   try {
     const totalBeds = await Inventory.countDocuments({ 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|B\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
     });
 
     const occupiedBeds = await Inventory.countDocuments({ 
       occupiedBy: { $ne: null },
+      barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
+      roomNo: { $not: /gym|conference|store|common/i },
       floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] } 
     });
 
