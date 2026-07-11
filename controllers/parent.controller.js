@@ -1313,7 +1313,9 @@ const fees = async (req, res) => {
             date: inv.paidDate || inv.updatedAt,
             method: inv.paymentMethod || "Online",
             status: "Completed",
-            type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+            type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            transactionId: inv.transactionId,
+            razorpayPaymentId: inv.razorpayPaymentId
           })),
         allInvoices: invoices.map(inv => ({
           _id: inv._id,
@@ -1324,7 +1326,9 @@ const fees = async (req, res) => {
           status: inv.status === 'pending_verification' ? 'Pending Verification' : (inv.status.charAt(0).toUpperCase() + inv.status.slice(1)),
           type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
           invoiceType: inv.invoiceType,   // raw enum value for frontend logic
-          method: inv.paymentMethod || "N/A"
+          method: inv.paymentMethod || "N/A",
+          transactionId: inv.transactionId,
+          razorpayPaymentId: inv.razorpayPaymentId
         }))
       }
     };

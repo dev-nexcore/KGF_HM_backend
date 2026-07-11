@@ -2964,7 +2964,7 @@ const getCurrentFeesStatus = async (req, res) => {
 
     // UPDATED: Now fetching from StudentInvoice (used by Admin) instead of Fee model
     const invoices = await StudentInvoice.find({ studentId: student._id })
-      .select("invoiceType amount status dueDate invoiceNumber paidDate description")
+      .select("invoiceType amount status dueDate invoiceNumber paidDate description transactionId razorpayPaymentId")
       .sort({ dueDate: -1 });
 
     const now = new Date();
@@ -2980,7 +2980,9 @@ const getCurrentFeesStatus = async (req, res) => {
         dueDate: invoice.dueDate,
         paidDate: invoice.paidDate,
         invoiceNumber: invoice.invoiceNumber,
-        description: invoice.description
+        description: invoice.description,
+        transactionId: invoice.transactionId,
+        razorpayPaymentId: invoice.razorpayPaymentId
       };
     });
 
