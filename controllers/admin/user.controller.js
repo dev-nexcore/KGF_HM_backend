@@ -1363,7 +1363,7 @@ const registerStudent = async (req, res) => {
 
     if (roomBedNumber && roomBedNumber !== "Not Assigned") {
       const claimedBed = await Inventory.findOneAndUpdate(
-        { _id: roomBedNumber, occupiedBy: null },
+        { _id: roomBedNumber, status: 'Available' },
         { $set: { occupiedBy: newStudent._id, status: "In Use" } },
         { new: true }
       );
@@ -1694,6 +1694,7 @@ const getAllStudents = async (req, res) => {
         roomType: inferredRoomType,
         emergencyContactName: student.emergencyContactName,
         emergencyContactNumber: student.emergencyContactNumber,
+        relation: student.relation,
         hasCollegeId: student.hasCollegeId,
         isWorking: student.isWorking,
         isAddedToBiometric: student.isAddedToBiometric,
@@ -1729,6 +1730,7 @@ const getAllStudents = async (req, res) => {
         emergencyContactNumber: data.emergencyContactNumber || "",
         emergencyContactName: data.emergencyContactName || "",
         admissionDate: data.admissionDate || "",
+        relation: data.relation || "",
         feeStatus: data.feeStatus || "Unpaid",
         dues: 0,
         documents: req.documents || {},
@@ -1892,7 +1894,7 @@ const updateStudent = async (req, res) => {
 
     if (newBedId && newBedId !== "Not Assigned" && String(previousBedId) !== String(newBedId)) {
       claimedBed = await Inventory.findOneAndUpdate(
-        { _id: newBedId, occupiedBy: null },
+        { _id: newBedId, status: 'Available' },
         { $set: { occupiedBy: currentStudent._id, status: "In Use" } },
         { new: true }
       );
