@@ -3274,11 +3274,17 @@ const getAttendanceSummary = async (req, res) => {
 
     const calcEnd = endDate > now ? now : endDate;
     let presentDays = 0;
+    let leaveDays = 0;
 
     const attendanceRecords = await Attendance.find({ 
       studentId: student._id,
       timestamp: { $gte: startDate, $lte: calcEnd },
       direction: 'IN' 
+    });
+
+    const approvedLeaves = await Leave.find({
+      studentId: student._id,
+      status: { $in: ['approved', 'warden_approved'] }
     });
 
     const fallbackLog = student.attendanceLog || [];
@@ -3310,17 +3316,29 @@ const getAttendanceSummary = async (req, res) => {
 
       if (isPresent) {
         presentDays++;
+      } else {
+        const isOnLeave = approvedLeaves.some(leave => {
+          const start = new Date(leave.startDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(leave.endDate);
+          end.setHours(23, 59, 59, 999);
+          return d >= start && d <= end;
+        });
+        if (isOnLeave) {
+          leaveDays++;
+        }
       }
     }
 
     const totalDays = getTotalDays(startDate, endDate);
-    const absentDays = Math.max(totalDays - presentDays, 0);
+    const absentDays = Math.max(totalDays - presentDays - leaveDays, 0);
 
     return res.json({
       range,
       totalDays,
       present: presentDays,
       absent: absentDays,
+      leaves: leaveDays,
     });
   } catch (error) {
     console.error('Error fetching attendance summary:', error);

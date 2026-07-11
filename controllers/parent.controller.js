@@ -908,11 +908,8 @@ const attendance = async (req, res) => {
     let currentDate = new Date(termStartDate);
 
     while (currentDate <= today) {
-      const dayOfWeek = currentDate.getDay();
-      // Exclude Saturdays (6) and Sundays (0) - adjust based on your school schedule
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-        totalSchoolDays++;
-      }
+      // Include weekends since it's a hostel
+      totalSchoolDays++;
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
@@ -994,12 +991,9 @@ const attendance = async (req, res) => {
     checkDate.setDate(checkDate.getDate() - 1); // Start from yesterday
 
     while (checkDate >= termStartDate) {
-      const dayOfWeek = checkDate.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) { // Skip weekends
-        if (!presentDates.has(checkDate.toDateString())) {
-          lastAbsenceDate = checkDate.toDateString();
-          break;
-        }
+      if (!presentDates.has(checkDate.toDateString())) {
+        lastAbsenceDate = checkDate.toDateString();
+        break;
       }
       checkDate.setDate(checkDate.getDate() - 1);
     }

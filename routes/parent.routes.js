@@ -22,16 +22,16 @@ router.get('/dashboard', authenticateParent,dashboard);
 router.get('/attendance', authenticateParent, attendance);
 router.get('/leave-management', authenticateParent,leaveManagement);
 router.put('/leave-status', authenticateParent, updateLeaveStatus);
-router.get('/fees',authenticateParent, fees);
-router.get('/notices',authenticateParent, notices);
+router.get('/fees', verifyStudentOrParentToken, fees);
+router.get('/notices', authenticateParent, notices);
 router.patch('/notices/:noticeId/read',authenticateParent, markNoticeAsRead);
 router.post('/refresh-token', refreshAccessToken);
 
 // Razorpay routes
-router.post('/create-razorpay-order', authenticateParent, createRazorpayOrder);
-router.post('/verify-razorpay-payment', authenticateParent, verifyRazorpayPayment);
-router.post('/submit-payment-details', authenticateParent, uploadPaymentScreenshot.single('screenshot'), submitPaymentDetails);
-router.post('/extract-utr', authenticateParent, uploadPaymentScreenshot.single('screenshot'), extractUtrFromScreenshot);
+router.post('/create-razorpay-order', verifyStudentOrParentToken, createRazorpayOrder);
+router.post('/verify-razorpay-payment', verifyStudentOrParentToken, verifyRazorpayPayment);
+router.post('/submit-payment-details', verifyStudentOrParentToken, uploadPaymentScreenshot.single('screenshot'), submitPaymentDetails);
+router.post('/extract-utr', verifyStudentOrParentToken, uploadPaymentScreenshot.single('screenshot'), extractUtrFromScreenshot);
 
 //refund routes
 
