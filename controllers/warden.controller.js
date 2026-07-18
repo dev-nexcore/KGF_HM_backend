@@ -411,12 +411,12 @@ const getStudentListForWarden = async (req, res) => {
       }
     });
 
-    // Fetch all pending invoices to calculate dues
-    const pendingInvoices = await StudentInvoice.find({ status: 'pending' });
+    // Fetch all pending and overdue invoices to calculate dues
+    const pendingInvoices = await StudentInvoice.find({ status: { $in: ['pending', 'overdue'] } });
     const duesMap = {};
     pendingInvoices.forEach(inv => {
       const sId = inv.studentId.toString();
-      duesMap[sId] = (duesMap[sId] || 0) + inv.amount;
+      duesMap[sId] = (duesMap[sId] || 0) + (inv.amount - (inv.paidAmount || 0));
     });
 
     const transformedStudents = students.map((student) => {
@@ -989,12 +989,12 @@ const getAllInterns = async (req, res) => {
       }
     });
 
-    // Fetch all pending invoices to calculate dues
-    const pendingInvoices = await StudentInvoice.find({ status: 'pending' });
+    // Fetch all pending and overdue invoices to calculate dues
+    const pendingInvoices = await StudentInvoice.find({ status: { $in: ['pending', 'overdue'] } });
     const duesMap = {};
     pendingInvoices.forEach(inv => {
       const sId = inv.studentId.toString();
-      duesMap[sId] = (duesMap[sId] || 0) + inv.amount;
+      duesMap[sId] = (duesMap[sId] || 0) + (inv.amount - (inv.paidAmount || 0));
     });
 
     const transformedInterns = interns.map((student) => {

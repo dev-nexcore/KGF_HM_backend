@@ -316,12 +316,12 @@ const login = async (req, res) => {
       adminId: admin._id,
       adminName: admin.adminId,
       actionType: AuditActionTypes.ADMIN_LOGIN,
-      description: `Admin ${admin.adminId} logged in (OTP disabled)`,
+      description: `Admin ${admin.adminId} logged in`,
       targetType: 'System'
     });
 
     return res.json({
-      message: "Login successful (OTP disabled)",
+      message: "Login successful",
       token,
       refreshToken,
       admin: {
