@@ -1639,7 +1639,7 @@ Please log in at https://www.KGF-HM.com using your OTP.
     });
   } catch (err) {
     console.error("Error registering warden:", err);
-    return res.status(500).json({ message: "Error registering warden." });
+    return res.status(500).json({ message: "Error registering warden.", error: err.message, stack: err.stack });
   }
 };
 
