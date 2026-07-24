@@ -2957,14 +2957,15 @@ const getCurrentFeesStatus = async (req, res) => {
   const studentId = req.studentId;
 
   try {
-    const student = await Student.findOne({ studentId });
+    const student = await Student.findOne({ studentId }).populate('roomBedNumber');
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
 
-    // UPDATED: Now fetching from StudentInvoice (used by Admin) instead of Fee model
+    const roomNo = student.roomBedNumber?.roomNo || "N/A";
+
+    // UPDATED: Now fetching from StudentInvoice (used by Admin)
     const invoices = await StudentInvoice.find({ studentId: student._id })
-      .select("invoiceType amount status dueDate invoiceNumber paidDate description transactionId razorpayPaymentId")
       .sort({ dueDate: -1 });
 
     const now = new Date();
@@ -2974,19 +2975,28 @@ const getCurrentFeesStatus = async (req, res) => {
 
       return {
         _id: invoice._id,
-        feeType: invoice.invoiceType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), // hostel_fee -> Hostel Fee
+        invoiceType: invoice.invoiceType,
+        feeType: invoice.invoiceType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         amount: invoice.amount,
+        paidAmount: invoice.paidAmount || 0,
         status: isOverdue ? 'overdue' : invoice.status === 'pending' ? 'unpaid' : invoice.status,
         dueDate: invoice.dueDate,
         paidDate: invoice.paidDate,
         invoiceNumber: invoice.invoiceNumber,
         description: invoice.description,
         transactionId: invoice.transactionId,
-        razorpayPaymentId: invoice.razorpayPaymentId
+        razorpayPaymentId: invoice.razorpayPaymentId,
+        paymentMethod: invoice.paymentMethod,
+        parentScreenshot: invoice.parentScreenshot,
+        billingCycleStart: invoice.billingCycleStart,
+        billingCycleEnd: invoice.billingCycleEnd,
+        items: invoice.items,
+        createdAt: invoice.createdAt,
+        roomNo
       };
     });
 
-    res.json({ fees: updatedFees });
+    res.json({ fees: updatedFees, studentName: `${student.firstName} ${student.lastName}`, studentId: student.studentId, roomNo });
   } catch (error) {
     console.error("Fee status error:", error);
     res.status(500).json({ message: "Error fetching fee status" });

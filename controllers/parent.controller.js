@@ -1282,7 +1282,7 @@ const fees = async (req, res) => {
   }
 
   try {
-    const student = await Student.findOne({ studentId });
+    const student = await Student.findOne({ studentId }).populate("roomBedNumber");
     if (!student) {
       return res.status(404).json({ message: "Student not found" });
     }
@@ -1299,6 +1299,7 @@ const fees = async (req, res) => {
       studentId: student.studentId,
       firstName: student.firstName,
       lastName: student.lastName,
+      roomNo: student.roomBedNumber?.roomNo || "N/A",
       feesOverview: {
         status: amountDue > 0 ? "Pending" : (totalAmount > 0 ? "Paid" : "No Invoice"),
         totalAmount,
@@ -1315,7 +1316,12 @@ const fees = async (req, res) => {
             status: "Completed",
             type: inv.invoiceType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()),
             transactionId: inv.transactionId,
-            razorpayPaymentId: inv.razorpayPaymentId
+            razorpayPaymentId: inv.razorpayPaymentId,
+            parentScreenshot: inv.parentScreenshot,
+            billingCycleStart: inv.billingCycleStart,
+            billingCycleEnd: inv.billingCycleEnd,
+            items: inv.items,
+            description: inv.description
           })),
         allInvoices: invoices.map(inv => ({
           _id: inv._id,
@@ -1328,7 +1334,12 @@ const fees = async (req, res) => {
           invoiceType: inv.invoiceType,   // raw enum value for frontend logic
           method: inv.paymentMethod || "N/A",
           transactionId: inv.transactionId,
-          razorpayPaymentId: inv.razorpayPaymentId
+          razorpayPaymentId: inv.razorpayPaymentId,
+          parentScreenshot: inv.parentScreenshot,
+          billingCycleStart: inv.billingCycleStart,
+          billingCycleEnd: inv.billingCycleEnd,
+          items: inv.items,
+          description: inv.description
         }))
       }
     };
@@ -1701,7 +1712,9 @@ const submitPaymentDetails = async (req, res) => {
     invoice.paidDate = null;
     invoice.paymentMethod = paymentMethod === 'Cash' ? 'cash' : 'online';
     invoice.transactionId = finalTransactionId || `TXN-${Date.now()}`;
-    invoice.parentScreenshot = screenshotFile ? screenshotFile.path : null;
+    invoice.parentScreenshot = screenshotFile
+      ? ('/' + screenshotFile.path.replace(/\\/g, '/').replace(/^\/+/, ''))
+      : null;
 
     // Compose description: include notes and screenshot path
     const parts = [];
