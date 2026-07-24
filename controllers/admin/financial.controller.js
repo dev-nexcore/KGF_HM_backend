@@ -27,7 +27,7 @@ const transporter = nodemailer.createTransport({
 });
 
 const generateStudentInvoice = async (req, res) => {
-  const { studentId, amount, invoiceType, dueDate, description } = req.body;
+  const { studentId, amount, invoiceType, dueDate, description, items, billingCycleStart, billingCycleEnd } = req.body;
 
   try {
     // Find student
@@ -40,14 +40,27 @@ const generateStudentInvoice = async (req, res) => {
     const invoiceCount = await StudentInvoice.countDocuments();
     const invoiceNumber = `INV-${Date.now()}-${(invoiceCount + 1).toString().padStart(4, '0')}`;
 
+    let finalAmount = Number(amount) || 0;
+    let finalItems = items || [];
+    
+    if (finalItems.length > 0) {
+      finalAmount = finalItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    } else if (amount) {
+      // Backwards compatibility if sent from old form
+      finalItems = [{ categoryName: invoiceType, amount: finalAmount }];
+    }
+
     // Create invoice
     const newInvoice = new StudentInvoice({
       studentId: student._id,
       invoiceNumber,
-      amount,
+      amount: finalAmount,
       invoiceType,
+      items: finalItems,
       dueDate: new Date(dueDate),
       description,
+      billingCycleStart: billingCycleStart ? new Date(billingCycleStart) : null,
+      billingCycleEnd: billingCycleEnd ? new Date(billingCycleEnd) : null,
       generatedBy: req.admin?._id
     });
 
@@ -135,6 +148,11 @@ const getStudentInvoices = async (req, res) => {
         paidDate: invoice.paidDate,
         studentId: invoice.studentId?._id,
         transactionId: invoice.transactionId,
+        items: invoice.items || [],
+        createdAt: invoice.createdAt,
+        description: invoice.description,
+        billingCycleStart: invoice.billingCycleStart,
+        billingCycleEnd: invoice.billingCycleEnd,
         parentScreenshot: invoice.parentScreenshot,
         adminScreenshot: invoice.adminScreenshot
       })),
@@ -208,6 +226,90 @@ const updateStudentInvoiceStatus = async (req, res) => {
   } catch (err) {
     console.error("Update invoice status error:", err);
     return res.status(500).json({ message: "Error updating invoice status." });
+  }
+};
+
+const deleteStudentInvoice = async (req, res) => {
+  const { invoiceId } = req.params;
+  try {
+    const invoice = await StudentInvoice.findById(invoiceId).populate('studentId', 'firstName lastName studentId');
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    if (invoice.status !== 'pending' || (invoice.paidAmount && invoice.paidAmount > 0)) {
+      return res.status(400).json({ message: "Cannot delete an invoice that is already paid or partially paid." });
+    }
+
+    const studentDisplayName = `${invoice.studentId?.firstName || ""} ${invoice.studentId?.lastName || ""}`.trim() || invoice.studentId?.studentId || "Student";
+    const invoiceNumber = invoice.invoiceNumber;
+    const amount = invoice.amount;
+
+    await StudentInvoice.findByIdAndDelete(invoiceId);
+
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: 'Invoice Deleted',
+      description: `Deleted pending invoice ${invoiceNumber} for ${studentDisplayName}. Amount: ₹${amount}`,
+      targetType: 'Invoice',
+      targetId: invoiceNumber,
+      targetName: `${studentDisplayName} - ₹${amount}`
+    });
+
+    return res.json({ message: "Invoice deleted successfully" });
+  } catch (err) {
+    console.error("Delete invoice error:", err);
+    return res.status(500).json({ message: "Error deleting invoice." });
+  }
+};
+
+const updateStudentInvoice = async (req, res) => {
+  const { invoiceId } = req.params;
+  const { dueDate, description, items, amount, invoiceType, billingCycleStart, billingCycleEnd } = req.body;
+  
+  try {
+    const invoice = await StudentInvoice.findById(invoiceId).populate('studentId', 'firstName lastName studentId');
+    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+
+    if (invoice.status !== 'pending' || (invoice.paidAmount && invoice.paidAmount > 0)) {
+      return res.status(400).json({ message: "Cannot edit an invoice that is already paid or partially paid." });
+    }
+
+    let finalAmount = Number(amount) || 0;
+    let finalItems = items || [];
+    
+    if (finalItems.length > 0) {
+      finalAmount = finalItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    } else if (amount) {
+      finalItems = [{ categoryName: invoiceType, amount: finalAmount }];
+    }
+
+    invoice.amount = finalAmount;
+    invoice.items = finalItems;
+    if (invoiceType) invoice.invoiceType = invoiceType;
+    if (dueDate) invoice.dueDate = new Date(dueDate);
+    if (description !== undefined) invoice.description = description;
+    
+    if (billingCycleStart !== undefined) invoice.billingCycleStart = billingCycleStart ? new Date(billingCycleStart) : null;
+    if (billingCycleEnd !== undefined) invoice.billingCycleEnd = billingCycleEnd ? new Date(billingCycleEnd) : null;
+
+    await invoice.save();
+
+    const studentDisplayName = `${invoice.studentId?.firstName || ""} ${invoice.studentId?.lastName || ""}`.trim() || invoice.studentId?.studentId || "Student";
+    
+    await createAuditLog({
+      adminId: req.admin?._id,
+      adminName: req.admin?.adminId || 'System',
+      actionType: 'Invoice Updated',
+      description: `Updated pending invoice ${invoice.invoiceNumber} for ${studentDisplayName}. New Amount: ₹${finalAmount}`,
+      targetType: 'Invoice',
+      targetId: invoice.invoiceNumber,
+      targetName: `${studentDisplayName} - ₹${finalAmount}`
+    });
+
+    return res.json({ message: "Invoice updated successfully", invoice });
+  } catch (err) {
+    console.error("Update invoice error:", err);
+    return res.status(500).json({ message: "Error updating invoice." });
   }
 };
 
@@ -907,39 +1009,52 @@ const createRazorpayOrder = async (req, res) => {
 };
 
 const verifyRazorpayPayment = async (req, res) => {
-  const { 
-    razorpay_order_id, 
-    razorpay_payment_id, 
-    razorpay_signature,
-    id, // Invoice ID or Salary ID
-    type // 'student_invoice' or 'staff_salary'
-  } = req.body;
+    const { 
+      razorpay_order_id, 
+      razorpay_payment_id, 
+      razorpay_signature,
+      id, // Invoice ID or Salary ID
+      type, // 'student_invoice' or 'staff_salary'
+      amountPaid
+    } = req.body;
 
-  try {
-    // 1. Verify signature
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(body.toString())
-      .digest('hex');
+    try {
+      // 1. Verify signature
+      const body = razorpay_order_id + "|" + razorpay_payment_id;
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+        .update(body.toString())
+        .digest('hex');
 
-    const isSignatureValid = expectedSignature === razorpay_signature;
+      const isSignatureValid = expectedSignature === razorpay_signature;
 
-    if (!isSignatureValid) {
-      return res.status(400).json({ success: false, message: "Invalid payment signature" });
-    }
+      if (!isSignatureValid) {
+        return res.status(400).json({ success: false, message: "Invalid payment signature" });
+      }
 
-    // 2. Update the record
-    if (type === 'student_invoice') {
-      const invoice = await StudentInvoice.findById(id).populate('studentId');
-      if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+      // 2. Update the record
+      if (type === 'student_invoice') {
+        const invoice = await StudentInvoice.findById(id).populate('studentId');
+        if (!invoice) return res.status(404).json({ message: "Invoice not found" });
 
-      invoice.status = 'paid';
-      invoice.paidDate = new Date();
-      invoice.paymentMethod = 'razorpay';
-      invoice.razorpayPaymentId = razorpay_payment_id;
-      invoice.razorpayOrderId = razorpay_order_id;
-      await invoice.save();
+        if (amountPaid) {
+          invoice.paidAmount = (invoice.paidAmount || 0) + Number(amountPaid);
+          if (invoice.paidAmount >= invoice.amount) {
+            invoice.status = 'paid';
+            invoice.paidDate = new Date();
+          } else {
+            invoice.status = 'pending';
+          }
+        } else {
+          invoice.status = 'paid';
+          invoice.paidDate = new Date();
+          invoice.paidAmount = invoice.amount;
+        }
+
+        invoice.paymentMethod = 'razorpay';
+        invoice.razorpayPaymentId = razorpay_payment_id;
+        invoice.razorpayOrderId = razorpay_order_id;
+        await invoice.save();
 
       // Audit Log
       await createAuditLog({
@@ -1087,6 +1202,8 @@ export {
   generateStudentInvoice,
   getStudentInvoices,
   updateStudentInvoiceStatus,
+  updateStudentInvoice,
+  deleteStudentInvoice,
   createManagementInvoice,
   getManagementInvoices,
   updateManagementInvoiceStatus,

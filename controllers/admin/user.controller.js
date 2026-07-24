@@ -1370,6 +1370,22 @@ const registerStudent = async (req, res) => {
       if (!claimedBed) {
         return res.status(400).json({ success: false, message: "Bed is already taken or does not exist." });
       }
+
+      // Add audit log for inventory assigned to student/worker
+      try {
+        const userType = (isWorking === 'true' || isWorking === true) ? "worker" : "student";
+        await createAuditLog({
+          adminId: req.admin?._id,
+          adminName: req.admin?.adminId || "System",
+          actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+          description: `Status changed from Available to In Use. Assigned to ${userType}: ${firstName} ${lastName} (ID: ${studentId})`,
+          targetType: "Inventory",
+          targetId: claimedBed._id,
+          targetName: claimedBed.itemName
+        });
+      } catch (auditErr) {
+        console.error("Inventory assignment audit log failed:", auditErr.message);
+      }
     }
 
     await newStudent.save();
@@ -1901,6 +1917,21 @@ const updateStudent = async (req, res) => {
       if (!claimedBed) {
         return res.status(400).json({ success: false, message: "New bed is already taken or does not exist." });
       }
+
+      try {
+        const userType = (isWorking === 'true' || isWorking === true) ? "worker" : "student";
+        await createAuditLog({
+          adminId: req.admin?._id,
+          adminName: req.admin?.adminId || "System",
+          actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+          description: `Status changed from Available to In Use. Assigned to ${userType}: ${firstName} ${lastName} (ID: ${studentId}) during update`,
+          targetType: "Inventory",
+          targetId: claimedBed._id,
+          targetName: claimedBed.itemName
+        });
+      } catch (auditErr) {
+        console.error("New bed audit log failed:", auditErr.message);
+      }
     }
 
     const updatedStudent = await Student.findOneAndUpdate(
@@ -1910,7 +1941,24 @@ const updateStudent = async (req, res) => {
     );
 
     if (previousBedId && previousBedId !== "Not Assigned" && String(previousBedId) !== String(newBedId)) {
-      await Inventory.findByIdAndUpdate(previousBedId, { $set: { status: "Available", occupiedBy: null } });
+      const freedBed = await Inventory.findByIdAndUpdate(previousBedId, { $set: { status: "Available", occupiedBy: null } });
+      
+      if (freedBed) {
+        try {
+          const userType = (isWorking === 'true' || isWorking === true) ? "worker" : "student";
+          await createAuditLog({
+            adminId: req.admin?._id,
+            adminName: req.admin?.adminId || "System",
+            actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+            description: `Status changed from In Use to Available. Unassigned from ${userType}: ${firstName} ${lastName} (ID: ${studentId}) during update`,
+            targetType: "Inventory",
+            targetId: freedBed._id,
+            targetName: freedBed.itemName
+          });
+        } catch (auditErr) {
+          console.error("Old bed audit log failed:", auditErr.message);
+        }
+      }
     }
 
     // Create audit log for the update
@@ -1956,8 +2004,30 @@ const deleteStudent = async (req, res) => {
       lastName: existingStudent.lastName,
       email: existingStudent.email,
       contactNumber: existingStudent.contactNumber,
-      roomBedNumber: existingStudent.roomBedNumber
+      roomBedNumber: existingStudent.roomBedNumber,
+      isWorking: existingStudent.isWorking
     };
+
+    // Before deleting student, free their bed
+    if (studentData.roomBedNumber && studentData.roomBedNumber !== "Not Assigned") {
+      const freedBed = await Inventory.findByIdAndUpdate(studentData.roomBedNumber, { $set: { status: "Available", occupiedBy: null } });
+      if (freedBed) {
+        try {
+          const userType = (studentData.isWorking === 'true' || studentData.isWorking === true) ? "worker" : "student";
+          await createAuditLog({
+            adminId: req.admin?._id,
+            adminName: req.admin?.adminId || "System",
+            actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+            description: `Status changed from In Use to Available. Unassigned from ${userType}: ${studentData.firstName} ${studentData.lastName} (ID: ${studentId}) due to deletion`,
+            targetType: "Inventory",
+            targetId: freedBed._id,
+            targetName: freedBed.itemName
+          });
+        } catch (auditErr) {
+          console.error("Old bed audit log failed on deletion:", auditErr.message);
+        }
+      }
+    }
 
     await Student.deleteOne({ studentId });
 

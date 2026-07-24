@@ -11,7 +11,7 @@ import mongoose from 'mongoose';
 import sendEmail from '../../utils/sendEmail.js';
 import { sendBulkNotifications } from '../../utils/sendNotification.js';
 import { emitAddEmployee } from '../../socketManager.js';
-
+import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 // Get all requisitions with optional filters
 export const getAllRequisitions = async (req, res) => {
   try {
@@ -367,9 +367,26 @@ export const updateRequisitionStatus = async (req, res) => {
         if (itemId && mongoose.Types.ObjectId.isValid(itemId)) {
           const item = await Inventory.findById(itemId);
           if (item) {
+            const oldStatus = item.status;
             item.status = 'Damaged'; // Or mark as needing replacement
-            // You could also populate the replacementRequest field in Inventory model if you want
             await item.save();
+
+            // Create audit log for inventory status change via requisition
+            if (oldStatus !== 'Damaged') {
+              try {
+                await createAuditLog({
+                  adminId: req.admin?._id,
+                  adminName: req.admin?.adminId || "System",
+                  actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+                  description: `Status changed from ${oldStatus} to Damaged due to approved replacement requisition`,
+                  targetType: "Inventory",
+                  targetId: item._id,
+                  targetName: item.itemName
+                });
+              } catch (auditErr) {
+                console.error("Inventory requisition audit log failed:", auditErr.message);
+              }
+            }
           }
         }
 

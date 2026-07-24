@@ -39,8 +39,19 @@ const studentInvoiceSchema = new mongoose.Schema({
   },
   invoiceType: {
     type: String,
-    enum: ['hostel_fee', 'mess_fee', 'security_deposit', 'maintenance_fee', 'other'],
     required: true
+  },
+  items: [{
+    categoryName: { type: String, required: true },
+    amount: { type: Number, required: true }
+  }],
+  billingCycleStart: {
+    type: Date,
+    default: null
+  },
+  billingCycleEnd: {
+    type: Date,
+    default: null
   },
   description: {
     type: String,

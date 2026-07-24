@@ -10,6 +10,7 @@ const getAuditLogs = async (req, res) => {
       actionType, 
       adminId, 
       targetType,
+      targetId,
       startDate,
       endDate
     } = req.query;
@@ -39,6 +40,11 @@ const getAuditLogs = async (req, res) => {
     // Filter by target type
     if (targetType && targetType !== 'all') {
       query.targetType = targetType;
+    }
+
+    // Filter by target id
+    if (targetId) {
+      query.targetId = targetId;
     }
 
     // Date range filter

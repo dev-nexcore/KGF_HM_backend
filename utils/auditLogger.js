@@ -55,12 +55,18 @@ const AuditActionTypes = {
   NOTICE_UPDATED: 'Notice Updated',
   NOTICE_DELETED: 'Notice Deleted',
   INVENTORY_ADDED: 'Inventory Added',
+  INVENTORY_UPDATED: 'Inventory Updated',
+  INVENTORY_DELETED: 'Inventory Deleted',
+  INVENTORY_STATUS_CHANGED: 'Inventory Status Changed',
+  INVENTORY_REPLACEMENT: 'Inventory Replacement',
   ADMIN_LOGIN: 'Admin Login',
   ADMIN_LOGOUT: 'Admin Logout',
   PASSWORD_RESET: 'Password Reset',
   BULK_LEAVE_UPDATE: 'Bulk Leave Update',
   BULK_COMPLAINT_UPDATE: 'Bulk Complaint Update',
-  SALARY_GENERATED: 'Salary Generated'
+  SALARY_GENERATED: 'Salary Generated',
+  INVENTORY_BULK_UPLOADED: 'Inventory Bulk Uploaded',
+  INVENTORY_BULK_DELETED: 'Inventory Bulk Deleted'
 };
 
 export{

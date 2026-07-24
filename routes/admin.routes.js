@@ -76,6 +76,8 @@ import {
   generateStudentInvoice,
   getStudentInvoices,
   updateStudentInvoiceStatus,
+  updateStudentInvoice,
+  deleteStudentInvoice,
   createManagementInvoice,
   getManagementInvoices,
   updateManagementInvoiceStatus,
@@ -133,7 +135,8 @@ import {
   updateNoticeTemplate,
   deleteNoticeTemplate,
   approveNoticeTemplateAction,
-  rejectNoticeTemplateAction
+  rejectNoticeTemplateAction,
+  replaceInventoryItem
 } from "../controllers/admin/notice_inventory.controller.js";
 
 import{
@@ -265,6 +268,8 @@ router.patch('/inspections/:inspectionId/status',verifyAdminToken, updateInspect
 // Student Invoices
 router.post('/invoices/student', generateStudentInvoice);
 router.get('/invoices/student', getStudentInvoices);
+router.put('/invoices/student/:invoiceId', updateStudentInvoice);
+router.delete('/invoices/student/:invoiceId', deleteStudentInvoice);
 router.put('/invoices/student/:invoiceId/status', updateStudentInvoiceStatus);
 router.post('/invoices/student/:invoiceId/verify-ocr', verifyAdminToken, uploadPaymentScreenshot.single('screenshot'), verifyInvoicePaymentOCR);
 
@@ -319,13 +324,13 @@ router.delete('/holidays/:id', verifyAdminToken, deleteHoliday);
 
 // ====================== CONTENT MANAGEMENT ROUTES ======================
 // General inventory routes
-router.get('/inventory', getInventoryItems);
-router.post('/inventory/add', upload.single('receipt'), addInventoryItem);
+router.get('/inventory', verifyAdminToken, getInventoryItems);
+router.post('/inventory/add', verifyAdminToken, upload.single('receipt'), addInventoryItem);
 
 // ADD THESE TWO NEW ROUTES HERE (before specific routes)
-router.post('/inventory/bulk-upload', uploadBulk.single('file'), bulkUploadInventory);
-router.post('/inventory/bulk-qr-generate', bulkGenerateQRCodes);
-router.post('/inventory/bulk-delete', bulkDeleteInventory);
+router.post('/inventory/bulk-upload', verifyAdminToken, uploadBulk.single('file'), bulkUploadInventory);
+router.post('/inventory/bulk-qr-generate', verifyAdminToken, bulkGenerateQRCodes);
+router.post('/inventory/bulk-delete', verifyAdminToken, bulkDeleteInventory);
 
 // Specific inventory routes (these must come BEFORE /inventory/:id)
 router.get('/inventory/stock-report', generateStockReport);
@@ -336,13 +341,14 @@ router.get('/inventory/qr/:slug', getItemByQRSlug);
 
 
 // Parameterized inventory routes
-router.get('/inventory/:id', getInventoryItemById);
-router.put('/inventory/:id', upload.single('receipt'), updateInventoryItem);
-router.put('/inventory/:id/receipt', upload.single('receipt'), updateInventoryReceipt);
-router.post('/inventory/:id/qr-code', generateQRCode);
+router.get('/inventory/:id', verifyAdminToken, getInventoryItemById);
+router.put('/inventory/:id', verifyAdminToken, upload.single('receipt'), updateInventoryItem);
+router.put('/inventory/:id/receipt', verifyAdminToken, upload.single('receipt'), updateInventoryReceipt);
+router.post('/inventory/:id/replace', verifyAdminToken, upload.single('receipt'), replaceInventoryItem);
+router.post('/inventory/:id/qr-code', verifyAdminToken, generateQRCode);
 router.get('/inventory/:id/qr-code/download', downloadQRCode); 
-router.delete('/inventory/delete-all', deleteAllInventory);
-router.delete('/inventory/:id', deleteInventoryItem);
+router.delete('/inventory/delete-all', verifyAdminToken, deleteAllInventory);
+router.delete('/inventory/:id', verifyAdminToken, deleteInventoryItem);
 
 // *** NOTICE ROUTES ***
 router.post('/issue-notice', verifyAdminToken, issueNotice);

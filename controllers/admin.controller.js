@@ -496,7 +496,7 @@ const getFinancialSummary = async (req, res) => {
 };
 
 const generateStudentInvoice = async (req, res) => {
-  const { studentId, amount, invoiceType, dueDate, description } = req.body;
+  const { studentId, amount, invoiceType, dueDate, description, items, billingCycleStart, billingCycleEnd } = req.body;
 
   try {
     // Find student
@@ -509,14 +509,27 @@ const generateStudentInvoice = async (req, res) => {
     const invoiceCount = await StudentInvoice.countDocuments();
     const invoiceNumber = `INV-${Date.now()}-${(invoiceCount + 1).toString().padStart(4, '0')}`;
 
+    let finalAmount = Number(amount) || 0;
+    let finalItems = items || [];
+    
+    if (finalItems.length > 0) {
+      finalAmount = finalItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    } else if (amount) {
+      // Backwards compatibility if sent from old form
+      finalItems = [{ categoryName: invoiceType, amount: finalAmount }];
+    }
+
     // Create invoice
     const newInvoice = new StudentInvoice({
       studentId: student._id,
       invoiceNumber,
-      amount,
+      amount: finalAmount,
       invoiceType,
+      items: finalItems,
       dueDate: new Date(dueDate),
       description,
+      billingCycleStart: billingCycleStart ? new Date(billingCycleStart) : null,
+      billingCycleEnd: billingCycleEnd ? new Date(billingCycleEnd) : null,
       generatedBy: req.admin?._id
     });
 

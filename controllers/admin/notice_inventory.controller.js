@@ -453,6 +453,17 @@ export const applyReplacementRequest = async (req, res) => {
 
     await inventory.save();
 
+    await createAuditLog({
+      adminId: req.admin?._id || req.user?.id,
+      adminName: req.admin?.adminId || req.user?.name || 'System',
+      actionType: AuditActionTypes.INVENTORY_REPLACEMENT,
+      description: `Replacement requested for ${inventory.itemName} due to: ${oldItemReason}`,
+      targetType: 'Inventory',
+      targetId: inventory._id,
+      targetName: inventory.itemName,
+      additionalData: { replacementItemName }
+    });
+
     return res.status(200).json({
       success: true,
       message: "Replacement request submitted successfully",
@@ -505,11 +516,34 @@ export const updateReplacementRequestStatus = async (req, res) => {
       new Date();
 
     // ✅ if approved then mark old item damaged
+    let oldStatus = inventory.status;
     if (replacementStatus === "Approved") {
       inventory.status = "Damaged";
     }
 
     await inventory.save();
+
+    await createAuditLog({
+      adminId: req.admin?._id || req.user?.id,
+      adminName: req.admin?.adminId || req.user?.name || 'System',
+      actionType: AuditActionTypes.INVENTORY_REPLACEMENT,
+      description: `Replacement request ${replacementStatus} for ${inventory.itemName}. Remark: ${adminRemark || 'None'}`,
+      targetType: 'Inventory',
+      targetId: inventory._id,
+      targetName: inventory.itemName
+    });
+
+    if (replacementStatus === "Approved" && oldStatus !== "Damaged") {
+      await createAuditLog({
+        adminId: req.admin?._id || req.user?.id,
+        adminName: req.admin?.adminId || req.user?.name || 'System',
+        actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+        description: `Status changed from ${oldStatus} to Damaged due to replacement approval.`,
+        targetType: 'Inventory',
+        targetId: inventory._id,
+        targetName: inventory.itemName
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -1002,6 +1036,19 @@ export const bulkUploadInventory = async (req, res) => {
 
     fs.unlinkSync(filePath);
 
+    // Create audit logs for all bulk uploaded items
+    for (const item of savedItems) {
+      await createAuditLog({
+        adminId: req.admin?._id,
+        adminName: req.admin?.adminId || 'System',
+        actionType: AuditActionTypes.INVENTORY_ADDED,
+        description: `Bulk uploaded inventory item: ${item.itemName} (Barcode: ${item.barcodeId})`,
+        targetType: 'Inventory',
+        targetId: item._id,
+        targetName: item.itemName
+      });
+    }
+
     return res.status(201).json({
       success: true,
       addedCount: savedItems.length,
@@ -1237,20 +1284,42 @@ const downloadQRCode = async (req, res) => {
     const { id } = req.params;
     const inventoryItem = await Inventory.findById(id);
 
-    if (!inventoryItem || !inventoryItem.qrCodeUrl) {
+    if (!inventoryItem) {
       return res.status(404).json({
         success: false,
-        message: 'QR code not found for this item'
+        message: 'Inventory item not found'
       });
     }
 
-    const qrCodePath = path.join(process.cwd(), 'public', 'qrcodes', `${id}.png`);
+    const qrCodesDir = path.join(process.cwd(), 'public', 'qrcodes');
+    const qrCodePath = path.join(qrCodesDir, `${id}.png`);
 
     if (!fs.existsSync(qrCodePath)) {
-      return res.status(404).json({
-        success: false,
-        message: 'QR code file not found'
+      // Re-generate if it doesn't exist locally
+      if (!fs.existsSync(qrCodesDir)) {
+        fs.mkdirSync(qrCodesDir, { recursive: true });
+      }
+      
+      // Ensure publicSlug exists
+      if (!inventoryItem.publicSlug) {
+        inventoryItem.publicSlug = nanoid(10);
+      }
+      
+      const qrData = `${FRONTEND_BASE_URL}/inventory/item/${inventoryItem.publicSlug}`;
+      await QRCode.toFile(qrCodePath, qrData, {
+        width: 300,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
       });
+      
+      // Update item with QR code URL if not already set
+      if (!inventoryItem.qrCodeUrl) {
+        inventoryItem.qrCodeUrl = `/qrcodes/${inventoryItem._id}.png`;
+      }
+      await inventoryItem.save();
     }
 
     // Set headers for file download
@@ -1349,6 +1418,15 @@ const getAvailableRooms = async (req, res) => {
 const updateInventoryItem = async (req, res) => {
   try {
     const { id } = req.params;
+    const oldItem = await Inventory.findById(id);
+
+    if (!oldItem) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found"
+      });
+    }
+
     const updateData = { ...req.body };
 
     // If a file is uploaded, add its path to updateData
@@ -1377,19 +1455,38 @@ const updateInventoryItem = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    if (!updatedItem) {
-      return res.status(404).json({
-        success: false,
-        message: "Item not found"
+    let changes = [];
+    if (updateData.status && updateData.status !== oldItem.status) {
+      changes.push(`Status changed from ${oldItem.status} to ${updateData.status}`);
+      
+      await createAuditLog({
+        adminId: req.admin?._id,
+        adminName: req.admin?.adminId || 'System',
+        actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+        description: `Status changed from ${oldItem.status} to ${updateData.status}`,
+        targetType: 'Inventory',
+        targetId: id,
+        targetName: updatedItem.itemName
       });
     }
+    
+    if (updateData.roomNo && updateData.roomNo !== oldItem.roomNo) {
+      changes.push(`Assigned to Room: ${updateData.roomNo}`);
+    }
+    if (updateData.location && updateData.location !== oldItem.location) {
+      changes.push(`Moved to Location: ${updateData.location}`);
+    }
+
+    const changeDescription = changes.length > 0 
+      ? `Updated inventory item: ${updatedItem.itemName}. Changes: ${changes.join(', ')}`
+      : `Updated inventory item: ${updatedItem.itemName}`;
 
     // Create audit log for inventory update
     await createAuditLog({
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
-      actionType: 'Inventory Updated',
-      description: `Updated inventory item: ${updatedItem.itemName} (Barcode: ${updatedItem.barcodeId})`,
+      actionType: AuditActionTypes.INVENTORY_UPDATED,
+      description: changeDescription,
       targetType: 'Inventory',
       targetId: id,
       targetName: updatedItem.itemName,
@@ -2836,6 +2933,97 @@ const rejectNoticeAction = async (req, res) => {
   }
 };
 
+const replaceInventoryItem = async (req, res) => {
+  const clean = (v) =>
+    v === "" || v === null || v === "undefined" ? undefined : v;
+
+  try {
+    const { id } = req.params;
+    const {
+      reason,
+      itemName,
+      category,
+      location,
+      roomNo,
+      floor,
+      status,
+      description,
+      purchaseDate,
+      purchaseCost
+    } = req.body;
+
+    if (!itemName) {
+      return res.status(400).json({ success: false, message: "New Item name is required" });
+    }
+
+    const itemToUpdate = await Inventory.findById(id);
+    if (!itemToUpdate) {
+      return res.status(404).json({ success: false, message: "Inventory item not found" });
+    }
+
+    const oldItemName = itemToUpdate.itemName;
+    const oldBarcodeId = itemToUpdate.barcodeId;
+
+    // Do NOT generate a new barcode ID. Keep the old one.
+    let generatedBarcode = oldBarcodeId;
+
+    const receiptUrl = req.file ? `/uploads/receipts/${req.file.filename}` : itemToUpdate.receiptUrl;
+    
+    let parsedPurchaseDate = itemToUpdate.purchaseDate;
+    if (purchaseDate && purchaseDate.trim() !== "") {
+      parsedPurchaseDate = new Date(purchaseDate.split("-").reverse().join("-"));
+    }
+
+    // Update existing item
+    itemToUpdate.itemName = itemName;
+    itemToUpdate.barcodeId = generatedBarcode;
+    itemToUpdate.category = category || itemToUpdate.category;
+    itemToUpdate.location = location || itemToUpdate.location;
+    itemToUpdate.roomNo = roomNo || itemToUpdate.roomNo;
+    itemToUpdate.floor = floor || itemToUpdate.floor;
+    itemToUpdate.status = status || "Available";
+    itemToUpdate.description = clean(description) || itemToUpdate.description;
+    itemToUpdate.purchaseDate = parsedPurchaseDate;
+    itemToUpdate.purchaseCost = clean(purchaseCost) || itemToUpdate.purchaseCost;
+    itemToUpdate.receiptUrl = receiptUrl;
+    
+    // We can keep the same publicSlug and QR Code URL, but we might want to regenerate the QR Code image just in case
+    const qrData = `${FRONTEND_BASE_URL}/inventory/item/${itemToUpdate.publicSlug}`;
+    const qrCodesDir = path.join(process.cwd(), "public", "qrcodes");
+    if (!fs.existsSync(qrCodesDir)) {
+      fs.mkdirSync(qrCodesDir, { recursive: true });
+    }
+    const qrCodePath = path.join(qrCodesDir, `${itemToUpdate._id}.png`);
+    await QRCode.toFile(qrCodePath, qrData, {
+      width: 300, margin: 2, color: { dark: "#000000", light: "#FFFFFF" }
+    });
+
+    await itemToUpdate.save();
+
+    // Create single Audit Log for replacement history
+    await createAuditLog({
+      adminId: req.admin?._id || req.user?.id,
+      adminName: req.admin?.adminId || req.user?.name || 'System',
+      actionType: AuditActionTypes.INVENTORY_REPLACEMENT || AuditActionTypes.INVENTORY_UPDATED || 'INVENTORY_REPLACEMENT',
+      description: `Item replaced inline. Old: ${oldItemName} (${oldBarcodeId}) -> New: ${itemName} (${generatedBarcode}). Reason: ${reason || 'N/A'}`,
+      targetType: 'Inventory',
+      targetId: itemToUpdate._id,
+      targetName: itemToUpdate.itemName,
+      additionalData: { oldBarcodeId, oldItemName }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Item replaced successfully",
+      item: itemToUpdate
+    });
+
+  } catch (err) {
+    console.error("Replace Inventory Error:", err);
+    return res.status(500).json({ success: false, message: "Failed to replace inventory item." });
+  }
+};
+
 export {
   addInventoryItem,
   getInventoryItems,
@@ -2868,5 +3056,6 @@ export {
   updateNoticeTemplate,
   deleteNoticeTemplate,
   approveNoticeTemplateAction,
-  rejectNoticeTemplateAction
+  rejectNoticeTemplateAction,
+  replaceInventoryItem
 }
