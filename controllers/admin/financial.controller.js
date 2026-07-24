@@ -153,6 +153,7 @@ const getStudentInvoices = async (req, res) => {
         description: invoice.description,
         billingCycleStart: invoice.billingCycleStart,
         billingCycleEnd: invoice.billingCycleEnd,
+        paymentMethod: invoice.paymentMethod,
         parentScreenshot: invoice.parentScreenshot,
         adminScreenshot: invoice.adminScreenshot
       })),
@@ -171,7 +172,7 @@ const getStudentInvoices = async (req, res) => {
 
 const updateStudentInvoiceStatus = async (req, res) => {
   const { invoiceId } = req.params;
-  const { status, paymentMethod, paidAmountToAdd } = req.body;
+  const { status, paymentMethod, paidAmountToAdd, transactionId, notes, parentScreenshot, adminScreenshot } = req.body;
 
   try {
     const invoice = await StudentInvoice.findById(invoiceId)
@@ -204,6 +205,11 @@ const updateStudentInvoiceStatus = async (req, res) => {
         invoice.paymentMethod = paymentMethod || invoice.paymentMethod;
       }
     }
+
+    if (transactionId) invoice.transactionId = transactionId;
+    if (notes) invoice.description = invoice.description ? `${invoice.description}\nNotes: ${notes}` : `Notes: ${notes}`;
+    if (parentScreenshot) invoice.parentScreenshot = parentScreenshot;
+    if (adminScreenshot) invoice.adminScreenshot = adminScreenshot;
 
     await invoice.save();
 
@@ -420,9 +426,12 @@ const updateManagementInvoiceStatus = async (req, res) => {
     if (adminNotes) {
       invoice.adminNotes = adminNotes;
     }
+    invoice.paymentMethod = paymentMethod || invoice.paymentMethod;
     if (status === 'approved') {
       invoice.paymentDate = new Date();
     }
+    if (transactionId) invoice.transactionId = transactionId;
+    if (notes) invoice.description = invoice.description ? `${invoice.description}\nNotes: ${notes}` : `Notes: ${notes}`;
 
     await invoice.save();
 
@@ -1198,6 +1207,51 @@ const verifyInvoicePaymentOCR = async (req, res) => {
   }
 };
 
+const extractAdminPaymentOCR = async (req, res) => {
+  const screenshotFile = req.file;
+  if (!screenshotFile) {
+    return res.status(400).json({ success: false, message: "No verification screenshot uploaded" });
+  }
+
+  try {
+    console.log("Running OCR on admin verification screenshot:", screenshotFile.path);
+    const { data: { text } } = await Tesseract.recognize(screenshotFile.path, 'eng');
+    console.log("OCR Extracted Text from Admin Screenshot:\n", text);
+
+    // Extract UTR (12-digit number)
+    const cleanedText = text.replace(/[\s-]/g, '');
+    const match = cleanedText.match(/\b\d{12}\b/) || cleanedText.match(/\d{12}/);
+    let extractedUtr = null;
+    if (match) {
+      extractedUtr = match[0];
+    }
+
+    // Extract amounts (looking for patterns like 13,500 or 13500)
+    // We'll extract all numbers that could be amounts
+    const amountMatches = text.match(/(?:Rs\.?|₹|INR)?\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{2})?|\d{3,6}(?:\.\d{2})?)/gi) || [];
+    const detectedAmounts = [];
+    
+    amountMatches.forEach(m => {
+      const numStr = m.replace(/[^\d.]/g, ''); // strip out currency symbols and commas
+      const num = parseFloat(numStr);
+      if (!isNaN(num) && num > 0) {
+        detectedAmounts.push(num);
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      extractedUtr,
+      detectedAmounts: [...new Set(detectedAmounts)],
+      screenshotUrl: screenshotFile ? `/uploads/payment-screenshots/${screenshotFile.filename}` : null
+    });
+
+  } catch (error) {
+    console.error("OCR Extraction API error:", error);
+    return res.status(500).json({ success: false, message: "OCR processing failed", error: error.message });
+  }
+};
+
 export {
   generateStudentInvoice,
   getStudentInvoices,
@@ -1216,5 +1270,6 @@ export {
   updateRefundStatus,
   createRazorpayOrder,
   verifyRazorpayPayment,
-  verifyInvoicePaymentOCR
+  verifyInvoicePaymentOCR,
+  extractAdminPaymentOCR
 }

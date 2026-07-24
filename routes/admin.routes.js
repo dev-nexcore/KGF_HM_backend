@@ -90,7 +90,8 @@ import {
   updateRefundStatus,
   createRazorpayOrder,
   verifyRazorpayPayment,
-  verifyInvoicePaymentOCR
+  verifyInvoicePaymentOCR,
+  extractAdminPaymentOCR
 } from "../controllers/admin/financial.controller.js";
 
 import {
@@ -272,6 +273,7 @@ router.put('/invoices/student/:invoiceId', updateStudentInvoice);
 router.delete('/invoices/student/:invoiceId', deleteStudentInvoice);
 router.put('/invoices/student/:invoiceId/status', updateStudentInvoiceStatus);
 router.post('/invoices/student/:invoiceId/verify-ocr', verifyAdminToken, uploadPaymentScreenshot.single('screenshot'), verifyInvoicePaymentOCR);
+router.post('/extract-utr', verifyAdminToken, uploadPaymentScreenshot.single('screenshot'), extractAdminPaymentOCR);
 
 // Razorpay Payments
 router.post('/razorpay/create-order', createRazorpayOrder);
