@@ -1683,17 +1683,32 @@ const getAllStudents = async (req, res) => {
       }
     });
 
-    // Fetch all pending and overdue invoices to calculate dues
-    const pendingInvoices = await StudentInvoice.find({ status: { $in: ['pending', 'overdue'] } });
-    const duesMap = {};
-    pendingInvoices.forEach(inv => {
+    // Fetch ALL invoices to accurately determine fee status and dues
+    const allInvoices = await StudentInvoice.find({});
+    const invoiceStatsMap = {};
+    allInvoices.forEach(inv => {
       const sId = inv.studentId.toString();
-      duesMap[sId] = (duesMap[sId] || 0) + (inv.amount - (inv.paidAmount || 0));
+      if (!invoiceStatsMap[sId]) {
+         invoiceStatsMap[sId] = { total: 0, pending: 0, dues: 0 };
+      }
+      invoiceStatsMap[sId].total += 1;
+      if (inv.status === 'pending' || inv.status === 'overdue') {
+         invoiceStatsMap[sId].pending += 1;
+         invoiceStatsMap[sId].dues += (inv.amount - (inv.paidAmount || 0));
+      }
     });
 
     const transformedStudents = students.map((student) => {
       // Infer roomType if not explicitly set but a room is assigned
       const inferredRoomType = student.roomType || (student.roomBedNumber?.roomNo ? String(capacityMap[student.roomBedNumber.roomNo]) : "");
+
+      const stats = invoiceStatsMap[student._id.toString()] || { total: 0, pending: 0, dues: 0 };
+      let computedFeeStatus = student.feeStatus;
+      if (stats.total > 0) {
+         computedFeeStatus = stats.dues > 0 ? "Unpaid" : "Paid";
+      } else {
+         computedFeeStatus = "Unpaid"; // Initial state when no invoices exist
+      }
 
       return {
         id: student.studentId,
@@ -1705,8 +1720,8 @@ const getAllStudents = async (req, res) => {
         _id: student._id,
         email: student.email,
         admissionDate: student.admissionDate,
-        feeStatus: student.feeStatus,
-        dues: duesMap[student._id.toString()] || 0,
+        feeStatus: computedFeeStatus,
+        dues: stats.dues,
         roomType: inferredRoomType,
         emergencyContactName: student.emergencyContactName,
         emergencyContactNumber: student.emergencyContactNumber,
