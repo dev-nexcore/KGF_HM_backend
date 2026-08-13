@@ -643,9 +643,19 @@ const updateLeaveStatus = async (req, res) => {
     }
     
     // Translate frontend 'approved'/'rejected' to 'warden_approved'/'warden_rejected'
-    const newStatus = status === 'approved' ? 'warden_approved' : (status === 'rejected' ? 'warden_rejected' : status);
+    let newStatus;
+    if (status === 'approved') {
+      if (leave.status === 'parent_approved') {
+        newStatus = 'approved';
+      } else {
+        newStatus = 'warden_approved';
+      }
+    } else if (status === 'rejected') {
+      newStatus = 'warden_rejected';
+    } else {
+      newStatus = status;
+    }
     leave.status = newStatus;
-
     if (wardenComments) {
       leave.wardenComments = wardenComments;
     }
@@ -667,7 +677,7 @@ const updateLeaveStatus = async (req, res) => {
           
           <p style="margin: 0 0 25px; font-size: 15px; color: #475569; line-height: 1.6;">
             Dear <strong>${leave.studentId.firstName}</strong>,<br/>
-            Your leave application for <strong>${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</strong> has been reviewed by the warden (<strong style="color: ${status === 'approved' ? '#16a34a' : '#dc2626'}">${status.toUpperCase()}</strong>) and is now pending final approval by the Hostel Admin.
+            Your leave application for <strong>${leave.leaveType === 'Others' && leave.otherLeaveType ? `Others (${leave.otherLeaveType})` : leave.leaveType}</strong> has been reviewed by the warden (<strong style="color: ${status === 'approved' ? '#16a34a' : '#dc2626'}">${status.toUpperCase()}</strong>) ${newStatus === 'approved' ? 'and is now <strong>FULLY APPROVED</strong>.' : 'and is now pending final approval.'}
           </p>
 
           <div style="border: 1px solid #e2e8f0; border-left: 4px solid ${status === 'approved' ? '#16a34a' : '#dc2626'}; border-radius: 6px; padding: 25px; margin-bottom: 25px; background-color: #f8fafc;">
@@ -688,7 +698,7 @@ const updateLeaveStatus = async (req, res) => {
               </tr>
               <tr>
                 <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; color: #64748b; width: 40%;">Warden Status</td>
-                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: ${status === 'approved' ? '#16a34a' : '#dc2626'}; text-transform: capitalize;">${status} (Pending Admin)</td>
+                <td style="padding: 15px 0 15px; border-bottom: 1px solid #e2e8f0; font-size: 14px; font-weight: 600; text-align: right; width: 60%; color: ${status === 'approved' ? '#16a34a' : '#dc2626'}; text-transform: capitalize;">${status} ${newStatus === 'approved' ? '(Fully Approved)' : '(Pending Admin/Parent)'}</td>
               </tr>
               ${wardenComments ? `
               <tr>

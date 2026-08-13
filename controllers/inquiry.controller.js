@@ -69,7 +69,7 @@ export const getAllInquiries = async (req, res) => {
 export const updateInquiryStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, notes } = req.body;
+    const { status, notes, rejectReason } = req.body;
 
     const inquiry = await Inquiry.findById(id);
 
@@ -79,6 +79,7 @@ export const updateInquiryStatus = async (req, res) => {
 
     if (status) inquiry.status = status;
     if (notes) inquiry.notes = notes;
+    if (rejectReason !== undefined) inquiry.rejectReason = rejectReason;
 
     await inquiry.save();
 

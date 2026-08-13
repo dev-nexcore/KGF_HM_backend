@@ -16,6 +16,10 @@ const holidaySchema = new mongoose.Schema({
     enum: ['National', 'Festival', 'Other'],
     default: 'Other'
   },
+  isPaid: {
+    type: Boolean,
+    default: true
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'

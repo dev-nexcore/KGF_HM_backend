@@ -33,7 +33,7 @@ export const getHolidays = async (req, res) => {
 // Add a new holiday
 export const addHoliday = async (req, res) => {
   try {
-    const { date, title, type } = req.body;
+    const { date, title, type, isPaid } = req.body;
     
     // Check if a holiday already exists for this date
     const holidayDate = new Date(date);
@@ -57,6 +57,7 @@ export const addHoliday = async (req, res) => {
       date: holidayDate,
       title,
       type: type || 'Other',
+      isPaid: isPaid !== undefined ? isPaid : true,
       createdBy: req.admin?._id
     });
 

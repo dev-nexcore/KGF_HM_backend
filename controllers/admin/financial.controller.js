@@ -849,7 +849,7 @@ const getRefunds = async (req, res) => {
     const refunds = await Refund.find(query)
       .populate('studentId', 'firstName lastName studentId')
       .populate('processedBy', 'adminId')
-      .sort({ requestDate: -1 })
+      .sort({ requestedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -870,8 +870,9 @@ const getRefunds = async (req, res) => {
       refunds: filteredRefunds.map(refund => ({
         _id: refund._id,
         refundId: refund.refundId,
-        date: refund.requestDate,
+        date: refund.requestedAt || refund.createdAt,
         recipientName: refund.studentId ? `${refund.studentId.firstName} ${refund.studentId.lastName}` : 'Unknown',
+        studentId: refund.studentId?.studentId || 'N/A',
         amount: refund.amount,
         reason: refund.reason,
         status: refund.status,
@@ -898,7 +899,7 @@ const getRefunds = async (req, res) => {
 
 const updateRefundStatus = async (req, res) => {
   const { refundId } = req.params;
-  const { status, adminNotes, paymentMethod } = req.body;
+  const { status, adminNotes, paymentMethod, deduction, deductionReason } = req.body;
 
   try {
     const refund = await Refund.findById(refundId)
@@ -915,6 +916,11 @@ const updateRefundStatus = async (req, res) => {
     if (status === 'completed') {
       refund.processedDate = new Date();
       refund.paymentMethod = paymentMethod;
+      if (deduction !== undefined) refund.deduction = Number(deduction);
+      if (deductionReason) refund.deductionReason = deductionReason;
+      
+      // The final amount is basically original amount - deduction
+      // We don't overwrite refund.amount because that's the requested amount.
     }
     refund.processedBy = req.admin?._id;
 
@@ -941,7 +947,7 @@ Refund Details:
 ${status === 'completed' ? `• Payment Method: ${paymentMethod}` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
-Request Date: ${new Date(refund.requestDate).toLocaleDateString("en-IN")}
+Request Date: ${new Date(refund.requestedAt || refund.createdAt).toLocaleDateString("en-IN")}
 ${status === 'completed' ? `Processed Date: ${new Date().toLocaleDateString("en-IN")}` : ''}
 
 ${status === 'completed' ?

@@ -31,6 +31,10 @@ const inquirySchema = new mongoose.Schema({
     enum: ['pending', 'contacted', 'converted', 'rejected'],
     default: 'pending'
   },
+  rejectReason: {
+    type: String,
+    trim: true
+  },
   notes: {
     type: String,
     trim: true

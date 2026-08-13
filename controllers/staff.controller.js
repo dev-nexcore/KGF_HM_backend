@@ -19,6 +19,7 @@ export const registerStaff =
       shiftStart,
       shiftEnd,
       salary,
+      referredBy,
     } = req.body;
 
     try {
@@ -52,7 +53,8 @@ export const registerStaff =
           designation,
           shiftStart,
           shiftEnd,
-          salary
+          salary,
+          referredBy
         },
         documents: {
           aadharCard: req.files?.aadharCard ? {

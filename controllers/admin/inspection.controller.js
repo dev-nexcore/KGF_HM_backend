@@ -1,4 +1,5 @@
 import { Inspection } from '../../models/inspection.model.js';
+import { InspectionTemplate } from '../../models/inspectionTemplate.model.js';
 import { createAuditLog, AuditActionTypes } from '../../utils/auditLogger.js';
 
 // POST - Create new inspection
@@ -374,11 +375,52 @@ const updateInspectionStatus = async (req, res) => {
   }
 };
 
+// POST - Create new inspection template
+const createInspectionTemplate = async (req, res) => {
+  const { title, target, area, instructions } = req.body;
+  try {
+    if (!title) {
+      return res.status(400).json({ success: false, message: 'Title is required.' });
+    }
+    const newTemplate = new InspectionTemplate({ title, target, area, instructions });
+    await newTemplate.save();
+    return res.json({ success: true, message: 'Template created successfully', template: newTemplate });
+  } catch (error) {
+    console.error('Error creating template:', error);
+    return res.status(500).json({ success: false, message: 'Error creating template.' });
+  }
+};
+
+// GET - Get all inspection templates
+const getInspectionTemplates = async (req, res) => {
+  try {
+    const templates = await InspectionTemplate.find().sort({ createdAt: -1 });
+    return res.json({ success: true, templates });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    return res.status(500).json({ success: false, message: 'Error fetching templates.' });
+  }
+};
+
+// DELETE - Delete inspection template
+const deleteInspectionTemplate = async (req, res) => {
+  try {
+    await InspectionTemplate.findByIdAndDelete(req.params.id);
+    return res.json({ success: true, message: 'Template deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting template:', error);
+    return res.status(500).json({ success: false, message: 'Error deleting template.' });
+  }
+};
+
 export {
   createInspection,
   getAllInspections,
   getInspectionById,
   updateInspection,
   deleteInspection,
-  updateInspectionStatus
+  updateInspectionStatus,
+  createInspectionTemplate,
+  getInspectionTemplates,
+  deleteInspectionTemplate
 };

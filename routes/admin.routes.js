@@ -146,8 +146,11 @@ import{
   getInspectionById,
   updateInspection,
   deleteInspection,
-  updateInspectionStatus
-} from "../controllers/admin/inspection.controller.js"
+  updateInspectionStatus,
+  createInspectionTemplate,
+  getInspectionTemplates,
+  deleteInspectionTemplate
+} from "../controllers/admin/inspection.controller.js";
 
 import {
   getAllRequisitions,
@@ -258,12 +261,18 @@ router.put('/complaints/:complaintId/status', updateComplaintStatus);
 router.put('/complaints/bulk-status', bulkUpdateComplaintStatus);
 
 // ====================== INSPECTION ROUTES ======================
-router.post('/inspections',verifyAdminToken, createInspection);
-router.get('/inspections', getAllInspections);
-router.get('/inspections/:inspectionId', getInspectionById);
-router.put('/inspections/:inspectionId', updateInspection);
-router.delete('/inspections/:inspectionId', deleteInspection);
-router.patch('/inspections/:inspectionId/status',verifyAdminToken, updateInspectionStatus);
+// ----- Inspection Management Routes -----
+router.post("/inspections", verifyAdminToken, createInspection);
+router.get("/inspections", verifyAdminToken, getAllInspections);
+router.get("/inspections/:id", verifyAdminToken, getInspectionById);
+router.put("/inspections/:id", verifyAdminToken, updateInspection);
+router.delete("/inspections/:id", verifyAdminToken, deleteInspection);
+router.patch("/inspections/:id/status", verifyAdminToken, updateInspectionStatus);
+
+// ----- Inspection Templates Routes -----
+router.post("/inspection-templates", verifyAdminToken, createInspectionTemplate);
+router.get("/inspection-templates", verifyAdminToken, getInspectionTemplates);
+router.delete("/inspection-templates/:id", verifyAdminToken, deleteInspectionTemplate);
 
 // ====================== FINANCIAL MANAGEMENT ROUTES ======================
 // Student Invoices

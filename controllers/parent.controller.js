@@ -1042,7 +1042,7 @@ const leaveManagement = async (req, res) => {
 
     // Fetch leave history from Leave model
     const leaves = await Leave.find({ studentId: student._id })
-      .select("leaveType otherLeaveType startDate endDate reason status appliedAt _id")
+      .select("leaveType otherLeaveType startDate endDate reason status appliedAt _id parentComment wardenComments adminComments")
       .sort({ appliedAt: -1 });
 
     console.log("Leaves found:", leaves);
@@ -1061,7 +1061,10 @@ const leaveManagement = async (req, res) => {
         startDate: startDate,
         endDate: endDate,
         reason: leave.reason,
-        status: leave.status
+        status: leave.status,
+        parentComment: leave.parentComment,
+        wardenComments: leave.wardenComments,
+        adminComments: leave.adminComments
       };
     });
 
@@ -1102,15 +1105,25 @@ const updateLeaveStatus = async (req, res) => {
       return res.status(403).json({ message: "You can only update your child's leave requests" });
     }
 
-    // Check if leave is still pending
-    if (leave.status.toLowerCase() !== 'pending') {
+    // Check if leave is still pending or warden_approved
+    if (!['pending', 'warden_approved'].includes(leave.status.toLowerCase())) {
       return res.status(400).json({
         message: `Leave request is already ${leave.status}. Cannot update.`
       });
     }
 
     // Update leave status - if parent approves, set to 'parent_approved', if rejects, set to 'parent_rejected'
-    leave.status = status.toLowerCase() === 'approved' ? 'parent_approved' : 'parent_rejected';
+    let isFinalApproved = false;
+    if (status.toLowerCase() === 'approved') {
+      if (leave.status === 'warden_approved') {
+        leave.status = 'approved';
+        isFinalApproved = true;
+      } else {
+        leave.status = 'parent_approved';
+      }
+    } else {
+      leave.status = 'parent_rejected';
+    }
     leave.parentComment = parentComment || '';
     leave.parentApprovalDate = new Date();
     await leave.save();
@@ -1188,7 +1201,7 @@ const updateLeaveStatus = async (req, res) => {
           <div style="background-color: ${status === 'approved' ? '#f0fdf4' : '#fef2f2'}; padding: 15px; border-radius: 6px; margin: 20px 0;">
             <p style="margin: 0; color: ${status === 'approved' ? '#16a34a' : '#dc2626'}; font-weight: 600;">
               ${status === 'approved' 
-                ? '✅ Your leave has been approved by your parent. It is now awaiting Warden approval.' 
+                ? (isFinalApproved ? '✅ Your leave has been fully approved by your parent and warden.' : '✅ Your leave has been approved by your parent. It is now awaiting Warden approval.') 
                 : '❌ Your leave request has been rejected. Please contact your parent or hostel administration for more details.'}
             </p>
           </div>

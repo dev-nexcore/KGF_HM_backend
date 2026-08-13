@@ -801,7 +801,7 @@
 //   try {
 
 const registerStaff = async (req, res) => {
-  const { firstName, lastName, email, contactNumber, designation, shiftStart, shiftEnd, salary } = req.body;
+  const { firstName, lastName, email, contactNumber, designation, shiftStart, shiftEnd, salary, referredBy } = req.body;
   const aadharCard = req.files?.['aadharCard'] ? req.files['aadharCard'][0].path.replace(/\\/g, '/') : null;
   const panCard = req.files?.['panCard'] ? req.files['panCard'][0].path.replace(/\\/g, '/') : null;
 
@@ -828,7 +828,8 @@ const registerStaff = async (req, res) => {
       staffId,
       password,
       aadharCard,
-      panCard
+      panCard,
+      referredBy
     });
 
     await newStaff.save();
@@ -1580,7 +1581,7 @@ The OTP will be valid for 5 minutes each time you request it.
 
 
 const registerWarden = async (req, res) => {
-  const { firstName, lastName, email, contactNumber, salary } = req.body;
+  const { firstName, lastName, email, contactNumber, salary, referredBy } = req.body;
   const aadharCard = req.files?.['aadharCard'] ? req.files['aadharCard'][0].path.replace(/\\/g, '/') : null;
   const panCard = req.files?.['panCard'] ? req.files['panCard'][0].path.replace(/\\/g, '/') : null;
 
@@ -1603,7 +1604,7 @@ const registerWarden = async (req, res) => {
     const cleanName = firstName.replace(/\s+/g, '').toLowerCase();
     const wardenPassword = `${cleanName}${lastName}`;
 
-    const newWarden = new Warden({ firstName, lastName, email, wardenId: newWardenId, contactNumber, salary, password: wardenPassword, aadharCard, panCard });
+    const newWarden = new Warden({ firstName, lastName, email, wardenId: newWardenId, contactNumber, salary, password: wardenPassword, aadharCard, panCard, referredBy });
     await newWarden.save();
 
     // Add Warden to Biometric Device

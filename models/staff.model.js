@@ -42,6 +42,11 @@ const staffSchema = new mongoose.Schema(
       required: true,
     },
 
+    referredBy: {
+      type: String,
+      default: ""
+    },
+
     shiftStart: {
       type: String,
       required: true,

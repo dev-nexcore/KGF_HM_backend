@@ -35,6 +35,10 @@ const wardenSchema = new mongoose.Schema({
   profilePhoto: {
     type: String, // File path or filename
   },
+  referredBy: {
+    type: String,
+    default: ""
+  },
   isAddedToBiometric: {
     type: Boolean,
     default: false

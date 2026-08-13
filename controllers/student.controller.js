@@ -2399,7 +2399,7 @@ const getLeaveHistory = async (req, res) => {
     }
 
     const leaves = await Leave.find({ studentId: student._id })
-      .select("leaveType otherLeaveType startDate endDate reason status appliedAt")
+      .select("leaveType otherLeaveType startDate endDate reason status appliedAt parentComment wardenComments adminComments")
       .sort({ appliedAt: -1 });
 
     return res.json({ leaves });

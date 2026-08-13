@@ -1098,7 +1098,7 @@ const getRefunds = async (req, res) => {
     const refunds = await Refund.find(query)
       .populate('studentId', 'studentName studentId')
       .populate('processedBy', 'adminId')
-      .sort({ requestDate: -1 })
+      .sort({ requestedAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
@@ -1118,8 +1118,9 @@ const getRefunds = async (req, res) => {
       refunds: filteredRefunds.map(refund => ({
         _id: refund._id,
         refundId: refund.refundId,
-        date: refund.requestDate,
+        date: refund.requestedAt || refund.createdAt,
         recipientName: refund.studentId?.studentName || 'Unknown',
+        studentId: refund.studentId?.studentId || 'N/A',
         amount: refund.amount,
         reason: refund.reason,
         status: refund.status,
@@ -1185,7 +1186,7 @@ Refund Details:
 ${status === 'completed' ? `• Payment Method: ${paymentMethod}` : ''}
 ${adminNotes ? `• Admin Notes: ${adminNotes}` : ''}
 
-Request Date: ${new Date(refund.requestDate).toLocaleDateString("en-IN")}
+Request Date: ${new Date(refund.requestedAt || refund.createdAt).toLocaleDateString("en-IN")}
 ${status === 'completed' ? `Processed Date: ${new Date().toLocaleDateString("en-IN")}` : ''}
 
 ${status === 'completed' ? 
