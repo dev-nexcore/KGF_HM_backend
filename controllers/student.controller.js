@@ -2611,10 +2611,33 @@ const getRefundHistory = async (req, res) => {
     }
 
     const refunds = await Refund.find({ studentId: student._id })
-      .select("refundType amount reason status requestedAt")
+      .populate('processedBy', 'adminId')
       .sort({ requestedAt: -1 });
 
-    return res.json({ refunds });
+    const formattedRefunds = refunds.map(refund => ({
+      _id: refund._id,
+      refundId: refund.refundId,
+      refundType: refund.refundType,
+      otherRefundType: refund.otherRefundType,
+      amount: refund.amount,
+      reason: refund.reason,
+      status: refund.status,
+      requestedAt: refund.requestedAt,
+      paymentMethod: refund.paymentMethod,
+      chequeNumber: refund.chequeNumber,
+      bankName: refund.bankName,
+      chequeDate: refund.chequeDate,
+      chequeImage: refund.chequeImage ? refund.chequeImage.replace('/screenshots/', '/payment-screenshots/') : "",
+      adminNotes: refund.adminNotes,
+      processedDate: refund.processedDate,
+      processedBy: refund.processedBy,
+      fees: refund.fees,
+      securityDeposit: refund.securityDeposit,
+      deduction: refund.deduction,
+      deductionReason: refund.deductionReason
+    }));
+
+    return res.json({ refunds: formattedRefunds });
   } catch (err) {
     console.error("Fetch refund history error:", err);
     return res

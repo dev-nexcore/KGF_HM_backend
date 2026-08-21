@@ -296,13 +296,13 @@ router.put('/invoices/management/:invoiceId/status', updateManagementInvoiceStat
 // Staff Salary Management
 router.post('/salary/generate', verifyAdminToken, generateStaffSalary);
 router.get('/salary', verifyAdminToken, getStaffSalaries);
-router.put('/salary/:salaryId/status', verifyAdminToken, updateSalaryStatus);
+router.put('/salary/:salaryId/status', verifyAdminToken, uploadPaymentScreenshot.single('chequeImage'), updateSalaryStatus);
 router.get('/salary/:salaryId/slip', verifyAdminToken, generateSalarySlip);
 
 // Refund Management
-router.post('/refunds', initiateRefund);
-router.get('/refunds', getRefunds);
-router.put('/refunds/:refundId/status', updateRefundStatus);
+router.post('/refunds', verifyAdminToken, initiateRefund);
+router.get('/refunds', verifyAdminToken, getRefunds);
+router.put('/refunds/:refundId/status', verifyAdminToken, uploadPaymentScreenshot.single('chequeImage'), updateRefundStatus);
 
 // ====================== AUDIT LOG ROUTES ======================
 router.get('/audit-logs', getAuditLogs);

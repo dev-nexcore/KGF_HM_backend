@@ -1143,7 +1143,7 @@ const getRefunds = async (req, res) => {
 
 const updateRefundStatus = async (req, res) => {
   const { refundId } = req.params;
-  const { status, adminNotes, paymentMethod } = req.body;
+  const { status, adminNotes, paymentMethod, chequeNumber, bankName, chequeDate, deduction, deductionReason } = req.body;
 
   try {
     const refund = await Refund.findById(refundId)
@@ -1160,6 +1160,14 @@ const updateRefundStatus = async (req, res) => {
     if (status === 'completed') {
       refund.processedDate = new Date();
       refund.paymentMethod = paymentMethod;
+      if (chequeNumber) refund.chequeNumber = chequeNumber;
+      if (bankName) refund.bankName = bankName;
+      if (chequeDate) refund.chequeDate = new Date(chequeDate);
+      if (req.file) {
+        refund.chequeImage = `/uploads/screenshots/${req.file.filename}`;
+      }
+      if (deduction !== undefined) refund.deduction = Number(deduction);
+      if (deductionReason) refund.deductionReason = deductionReason;
     }
     refund.processedBy = req.admin?._id;
 

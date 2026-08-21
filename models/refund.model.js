@@ -29,7 +29,7 @@ const refundSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "completed", "rejected"],
+      enum: ["pending", "approved", "completed", "rejected"],
       default: "pending",
     },
     paymentMethod: {
@@ -38,6 +38,22 @@ const refundSchema = new mongoose.Schema(
       default: "",
     },
     adminNotes: {
+      type: String,
+      default: "",
+    },
+    chequeNumber: {
+      type: String,
+      default: "",
+    },
+    bankName: {
+      type: String,
+      default: "",
+    },
+    chequeDate: {
+      type: Date,
+      default: null,
+    },
+    chequeImage: {
       type: String,
       default: "",
     },

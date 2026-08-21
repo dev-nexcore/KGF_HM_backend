@@ -98,6 +98,18 @@ const staffSalarySchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  chequeNumber: {
+    type: String,
+    default: null
+  },
+  chequeDate: {
+    type: Date,
+    default: null
+  },
+  chequeImage: {
+    type: String,
+    default: null
+  },
   processedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'

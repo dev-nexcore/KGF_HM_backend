@@ -649,12 +649,21 @@ const getStaffSalaries = async (req, res) => {
         month: salary.month,
         year: salary.year,
         basicSalary: salary.basicSalary,
+        allowances: salary.allowances,
+        deductions: salary.deductions,
         tax: salary.tax,
         pf: salary.pf,
         loanDeduction: salary.loanDeduction,
+        totalDays: salary.totalDays,
+        attendanceDays: salary.attendanceDays,
+        paidHolidays: salary.paidHolidays,
+        unpaidLeaves: salary.unpaidLeaves,
         netSalary: salary.netSalary,
         status: salary.status,
         paymentDate: salary.paymentDate,
+        chequeNumber: salary.chequeNumber,
+        chequeDate: salary.chequeDate,
+        chequeImage: salary.chequeImage,
         bankName: salary.bankName,
         accountNumber: salary.accountNumber,
         ifscCode: salary.ifscCode,
@@ -681,7 +690,7 @@ const getStaffSalaries = async (req, res) => {
 
 const updateSalaryStatus = async (req, res) => {
   const { salaryId } = req.params;
-  const { status, paymentMethod } = req.body;
+  const { status, paymentMethod, bankName, chequeNumber, chequeDate } = req.body;
 
   try {
     const salary = await StaffSalary.findById(salaryId)
@@ -695,6 +704,16 @@ const updateSalaryStatus = async (req, res) => {
     if (status === 'paid') {
       salary.paymentDate = new Date();
       salary.paymentMethod = paymentMethod;
+      if (paymentMethod === 'cheque') {
+        salary.bankName = bankName || '';
+        salary.chequeNumber = chequeNumber || null;
+        salary.chequeDate = chequeDate ? new Date(chequeDate) : null;
+        if (req.file) {
+          salary.chequeImage = `/uploads/payment-screenshots/${req.file.filename}`;
+        }
+      } else if (paymentMethod === 'bank_transfer') {
+        salary.bankName = bankName || '';
+      }
     }
 
     await salary.save();
@@ -760,7 +779,12 @@ const generateSalarySlip = async (req, res) => {
         },
         netSalary: salary.netSalary,
         paymentDate: salary.paymentDate,
-        status: salary.status
+        status: salary.status,
+        paymentMethod: salary.paymentMethod,
+        bankName: salary.bankName,
+        accountNumber: salary.accountNumber,
+        chequeNumber: salary.chequeNumber,
+        chequeDate: salary.chequeDate
       },
       generatedAt: new Date(),
       generatedBy: req.admin?.adminId
@@ -882,7 +906,12 @@ const getRefunds = async (req, res) => {
         fees: refund.fees,
         securityDeposit: refund.securityDeposit,
         deduction: refund.deduction,
-        deductionReason: refund.deductionReason
+        deductionReason: refund.deductionReason,
+        chequeNumber: refund.chequeNumber,
+        bankName: refund.bankName,
+        chequeDate: refund.chequeDate,
+        chequeImage: refund.chequeImage ? refund.chequeImage.replace('/screenshots/', '/payment-screenshots/') : "",
+        adminNotes: refund.adminNotes
       })),
       pagination: {
         currentPage: parseInt(page),
@@ -899,10 +928,10 @@ const getRefunds = async (req, res) => {
 
 const updateRefundStatus = async (req, res) => {
   const { refundId } = req.params;
-  const { status, adminNotes, paymentMethod, deduction, deductionReason } = req.body;
+  const { status, adminNotes, paymentMethod, deduction, deductionReason, chequeNumber, bankName, chequeDate } = req.body;
 
   try {
-    const refund = await Refund.findById(refundId)
+    const refund = await Refund.findOne({ refundId })
       .populate('studentId', 'firstName lastName studentId email');
 
     if (!refund) {
@@ -918,6 +947,12 @@ const updateRefundStatus = async (req, res) => {
       refund.paymentMethod = paymentMethod;
       if (deduction !== undefined) refund.deduction = Number(deduction);
       if (deductionReason) refund.deductionReason = deductionReason;
+      if (chequeNumber) refund.chequeNumber = chequeNumber;
+      if (bankName) refund.bankName = bankName;
+      if (chequeDate) refund.chequeDate = new Date(chequeDate);
+      if (req.file) {
+        refund.chequeImage = `/uploads/payment-screenshots/${req.file.filename}`;
+      }
       
       // The final amount is basically original amount - deduction
       // We don't overwrite refund.amount because that's the requested amount.
@@ -935,7 +970,7 @@ const updateRefundStatus = async (req, res) => {
         from: `"Hostel Admin" <${process.env.MAIL_USER}>`,
         to: refund.studentId.email,
         subject: `Refund Request ${statusText} - ${refund.refundId}`,
-        text: `Hello ${refund.studentId.studentName},
+        text: `Hello ${refund.studentId.firstName} ${refund.studentId.lastName},
 
 ${statusEmoji} Your refund request has been ${status}.
 
@@ -967,10 +1002,10 @@ ${status === 'completed' ?
       adminId: req.admin?._id,
       adminName: req.admin?.adminId || 'System',
       actionType: `Refund ${status.charAt(0).toUpperCase() + status.slice(1)}`,
-      description: `${status} refund ${refund.refundId} for ${refund.studentId.studentName} - ₹${refund.amount}`,
+      description: `${status} refund ${refund.refundId} for ${refund.studentId.firstName} ${refund.studentId.lastName} - ₹${refund.amount}`,
       targetType: 'Refund',
       targetId: refund.refundId,
-      targetName: `${refund.studentId.studentName} - ₹${refund.amount}`
+      targetName: `${refund.studentId.firstName} ${refund.studentId.lastName} - ₹${refund.amount}`
     });
 
     // 🔔 Send in-app notification

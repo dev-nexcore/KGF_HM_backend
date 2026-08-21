@@ -43,7 +43,8 @@ const studentInvoiceSchema = new mongoose.Schema({
   },
   items: [{
     categoryName: { type: String, required: true },
-    amount: { type: Number, required: true }
+    amount: { type: Number, required: true },
+    description: { type: String, default: '' }
   }],
   billingCycleStart: {
     type: Date,
