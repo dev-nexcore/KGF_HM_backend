@@ -217,6 +217,7 @@ const ensureUploadsDir = () => {
     "uploads/warden-documents/",
     "uploads/bulk/",
     "uploads/payment-screenshots/",
+    "uploads/admin-profiles/",
   ];
 
   dirs.forEach((dir) => {
@@ -570,6 +571,24 @@ const paymentScreenshotStorage = multer.diskStorage({
 
 export const uploadPaymentScreenshot = multer({
   storage: paymentScreenshotStorage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
+
+/* =========================================================
+   ADMIN PROFILE UPLOAD
+========================================================= */
+const adminProfileStorage = multer.diskStorage({
+  destination: "uploads/admin-profiles/",
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `admin_profile_${uniqueSuffix}${ext}`);
+  },
+});
+
+export const uploadAdminProfile = multer({
+  storage: adminProfileStorage,
   fileFilter: imageFilter,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });

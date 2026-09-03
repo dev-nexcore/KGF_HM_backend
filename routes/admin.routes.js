@@ -22,6 +22,11 @@ import {
 } from "../controllers/admin/auth.controller.js";
 
 import {
+  getAdminProfile,
+  updateAdminProfile
+} from "../controllers/admin/profile.controller.js";
+
+import {
   registerStudent,
   registerParent,
   registerWarden,
@@ -183,6 +188,11 @@ router.post('/refresh-token', refreshAccessToken);
 router.post('/forgot-password', forgotPassword);
 router.post('/verify-otp', verifyOtp);
 router.post('/reset-password', resetPassword);
+
+// ====================== PROFILE ROUTES ======================
+import { uploadAdminProfile } from '../middleware/upload.js';
+router.get('/profile', verifyAdminToken, getAdminProfile);
+router.put('/profile', verifyAdminToken, uploadAdminProfile.single('profileImage'), updateAdminProfile);
 
 // ====================== USER MANAGEMENT ROUTES ======================
 router.post(

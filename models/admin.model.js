@@ -24,7 +24,11 @@ const adminSchema = new mongoose.Schema({
   refreshToken: {  // FIXED: was 'refreshTokens'
     type: String,
     required: false,
-  }
+  },
+  firstName: { type: String },
+  lastName: { type: String },
+  role: { type: String, default: "Admin" },
+  profileImage: { type: String }
 });
 
 // Password hash middleware
