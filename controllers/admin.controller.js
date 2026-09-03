@@ -250,7 +250,7 @@ Your student account has been created.
 
 • Student ID: ${studentId}
 
-Please log in at https://www.KGF-HM.com using your OTP.
+Please log in at https://kokanglobal.org/student/ using your OTP.
 
 – Hostel Admin`
     });
@@ -323,7 +323,7 @@ Your parent account has been created.
 
 • Your Child's Student ID: ${studentId}
 
-Please log in at https://www.KGF-HM.com using your OTP.
+Please log in at https://kokanglobal.org/parent/ using your OTP.
 
 – Hostel Admin`
     });
@@ -379,7 +379,7 @@ Your warden account has been created.
 • Warden Name: ${firstName} ${lastName}
 • Warden ID: ${wardenId}
 
-Please log in at https://www.KGF-HM.com using your OTP.
+Please log in at https://admin.kokanglobal.org using your OTP.
 
 – Hostel Admin`
     });

@@ -1625,7 +1625,7 @@ Your warden account has been created.
 • Warden Name: ${firstName} ${lastName}
 • Warden ID: ${newWardenId}
 
-Please log in at https://www.KGF-HM.com using your OTP.
+Please log in at https://kokanglobal.org/warden/ using your OTP.
 
 – Hostel Admin`
     });
