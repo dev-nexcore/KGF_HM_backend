@@ -538,6 +538,107 @@ const getTotalStudents = async (req, res) => {
 };
 
 // <---------- Inspection Management ---------->
+import { InspectionTemplate } from '../models/inspectionTemplate.model.js';
+
+const getWardenInspections = async (req, res) => {
+  try {
+    const inspections = await Inspection.find().sort({ datetime: -1 });
+    const transformedInspections = inspections.map(inspection => ({
+      id: inspection._id.toString(),
+      title: inspection.title,
+      target: inspection.target,
+      area: inspection.area,
+      date: inspection.datetime.toLocaleDateString('en-GB'),
+      time: inspection.datetime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }),
+      datetime: inspection.datetime,
+      instructions: inspection.instructions,
+      status: inspection.status === 'pending' ? 'Scheduled' : 'Completed',
+      createdBy: inspection.createdBy,
+      createdAt: inspection.createdAt
+    }));
+    return res.status(200).json({ success: true, inspections: transformedInspections });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching inspections' });
+  }
+};
+
+const createWardenInspection = async (req, res) => {
+  const { title, target, area, datetime, instructions } = req.body;
+  try {
+    const newInspection = new Inspection({
+      title,
+      target,
+      area,
+      datetime: new Date(datetime),
+      instructions: instructions || '',
+      createdBy: req.warden ? req.warden._id : 'warden',
+      status: 'pending'
+    });
+    await newInspection.save();
+    return res.status(201).json({
+      success: true,
+      inspection: {
+        id: newInspection._id,
+        title: newInspection.title,
+        target: newInspection.target,
+        area: newInspection.area,
+        datetime: newInspection.datetime,
+        instructions: newInspection.instructions,
+        status: newInspection.status,
+        createdAt: newInspection.createdAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error creating inspection' });
+  }
+};
+
+const updateWardenInspectionStatus = async (req, res) => {
+  try {
+    const { status } = req.body;
+    const inspection = await Inspection.findById(req.params.id);
+    if (!inspection) return res.status(404).json({ success: false, message: 'Not found' });
+    inspection.status = status;
+    await inspection.save();
+    return res.json({ success: true, inspection: { id: inspection._id, status: inspection.status } });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error updating' });
+  }
+};
+
+const deleteWardenInspection = async (req, res) => {
+  try {
+    await Inspection.findByIdAndDelete(req.params.id);
+    return res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error deleting' });
+  }
+};
+
+const getWardenInspectionTemplates = async (req, res) => {
+  try {
+    const templates = await InspectionTemplate.find().sort({ createdAt: -1 });
+    return res.json({ success: true, templates });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching templates' });
+  }
+};
+
+const createWardenInspectionTemplate = async (req, res) => {
+  const { title, target, area, instructions } = req.body;
+  try {
+    const newTemplate = new InspectionTemplate({ title, target, area, instructions });
+    await newTemplate.save();
+    return res.json({ success: true, template: newTemplate });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error creating template' });
+  }
+};
+
 const getRecentInspections = async (req, res) => {
   try {
     const inspections = await Inspection.find().sort({ datetime: -1 }).limit(10);
@@ -549,10 +650,18 @@ const getRecentInspections = async (req, res) => {
 
 const getFilteredInspections = async (req, res) => {
   try {
-    const { status, target, date } = req.query;
+    const { status, target, date, search } = req.query;
     const filter = {};
     if (status) filter.status = status;
     if (target) filter.target = target;
+    
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { target: { $regex: search, $options: 'i' } },
+        { area: { $regex: search, $options: 'i' } }
+      ];
+    }
     
     if (date) {
       const startOfDay = new Date(date);
@@ -1344,6 +1453,12 @@ export {
   filterLeaveRequests,
   getBedStats,
   getBedStatusOverview,
+  getWardenInspections,
+  createWardenInspection,
+  updateWardenInspectionStatus,
+  deleteWardenInspection,
+  getWardenInspectionTemplates,
+  createWardenInspectionTemplate,
   getRecentInspections,
   getFilteredInspections,
   getInspectionById,
