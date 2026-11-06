@@ -124,13 +124,18 @@ const getBedOccupancyStatus = async (req, res) => {
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     };
 
     const totalBeds = await Inventory.countDocuments(bedCriteria);
-    const occupiedBeds = await Inventory.countDocuments({ ...bedCriteria, status: 'In Use' });
-    const availableBeds = await Inventory.countDocuments({ ...bedCriteria, status: 'Available' });
+    const occupiedBeds = await Inventory.countDocuments({
+      ...bedCriteria,
+      $or: [
+        { status: 'In Use' },
+        { occupiedBy: { $ne: null } }
+      ]
+    });
+    const availableBeds = Math.max(0, totalBeds - occupiedBeds);
 
     return res.json({
       totalBeds,

@@ -1266,20 +1266,22 @@ const getTodaysCheckInOutStatus = async (req, res) => {
 
 const getBedOccupancyStatus = async (req, res) => {
   try {
-    const totalBeds = await Inventory.countDocuments({ 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+    const bedCriteria = { 
+      $or: [{ category: { $in: ['Furniture', 'BEDS', 'Bed'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
-    });
+      locationCategory: 'Residential Room'
+    };
+
+    const totalBeds = await Inventory.countDocuments(bedCriteria);
 
     const occupiedBeds = await Inventory.countDocuments({ 
-      occupiedBy: { $ne: null },
-      barcodeId: { $not: /^CR/i },
-      location: { $not: /gym|conference|store|common/i },
-      roomNo: { $not: /gym|conference|store|common/i },
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] } 
+      ...bedCriteria,
+      $or: [
+        { status: 'In Use' },
+        { occupiedBy: { $ne: null } }
+      ]
     });
 
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);

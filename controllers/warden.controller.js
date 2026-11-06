@@ -263,16 +263,16 @@ const getWardenDashboardStats = async (req, res) => {
   try {
     const totalStudents = await Student.countDocuments();
     const bedFilter = { 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS', 'Bed'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     };
     const [totalBeds, inUseBeds, availableBeds, damagedBeds] = await Promise.all([
       Inventory.countDocuments(bedFilter),
-      Inventory.countDocuments({ ...bedFilter, status: 'In Use' }),
-      Inventory.countDocuments({ ...bedFilter, status: 'Available' }),
+      Inventory.countDocuments({ ...bedFilter, $or: [{ status: 'In Use' }, { occupiedBy: { $ne: null } }] }),
+      Inventory.countDocuments({ ...bedFilter, status: 'Available', occupiedBy: null }),
       Inventory.countDocuments({ ...bedFilter, status: 'Damaged' })
     ]);
     
@@ -347,11 +347,11 @@ const getBedStats = async (req, res) => {
   try {
     const stats = await Inventory.aggregate([
       { $match: { 
-        $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+        $or: [{ category: { $in: ['Furniture', 'BEDS', 'Bed'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
         barcodeId: { $not: /^CR/i },
         location: { $not: /gym|conference|store|common/i },
         roomNo: { $not: /gym|conference|store|common/i },
-        floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+        locationCategory: 'Residential Room'
       } },
       { $group: { _id: '$status', count: { $sum: 1 } } }
     ]);
@@ -372,11 +372,11 @@ const getBedStatusOverview = async (req, res) => {
   try {
     const { floor, roomNo, status } = req.query;
     const filters = { 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS', 'Bed'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     };
     if (floor) filters.floor = floor;
     if (roomNo) filters.roomNo = roomNo;
@@ -396,13 +396,13 @@ const getStudentListForWarden = async (req, res) => {
     // Fetch all beds to calculate room capacities (room types)
     const allBedItems = await Inventory.find({
       $or: [
-        { category: { $in: ['Furniture', 'BEDS'] } },
+        { category: { $in: ['Furniture', 'BEDS', 'Bed'] } },
         { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     });
     const capacityMap = {};
     allBedItems.forEach(bed => {
@@ -515,12 +515,11 @@ const getAllAvailableBed = async (req, res) => {
   try {
     const beds = await Inventory.find({ 
       status: 'Available', 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+      $or: [{ category: { $in: ['Furniture', 'BEDS', 'Bed'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     }).select('barcodeId roomNo');
     res.status(200).json({ success: true, beds });
   } catch (error) {
@@ -1093,13 +1092,13 @@ const getAllInterns = async (req, res) => {
     // Fetch all beds to calculate room capacities (room types)
     const allBedItems = await Inventory.find({
       $or: [
-        { category: { $in: ['Furniture', 'BEDS'] } },
+        { category: { $in: ['Furniture', 'BEDS', 'Bed'] } },
         { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     });
     const capacityMap = {};
     allBedItems.forEach(bed => {
@@ -1191,18 +1190,22 @@ const updateStudentWarden = async (req, res) => {
 
 const getBedOccupancyStatus = async (req, res) => {
   try {
-    const totalBeds = await Inventory.countDocuments({ 
-      $or: [{ category: { $in: ['Furniture', 'BEDS'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
+    const bedCriteria = { 
+      $or: [{ category: { $in: ['Furniture', 'BEDS', 'Bed'] } }, { itemName: { $regex: /Bed|\bB\d+/i } }],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
-    });
+      locationCategory: 'Residential Room'
+    };
+
+    const totalBeds = await Inventory.countDocuments(bedCriteria);
 
     const occupiedBeds = await Inventory.countDocuments({ 
-      occupiedBy: { $ne: null },
-      locationCategory: 'Residential Room'
+      ...bedCriteria,
+      $or: [
+        { status: 'In Use' },
+        { occupiedBy: { $ne: null } }
+      ]
     });
 
     const availableBeds = Math.max(0, totalBeds - occupiedBeds);
