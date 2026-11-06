@@ -135,7 +135,8 @@ const addInventoryItem = async (req, res) => {
       status,
       description,
       purchaseDate,
-      purchaseCost
+      purchaseCost,
+      roomType
     } = req.body;
 
     if (!itemName) {
@@ -167,6 +168,7 @@ const addInventoryItem = async (req, res) => {
       roomNo,
       floor,
       status,
+      roomType: clean(roomType),
       description: clean(description),
       purchaseDate: parsedPurchaseDate,
       purchaseCost: clean(purchaseCost),
@@ -1349,9 +1351,8 @@ const getAvailableBeds = async (req, res) => {
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
       status: 'Available',
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
-    }).select('_id itemName barcodeId roomNo floor location locationCategory');
+      locationCategory: 'Residential Room'
+    }).select('_id itemName barcodeId roomNo floor location locationCategory roomType');
 
     res.status(200).json({
       success: true,
@@ -1376,25 +1377,38 @@ const getAvailableRooms = async (req, res) => {
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     });
 
     const roomStats = {};
     allBedItems.forEach(bed => {
       const roomKey = bed.roomNo;
-      if (!roomStats[roomKey]) {
-        roomStats[roomKey] = {
-          _id: roomKey,
-          floor: bed.floor,
-          location: bed.location,
-          totalBeds: 0,
-          availableCount: 0
-        };
+      if (roomKey) {
+        if (!roomStats[roomKey]) {
+          roomStats[roomKey] = {
+            _id: roomKey,
+            roomNo: roomKey,
+            floor: bed.floor,
+            location: bed.location,
+            totalBeds: 0,
+            availableCount: 0,
+            roomType: bed.roomType ? String(bed.roomType) : null
+          };
+        }
+        roomStats[roomKey].totalBeds++;
+        if (bed.roomType) {
+          roomStats[roomKey].roomType = String(bed.roomType);
+        }
+        if (bed.status === 'Available') {
+          roomStats[roomKey].availableCount++;
+        }
       }
-      roomStats[roomKey].totalBeds++;
-      if (bed.status === 'Available') {
-        roomStats[roomKey].availableCount++;
+    });
+
+    // If roomType is not explicitly set, fallback to totalBeds
+    Object.values(roomStats).forEach(r => {
+      if (!r.roomType) {
+        r.roomType = String(r.totalBeds);
       }
     });
 

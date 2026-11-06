@@ -391,7 +391,7 @@ const getBedStatusOverview = async (req, res) => {
 // <----------- Student Management ----------->
 const getStudentListForWarden = async (req, res) => {
   try {
-    const students = await Student.find().populate('roomBedNumber', 'itemName barcodeId floor roomNo');
+    const students = await Student.find().populate('roomBedNumber', 'itemName barcodeId floor roomNo roomType').sort({ studentId: 1, createdAt: 1 });
     
     // Fetch all beds to calculate room capacities (room types)
     const allBedItems = await Inventory.find({
@@ -1223,15 +1223,14 @@ const getAvailableBedsInventory = async (req, res) => {
     const beds = await Inventory.find({
       status: 'Available',
       $or: [
-        { category: { $in: ['Furniture', 'BEDS'] } },
+        { category: { $in: ['Furniture', 'BEDS', 'Bed', 'BED'] } },
         { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
-    });
+      locationCategory: 'Residential Room'
+    }).select('_id itemName barcodeId roomNo floor location locationCategory roomType');
     res.status(200).json({ success: true, availableBeds: beds });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
@@ -1242,14 +1241,13 @@ const getAvailableRoomsInventory = async (req, res) => {
   try {
     const allBedItems = await Inventory.find({
       $or: [
-        { category: { $in: ['Furniture', 'BEDS'] } },
+        { category: { $in: ['Furniture', 'BEDS', 'Bed', 'BED'] } },
         { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     });
 
     const roomStats = {};
@@ -1262,13 +1260,23 @@ const getAvailableRoomsInventory = async (req, res) => {
             roomNo: roomKey,
             floor: bed.floor,
             totalBeds: 0,
-            availableBeds: 0
+            availableBeds: 0,
+            roomType: bed.roomType ? String(bed.roomType) : null
           };
         }
         roomStats[roomKey].totalBeds += 1;
+        if (bed.roomType) {
+          roomStats[roomKey].roomType = String(bed.roomType);
+        }
         if (bed.status === 'Available') {
           roomStats[roomKey].availableBeds += 1;
         }
+      }
+    });
+
+    Object.values(roomStats).forEach(r => {
+      if (!r.roomType) {
+        r.roomType = String(r.totalBeds);
       }
     });
 

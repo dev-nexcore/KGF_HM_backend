@@ -1663,7 +1663,7 @@ Please log in at https://kokanglobal.org/warden/ using your OTP.
 
 const getAllStudents = async (req, res) => {
   try {
-    const students = await Student.find({}).select("-password").populate('roomBedNumber', 'itemName barcodeId floor roomNo').sort({ createdAt: -1 });
+    const students = await Student.find({}).select("-password").populate('roomBedNumber', 'itemName barcodeId floor roomNo roomType').sort({ studentId: 1, createdAt: 1 });
     
     // Fetch all beds to calculate room capacities (room types)
     const allBedItems = await Inventory.find({
@@ -1674,13 +1674,16 @@ const getAllStudents = async (req, res) => {
       barcodeId: { $not: /^CR/i },
       location: { $not: /gym|conference|store|common/i },
       roomNo: { $not: /gym|conference|store|common/i },
-      locationCategory: 'Residential Room',
-      floor: { $nin: ['3', '03', '3rd', 'Floor 3', 'Third'] }
+      locationCategory: 'Residential Room'
     });
     const capacityMap = {};
     allBedItems.forEach(bed => {
       if (bed.roomNo) {
-        capacityMap[bed.roomNo] = (capacityMap[bed.roomNo] || 0) + 1;
+        if (bed.roomType) {
+          capacityMap[bed.roomNo] = Number(bed.roomType);
+        } else {
+          capacityMap[bed.roomNo] = (capacityMap[bed.roomNo] || 0) + 1;
+        }
       }
     });
 

@@ -132,6 +132,12 @@ const inventorySchema = new mongoose.Schema({
   replacementRequest: {
     type: replacementRequestSchema,
     default: null
+  },
+
+  roomType: {
+    type: String,
+    enum: ['3', '4', '5', null],
+    default: null
   }
 
 }, { timestamps: true });
