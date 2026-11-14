@@ -1888,7 +1888,8 @@ const updateStudent = async (req, res) => {
 
     // ✅ Build update object with text fields
     const updateData = {
-      firstName, lastName, contactNumber, email, roomBedNumber,
+      firstName, lastName, contactNumber, email,
+      roomBedNumber: (!roomBedNumber || roomBedNumber === "Not Assigned") ? null : roomBedNumber,
       emergencyContactNumber, admissionDate, emergencyContactName, feeStatus: feeStatus || "Unpaid", hasCollegeId, isWorking, roomType, relation
     };
 

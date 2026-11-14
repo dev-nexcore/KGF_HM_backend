@@ -1150,20 +1150,26 @@ const getStudentsWithoutParents = async (req, res) => {
 const updateStudentWarden = async (req, res) => {
   try {
     const { studentId } = req.params;
-    let newDocuments = {};
-    if (req.files) {
-      Object.keys(req.files).forEach(k => {
-        newDocuments[k] = { filename: req.files[k][0].filename, path: req.files[k][0].path, uploadedAt: new Date() };
-      });
-    }
 
     if (studentId.match(/^[0-9a-fA-F]{24}$/)) {
       // It's a pending/rejected Requisition
       const reqq = await Requisition.findById(studentId);
       if (reqq) {
-        reqq.data = { ...reqq.data, ...req.body };
-        if (Object.keys(newDocuments).length > 0) {
-          reqq.documents = { ...reqq.documents, ...newDocuments };
+        const updateData = { ...req.body };
+        delete updateData.documents;
+        reqq.data = { ...reqq.data, ...updateData };
+        if (req.files && Object.keys(req.files).length > 0) {
+          if (!reqq.documents) reqq.documents = {};
+          Object.keys(req.files).forEach((k) => {
+            if (req.files[k] && req.files[k][0]) {
+              reqq.documents[k] = {
+                filename: req.files[k][0].filename,
+                path: req.files[k][0].path,
+                uploadedAt: new Date()
+              };
+            }
+          });
+          reqq.markModified('documents');
         }
         reqq.status = 'pending'; // Reset to pending if it was rejected
         await reqq.save();
@@ -1182,10 +1188,27 @@ const updateStudentWarden = async (req, res) => {
       const oldBedId = student.roomBedNumber;
       const newBedId = req.body.roomBedNumber;
 
-      Object.assign(student, req.body);
-      if (Object.keys(newDocuments).length > 0) {
-        student.documents = { ...student.documents, ...newDocuments };
+      const updateData = { ...req.body };
+      if (!updateData.roomBedNumber || updateData.roomBedNumber === "Not Assigned") {
+        updateData.roomBedNumber = null;
       }
+      delete updateData.documents;
+      Object.assign(student, updateData);
+
+      if (req.files && Object.keys(req.files).length > 0) {
+        if (!student.documents) student.documents = {};
+        Object.keys(req.files).forEach((k) => {
+          if (req.files[k] && req.files[k][0]) {
+            student.documents[k] = {
+              filename: req.files[k][0].filename,
+              path: req.files[k][0].path,
+              uploadedAt: new Date()
+            };
+          }
+        });
+        student.markModified('documents');
+      }
+
       await student.save();
 
       // If bed assignment changed, update Inventory status
@@ -1194,6 +1217,15 @@ const updateStudentWarden = async (req, res) => {
         if (oldBedId && String(oldBedId) !== "Not Assigned") {
           await Inventory.findByIdAndUpdate(oldBedId, { $set: { status: 'Available', occupiedBy: null } });
         }
+      } else if ((!newBedId || newBedId === "Not Assigned") && oldBedId && String(oldBedId) !== "Not Assigned") {
+        await Inventory.findByIdAndUpdate(oldBedId, { $set: { status: 'Available', occupiedBy: null } });
+      }
+
+      // Emit to biometric agent to update name/info if online
+      try {
+        emitAddEmployee(student);
+      } catch (bioErr) {
+        console.error("Biometric emit error:", bioErr.message);
       }
 
       return res.status(200).json({ success: true, student });
@@ -1201,7 +1233,8 @@ const updateStudentWarden = async (req, res) => {
 
     res.status(404).json({ success: false, message: "Student not found" });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error" });
+    console.error("Error in updateStudentWarden:", error);
+    res.status(500).json({ success: false, message: error.message || "Error updating student" });
   }
 };
 
