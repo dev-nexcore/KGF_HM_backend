@@ -376,20 +376,22 @@ const imageFilter = (req, file, cb) => {
 
 // Student/Parent document filter
 const documentFileFilter = (req, file, cb) => {
+  const allowedExts = /\.(jpe?g|png|webp|pdf)$/i;
   const allowedTypes = [
     "image/jpeg",
     "image/jpg",
     "image/png",
     "image/webp",
     "application/pdf",
+    "application/x-pdf",
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
+  if (allowedTypes.includes(file.mimetype) || allowedExts.test(file.originalname)) {
     cb(null, true);
   } else {
     cb(
       new Error(
-        "Invalid file type. Only JPEG, PNG, WEBP and PDF files are allowed."
+        "Invalid file type. Only JPEG, JPG, PNG, WEBP and PDF files are allowed."
       )
     );
   }
