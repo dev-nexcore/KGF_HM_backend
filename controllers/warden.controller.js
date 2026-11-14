@@ -1172,13 +1172,30 @@ const updateStudentWarden = async (req, res) => {
     }
 
     // Otherwise, it's an approved Student
-    const student = await Student.findOne({ studentId });
+    const student = await Student.findOne({
+      $or: [
+        { studentId },
+        ...(studentId.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: studentId }] : [])
+      ]
+    });
     if (student) {
+      const oldBedId = student.roomBedNumber;
+      const newBedId = req.body.roomBedNumber;
+
       Object.assign(student, req.body);
       if (Object.keys(newDocuments).length > 0) {
         student.documents = { ...student.documents, ...newDocuments };
       }
       await student.save();
+
+      // If bed assignment changed, update Inventory status
+      if (newBedId && String(newBedId) !== String(oldBedId) && newBedId !== "Not Assigned") {
+        await Inventory.findByIdAndUpdate(newBedId, { $set: { status: 'In Use', occupiedBy: student._id } });
+        if (oldBedId && String(oldBedId) !== "Not Assigned") {
+          await Inventory.findByIdAndUpdate(oldBedId, { $set: { status: 'Available', occupiedBy: null } });
+        }
+      }
+
       return res.status(200).json({ success: true, student });
     }
 
