@@ -2234,7 +2234,19 @@ const getStudentById = async (req, res) => {
       });
     }
 
-    const filePath = path.resolve(document.path);
+    let filePath = path.resolve(document.path);
+
+    if (!fs.existsSync(filePath)) {
+      const dir = path.dirname(filePath);
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir);
+        const prefix = `${student.email || student.studentId}-${docType}`.toLowerCase();
+        const fallback = files.filter(f => f.toLowerCase().startsWith(prefix)).pop();
+        if (fallback) {
+          filePath = path.join(dir, fallback);
+        }
+      }
+    }
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({
@@ -2300,7 +2312,19 @@ const getParentDocument = async (req, res) => {
       });
     }
 
-    const filePath = path.resolve(document.path);
+    let filePath = path.resolve(document.path);
+
+    if (!fs.existsSync(filePath)) {
+      const dir = path.dirname(filePath);
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir);
+        const prefix = `${student.email || student.studentId}-${docType}`.toLowerCase();
+        const fallback = files.filter(f => f.toLowerCase().startsWith(prefix)).pop();
+        if (fallback) {
+          filePath = path.join(dir, fallback);
+        }
+      }
+    }
 
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({

@@ -1032,9 +1032,29 @@ const getStudentDocument = async (req, res) => {
     }
     
     if (!student?.documents?.[docType]?.path) return res.status(404).json({ message: "Not found" });
-    res.sendFile(path.resolve(student.documents[docType].path));
+    
+    let filePath = path.resolve(student.documents[docType].path);
+    if (!fs.existsSync(filePath)) {
+      // Fallback: check if directory has a matching file for this student/email and docType
+      const dir = path.dirname(filePath);
+      if (fs.existsSync(dir)) {
+        const files = fs.readdirSync(dir);
+        const prefix = `${student.email || student.studentId}-${docType}`.toLowerCase();
+        const fallback = files.filter(f => f.toLowerCase().startsWith(prefix)).pop();
+        if (fallback) {
+          filePath = path.join(dir, fallback);
+        }
+      }
+    }
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ message: "File missing on server" });
+    }
+
+    return res.sendFile(filePath);
   } catch (error) {
-    res.status(500).json({ message: "Error" });
+    console.error("Error serving student document:", error);
+    return res.status(500).json({ message: "Error opening document" });
   }
 };
 
