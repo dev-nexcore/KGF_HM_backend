@@ -43,6 +43,7 @@ import {
   getWardenRequisitions,
   getStudentsWithoutParents,
   updateStudentWarden,
+  toggleStudentStatusWarden,
   getAvailableBedsInventory,
   getBedOccupancyStatus,
   getAvailableRoomsInventory,
@@ -154,6 +155,7 @@ import { getParentDocument } from "../controllers/admin/user.controller.js";
 router.get('/parent-document/:parentId/:docType', getParentDocument);
 
 router.put("/update-student/:studentId", verifyWardenToken, uploadStudentDocuments, updateStudentWarden);
+router.put("/toggle-student-status/:studentId", verifyWardenToken, toggleStudentStatusWarden);
 
 
 // Inventory for Warden

@@ -43,6 +43,7 @@ import {
   registerStaff,
   updateStaffStatus,
   getParentDocument,
+  toggleStudentStatusAdmin,
 } from "../controllers/admin/user.controller.js";
 
 import {
@@ -220,6 +221,7 @@ router.put('/update-parent/:id', verifyAdminToken, uploadParentDocuments, update
 router.get('/student/:studentId', getStudentById);
 // router.put('/update-student/:studentId',  verifyAdminToken, updateStudent);
 router.put('/update-student/:studentId', verifyAdminToken, uploadStudentDocuments, updateStudent);
+router.put('/toggle-student-status/:studentId', verifyAdminToken, toggleStudentStatusAdmin);
 router.delete('/delete-student/:studentId', deleteStudent);
 
 router.get('/student-document/:studentId/:docType', getStudentDocument);

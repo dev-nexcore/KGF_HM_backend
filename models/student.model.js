@@ -23,6 +23,8 @@ const studentSchema = new mongoose.Schema({
   roomType: { type: String, default: "" },
   password: { type: String, required: true },
   isAddedToBiometric: { type: Boolean, default: false },
+  isActive: { type: Boolean, default: true },
+  status: { type: String, default: "Active" },
   
   documents: {
     aadharCard: {

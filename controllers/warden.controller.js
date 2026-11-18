@@ -147,7 +147,7 @@ const login = async (req, res) => {
     // OTP is valid
     await Otp.deleteOne({ _id: otpRecord._id });
 
-    const token = jwt.sign({ id: warden._id, wardenId: warden.wardenId, role: "warden" }, process.env.JWT_SECRET, { expiresIn: "1d" });
+    const token = jwt.sign({ id: warden._id, wardenId: warden.wardenId, role: "warden" }, process.env.JWT_SECRET, { expiresIn: "30d" });
     return res.status(200).json({
       message: "Login successful",
       token,
@@ -426,6 +426,8 @@ const getStudentListForWarden = async (req, res) => {
       return {
         ...student.toObject(),
         id: student.studentId, // Ensure frontend compatibility
+        isActive: student.isActive !== false,
+        status: student.status || (student.isActive === false ? 'Inactive' : 'Active'),
         dues: duesMap[student._id.toString()] || 0,
         roomType: inferredRoomType,
       };
@@ -1238,6 +1240,101 @@ const updateStudentWarden = async (req, res) => {
   }
 };
 
+const toggleStudentStatusWarden = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { isActive } = req.body;
+
+    const student = await Student.findOne({
+      $or: [
+        { studentId },
+        ...(studentId.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: studentId }] : [])
+      ]
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found." });
+    }
+
+    const targetActive = typeof isActive === 'boolean' ? isActive : (student.isActive === false ? true : false);
+
+    if (!targetActive) {
+      // Deactivating student -> remove allocated bed and make it available
+      const allocatedBedId = student.roomBedNumber;
+
+      student.isActive = false;
+      student.status = "Inactive";
+      student.roomBedNumber = null;
+      await student.save();
+
+      // Free up bed in Inventory if one was allocated
+      if (allocatedBedId && String(allocatedBedId) !== "Not Assigned") {
+        const freedBed = await Inventory.findByIdAndUpdate(allocatedBedId, {
+          $set: { status: 'Available', occupiedBy: null }
+        }, { new: true });
+
+        if (freedBed) {
+          try {
+            await AuditLog.create({
+              actionType: 'INVENTORY_STATUS_CHANGED',
+              description: `Bed ${freedBed.itemName || freedBed.barcodeId} changed to Available. Unassigned from inactive student: ${student.firstName} ${student.lastName} (ID: ${student.studentId})`,
+              targetType: "Inventory",
+              targetId: freedBed._id,
+              targetName: freedBed.itemName || freedBed.barcodeId
+            });
+          } catch (auditErr) {
+            console.error("Audit log failed:", auditErr.message);
+          }
+        }
+      }
+
+      try {
+        await AuditLog.create({
+          actionType: 'STUDENT_UPDATED',
+          description: `Student ${student.firstName} ${student.lastName} (ID: ${student.studentId}) marked as Inactive. Bed released.`,
+          targetType: "Student",
+          targetId: student.studentId,
+          targetName: `${student.firstName} ${student.lastName}`
+        });
+      } catch (auditErr) {
+        console.error("Audit log failed:", auditErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Student ${student.firstName} ${student.lastName} has been marked as Inactive and their allocated bed is now Available.`,
+        student
+      });
+    } else {
+      // Reactivating student
+      student.isActive = true;
+      student.status = "Active";
+      await student.save();
+
+      try {
+        await AuditLog.create({
+          actionType: 'STUDENT_UPDATED',
+          description: `Student ${student.firstName} ${student.lastName} (ID: ${student.studentId}) reactivated to Active.`,
+          targetType: "Student",
+          targetId: student.studentId,
+          targetName: `${student.firstName} ${student.lastName}`
+        });
+      } catch (auditErr) {
+        console.error("Audit log failed:", auditErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Student ${student.firstName} ${student.lastName} has been activated successfully.`,
+        student
+      });
+    }
+  } catch (error) {
+    console.error("Error in toggleStudentStatusWarden:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to update student status." });
+  }
+};
+
 const getBedOccupancyStatus = async (req, res) => {
   try {
     const bedCriteria = { 
@@ -1271,6 +1368,16 @@ const getBedOccupancyStatus = async (req, res) => {
   }
 };
 
+const ROOM_CAPACITY_MAP = {
+  "101": "5", "102": "5", "103": "5", "104": "5",
+  "105": "4", "106": "4", "107": "4",
+  "108": "3", "109": "3", "110": "3",
+  "201": "5", "202": "5", "203": "5", "204": "5",
+  "205": "4", "206": "4", "207": "4",
+  "208": "3", "209": "3", "210": "3",
+  "307": "3"
+};
+
 const getAvailableBedsInventory = async (req, res) => {
   try {
     const beds = await Inventory.find({
@@ -1284,7 +1391,16 @@ const getAvailableBedsInventory = async (req, res) => {
       roomNo: { $not: /gym|conference|store|common/i },
       locationCategory: 'Residential Room'
     }).select('_id itemName barcodeId roomNo floor location locationCategory roomType');
-    res.status(200).json({ success: true, availableBeds: beds });
+
+    const mappedBeds = beds.map(b => {
+      const bObj = b.toObject ? b.toObject() : { ...b };
+      if (!bObj.roomType) {
+        bObj.roomType = ROOM_CAPACITY_MAP[bObj.roomNo] || "3";
+      }
+      return bObj;
+    });
+
+    res.status(200).json({ success: true, availableBeds: mappedBeds });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error" });
   }
@@ -1314,7 +1430,7 @@ const getAvailableRoomsInventory = async (req, res) => {
             floor: bed.floor,
             totalBeds: 0,
             availableBeds: 0,
-            roomType: bed.roomType ? String(bed.roomType) : null
+            roomType: bed.roomType ? String(bed.roomType) : (ROOM_CAPACITY_MAP[roomKey] || null)
           };
         }
         roomStats[roomKey].totalBeds += 1;
@@ -1329,7 +1445,10 @@ const getAvailableRoomsInventory = async (req, res) => {
 
     Object.values(roomStats).forEach(r => {
       if (!r.roomType) {
-        r.roomType = String(r.totalBeds);
+        r.roomType = ROOM_CAPACITY_MAP[r.roomNo] || String(r.totalBeds);
+      }
+      if (ROOM_CAPACITY_MAP[r.roomNo]) {
+        r.totalBeds = Math.max(r.totalBeds, Number(ROOM_CAPACITY_MAP[r.roomNo]));
       }
     });
 
@@ -1543,6 +1662,7 @@ export {
   getWardenRequisitions,
   getStudentsWithoutParents,
   updateStudentWarden,
+  toggleStudentStatusWarden,
   getAvailableBedsInventory,
   getBedOccupancyStatus,
   getAvailableRoomsInventory,

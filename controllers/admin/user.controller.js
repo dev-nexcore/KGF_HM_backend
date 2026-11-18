@@ -1733,6 +1733,8 @@ const getAllStudents = async (req, res) => {
         hasCollegeId: student.hasCollegeId,
         isWorking: student.isWorking,
         isAddedToBiometric: student.isAddedToBiometric,
+        isActive: student.isActive !== false,
+        status: student.status || (student.isActive === false ? 'Inactive' : 'Active'),
         documents: {
           aadharCard: student.documents?.aadharCard || null,
           panCard: student.documents?.panCard || null,
@@ -2007,6 +2009,107 @@ const updateStudent = async (req, res) => {
   } catch (err) {
     console.error('Error updating student:', err);
     return res.status(500).json({ message: 'Error updating student.' });
+  }
+};
+
+const toggleStudentStatusAdmin = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { isActive } = req.body;
+
+    const student = await Student.findOne({
+      $or: [
+        { studentId },
+        ...(studentId.match(/^[0-9a-fA-F]{24}$/) ? [{ _id: studentId }] : [])
+      ]
+    });
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found." });
+    }
+
+    const targetActive = typeof isActive === 'boolean' ? isActive : (student.isActive === false ? true : false);
+
+    if (!targetActive) {
+      // Deactivating student -> release allocated bed
+      const allocatedBedId = student.roomBedNumber;
+
+      student.isActive = false;
+      student.status = "Inactive";
+      student.roomBedNumber = null;
+      await student.save();
+
+      // Free up bed in Inventory if one was allocated
+      if (allocatedBedId && String(allocatedBedId) !== "Not Assigned") {
+        const freedBed = await Inventory.findByIdAndUpdate(allocatedBedId, {
+          $set: { status: 'Available', occupiedBy: null }
+        }, { new: true });
+
+        if (freedBed) {
+          try {
+            await createAuditLog({
+              adminId: req.admin?._id,
+              adminName: req.admin?.adminId || "Admin",
+              actionType: AuditActionTypes.INVENTORY_STATUS_CHANGED,
+              description: `Bed ${freedBed.itemName || freedBed.barcodeId} changed to Available. Unassigned from inactive student: ${student.firstName} ${student.lastName} (ID: ${student.studentId})`,
+              targetType: "Inventory",
+              targetId: freedBed._id,
+              targetName: freedBed.itemName || freedBed.barcodeId
+            });
+          } catch (auditErr) {
+            console.error("Audit log failed:", auditErr.message);
+          }
+        }
+      }
+
+      try {
+        await createAuditLog({
+          adminId: req.admin?._id,
+          adminName: req.admin?.adminId || "Admin",
+          actionType: AuditActionTypes.STUDENT_UPDATED,
+          description: `Student ${student.firstName} ${student.lastName} (ID: ${student.studentId}) marked as Inactive. Bed released.`,
+          targetType: "Student",
+          targetId: student.studentId,
+          targetName: `${student.firstName} ${student.lastName}`
+        });
+      } catch (auditErr) {
+        console.error("Audit log failed:", auditErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Student ${student.firstName} ${student.lastName} has been marked as Inactive and their allocated bed is now Available.`,
+        student
+      });
+    } else {
+      // Reactivating student
+      student.isActive = true;
+      student.status = "Active";
+      await student.save();
+
+      try {
+        await createAuditLog({
+          adminId: req.admin?._id,
+          adminName: req.admin?.adminId || "Admin",
+          actionType: AuditActionTypes.STUDENT_UPDATED,
+          description: `Student ${student.firstName} ${student.lastName} (ID: ${student.studentId}) reactivated to Active.`,
+          targetType: "Student",
+          targetId: student.studentId,
+          targetName: `${student.firstName} ${student.lastName}`
+        });
+      } catch (auditErr) {
+        console.error("Audit log failed:", auditErr.message);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Student ${student.firstName} ${student.lastName} has been activated successfully.`,
+        student
+      });
+    }
+  } catch (error) {
+    console.error("Error in toggleStudentStatusAdmin:", error);
+    res.status(500).json({ success: false, message: error.message || "Failed to update student status." });
   }
 };
 
@@ -2408,5 +2511,6 @@ export {
 
   deleteParent,
   updateParent,
-  updateStaffStatus
+  updateStaffStatus,
+  toggleStudentStatusAdmin
 }

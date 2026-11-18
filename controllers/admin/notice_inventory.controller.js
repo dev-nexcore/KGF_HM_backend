@@ -1340,11 +1340,21 @@ const downloadQRCode = async (req, res) => {
   }
 };
 
+const ROOM_CAPACITY_MAP = {
+  "101": "5", "102": "5", "103": "5", "104": "5",
+  "105": "4", "106": "4", "107": "4",
+  "108": "3", "109": "3", "110": "3",
+  "201": "5", "202": "5", "203": "5", "204": "5",
+  "205": "4", "206": "4", "207": "4",
+  "208": "3", "209": "3", "210": "3",
+  "307": "3"
+};
+
 const getAvailableBeds = async (req, res) => {
   try {
     const availableBeds = await Inventory.find({
       $or: [
-        { category: { $in: ['Furniture', 'BEDS'] } },
+        { category: { $in: ['Furniture', 'BEDS', 'Bed', 'BED'] } },
         { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
       barcodeId: { $not: /^CR/i },
@@ -1354,9 +1364,17 @@ const getAvailableBeds = async (req, res) => {
       locationCategory: 'Residential Room'
     }).select('_id itemName barcodeId roomNo floor location locationCategory roomType');
 
+    const mappedBeds = availableBeds.map(b => {
+      const bObj = b.toObject ? b.toObject() : { ...b };
+      if (!bObj.roomType) {
+        bObj.roomType = ROOM_CAPACITY_MAP[bObj.roomNo] || "3";
+      }
+      return bObj;
+    });
+
     res.status(200).json({
       success: true,
-      availableBeds: availableBeds
+      availableBeds: mappedBeds
     });
   } catch (error) {
     console.error('Error fetching available beds:', error);
@@ -1371,7 +1389,7 @@ const getAvailableRooms = async (req, res) => {
     // Get unique available rooms and their total bed count (capacity)
     const allBedItems = await Inventory.find({
       $or: [
-        { category: { $in: ['Furniture', 'BEDS'] } },
+        { category: { $in: ['Furniture', 'BEDS', 'Bed', 'BED'] } },
         { itemName: { $regex: /Bed|\bB\d+/i } }
       ],
       barcodeId: { $not: /^CR/i },
@@ -1392,7 +1410,8 @@ const getAvailableRooms = async (req, res) => {
             location: bed.location,
             totalBeds: 0,
             availableCount: 0,
-            roomType: bed.roomType ? String(bed.roomType) : null
+            availableBeds: 0,
+            roomType: bed.roomType ? String(bed.roomType) : (ROOM_CAPACITY_MAP[roomKey] || null)
           };
         }
         roomStats[roomKey].totalBeds++;
@@ -1401,14 +1420,18 @@ const getAvailableRooms = async (req, res) => {
         }
         if (bed.status === 'Available') {
           roomStats[roomKey].availableCount++;
+          roomStats[roomKey].availableBeds++;
         }
       }
     });
 
-    // If roomType is not explicitly set, fallback to totalBeds
+    // If roomType is not explicitly set, fallback to ROOM_CAPACITY_MAP or totalBeds
     Object.values(roomStats).forEach(r => {
       if (!r.roomType) {
-        r.roomType = String(r.totalBeds);
+        r.roomType = ROOM_CAPACITY_MAP[r.roomNo] || String(r.totalBeds);
+      }
+      if (ROOM_CAPACITY_MAP[r.roomNo]) {
+        r.totalBeds = Math.max(r.totalBeds, Number(ROOM_CAPACITY_MAP[r.roomNo]));
       }
     });
 
