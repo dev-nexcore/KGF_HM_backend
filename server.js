@@ -62,6 +62,15 @@ startNoticeSchedulerCron();
   };
   app.use(cors(corsOptions));
 
+  // Allow framing and cross-origin access for document preview endpoints
+  app.use((req, res, next) => {
+    if (req.path.includes("document")) {
+      res.removeHeader("X-Frame-Options");
+      res.setHeader("Content-Security-Policy", "frame-ancestors *");
+    }
+    next();
+  });
+
 
 // ----- Health check -----
 app.get("/", (req, res) => {
